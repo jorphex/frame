@@ -22,11 +22,16 @@ import { FrameInstance } from './windows/frames/frameInstances'
 import Erc20Contract from './contracts/erc20'
 import { getErrorCode } from '../resources/utils'
 
-app.commandLine.appendSwitch('enable-accelerated-2d-canvas', 'true')
-app.commandLine.appendSwitch('enable-gpu-rasterization', 'true')
-app.commandLine.appendSwitch('force-gpu-rasterization', 'true')
-app.commandLine.appendSwitch('ignore-gpu-blacklist', 'true')
-app.commandLine.appendSwitch('enable-native-gpu-memory-buffers', 'true')
+if (process.platform === 'linux') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+} else {
+  app.commandLine.appendSwitch('enable-accelerated-2d-canvas', 'true')
+  app.commandLine.appendSwitch('enable-gpu-rasterization', 'true')
+  app.commandLine.appendSwitch('force-gpu-rasterization', 'true')
+  app.commandLine.appendSwitch('ignore-gpu-blacklist', 'true')
+  app.commandLine.appendSwitch('enable-native-gpu-memory-buffers', 'true')
+}
 app.commandLine.appendSwitch('force-color-profile', 'srgb')
 
 const isDev = process.env.NODE_ENV === 'development'

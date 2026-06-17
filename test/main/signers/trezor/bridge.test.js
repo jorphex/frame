@@ -140,6 +140,22 @@ describe('ui events', () => {
 
     TrezorConnect.emit(UI_EVENT, { type: UI.REQUEST_PASSPHRASE, payload })
   })
+
+  it('emits a needPairing event when a thp pairing tag is requested', (done) => {
+    const device = { type: 'acquired', path: '27' }
+    const payload = { device, availableMethods: [2], selectedMethod: 2 }
+
+    TrezorBridge.once('trezor:needPairing', (request) => {
+      try {
+        expect(request).toEqual(payload)
+        done()
+      } catch (e) {
+        done(e)
+      }
+    })
+
+    TrezorConnect.emit(UI_EVENT, { type: UI.REQUEST_THP_PAIRING, payload })
+  })
 })
 
 describe('requests', () => {
@@ -183,5 +199,14 @@ describe('requests', () => {
     const signature = await TrezorBridge.signTransaction({ path: '11' }, "m/44'/60'/0'/4/0", tx)
 
     expect(signature).toEqual({ v: 1, r: 2, s: 3 })
+  })
+
+  it('sends a pairing response back to trezor connect', () => {
+    TrezorBridge.pairingEntered('device-id', { tag: 'ABC123' })
+
+    expect(TrezorConnect.uiResponse).toHaveBeenCalledWith({
+      type: UI.RECEIVE_THP_PAIRING_TAG,
+      payload: { tag: 'ABC123' }
+    })
   })
 })

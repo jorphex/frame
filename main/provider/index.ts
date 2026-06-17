@@ -79,6 +79,8 @@ const storeApi = {
   getOrigin: (id: string) => store('main.origins', id) as Origin
 }
 
+const getAccounts = () => require('../accounts').default as typeof accounts
+
 const getPayloadOrigin = ({ _origin }: RPCRequestPayload) => storeApi.getOrigin(_origin)
 
 export class Provider extends EventEmitter {
@@ -120,7 +122,10 @@ export class Provider extends EventEmitter {
 
     this.connection.on('update', (chain: Chain, event) => {
       if (event.type === 'fees') {
-        return accounts.updatePendingFees(chain.id)
+        const accountsState = getAccounts()
+        if (accountsState && typeof accountsState.updatePendingFees === 'function') {
+          return accountsState.updatePendingFees(chain.id)
+        }
       }
 
       if (event.type === 'status') {

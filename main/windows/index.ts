@@ -34,6 +34,7 @@ const trayWidth = 400
 const devHeight = 800
 const isWindows = process.platform === 'win32'
 const isMacOS = process.platform === 'darwin'
+const shouldForceDashOnStartup = process.platform === 'linux'
 
 let tray: Tray
 let dash: Dash
@@ -231,6 +232,10 @@ export class Tray {
         setTimeout(() => {
           store.setDash({ showing: true })
         }, 300)
+      } else if (shouldForceDashOnStartup && !openedAtLogin) {
+        setTimeout(() => {
+          store.setDash({ showing: true })
+        }, 300)
       }
 
       if (showOnboardingWindow && !showNotifyWindow) {
@@ -364,6 +369,35 @@ class Dash {
       dashOpts.type = 'panel'
     }
     initWindow('dash', dashOpts)
+
+    if (process.platform === 'linux') {
+      const positionDash = () => {
+        setTimeout(() => this.positionNextToTray(), 0)
+        setTimeout(() => this.positionNextToTray(), 50)
+        setTimeout(() => this.positionNextToTray(), 150)
+      }
+
+      windows.tray.on('show', positionDash)
+      windows.tray.on('move', positionDash)
+      windows.dash.on('show', positionDash)
+    }
+  }
+
+  private positionNextToTray(height?: number) {
+    if (!windows.tray || !windows.dash) return
+
+    const trayBounds = windows.tray.getBounds()
+    const dashBounds = windows.dash.getBounds()
+
+    windows.dash.setBounds(
+      {
+        x: trayBounds.x - dashBounds.width - 5,
+        y: trayBounds.y,
+        width: dashBounds.width,
+        height: height || dashBounds.height
+      },
+      false
+    )
   }
 
   public hide(context?: string) {
@@ -394,6 +428,8 @@ class Dash {
       this.recentDisplayEvent = false
     }, 150)
     setTimeout(() => {
+      if (!windows.tray.isVisible()) tray.show()
+
       if (isMacOS) {
         windows.dash.setPosition(0, 0)
       } else {
@@ -409,10 +445,9 @@ class Dash {
       windows.dash.setMinimumSize(trayWidth, height)
       windows.dash.setSize(trayWidth, height)
       windows.dash.setMaximumSize(trayWidth, height)
-      const { x, y } = topRight(windows.dash)
-      windows.dash.setPosition(x - trayWidth - 5, y)
+      this.positionNextToTray(height)
       windows.dash.show()
-      if (!windows.tray.isVisible()) windows.tray.show()
+      setTimeout(() => this.positionNextToTray(height), 50)
       windows.dash.focus()
       windows.dash.setVisibleOnAllWorkspaces(false, {
         visibleOnFullScreen: true,

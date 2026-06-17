@@ -18,6 +18,7 @@ interface KnownSigners {
 
 export default class TrezorSignerAdapter extends SignerAdapter {
   private knownSigners: KnownSigners = {}
+  private pendingSessionProbes: { [id: string]: boolean } = {}
   private observer?: Observer
 
   constructor() {
@@ -44,9 +45,10 @@ export default class TrezorSignerAdapter extends SignerAdapter {
       // create a new signer whenever a Trezor is detected, but it won't be opened
       // until a connect event with an active device is received
       const id = Trezor.generateId(path)
+      const signer = this.knownSigners[id]?.signer || this.initTrezor(path)
 
-      if (!this.knownSigners[id]) {
-        this.initTrezor(path)
+      if (!signer.device) {
+        this.probeSession(path)
       }
     })
 
@@ -97,6 +99,12 @@ export default class TrezorSignerAdapter extends SignerAdapter {
       this.handleEvent(deviceId, 'trezor:entered:passphrase')
     })
 
+    TrezorBridge.on('trezor:entered:pairing', (deviceId: string) => {
+      log.verbose(`Trezor ${deviceId} pairing response entered`)
+
+      this.handleEvent(deviceId, 'trezor:entered:pairing')
+    })
+
     TrezorBridge.on('trezor:enteringPhrase', (deviceId: string) => {
       log.verbose(`Trezor ${deviceId} waiting for passphrase entry on device`)
       const signer = this.knownSigners[deviceId].signer
@@ -144,6 +152,31 @@ export default class TrezorSignerAdapter extends SignerAdapter {
       })
     })
 
+    TrezorBridge.on('trezor:needPairing', (payload: TrezorDevice & Record<string, any>) => {
+      this.withSigner(payload.device, (signer) => {
+        log.verbose(`Trezor ${signer.id} needs pairing`, {
+          methods: payload.availableMethods,
+          selectedMethod: payload.selectedMethod
+        })
+
+        const currentStatus = signer.status
+
+        this.addEventHandler(signer, 'trezor:entered:pairing', () => {
+          signer.pairing = undefined
+          signer.status = currentStatus
+          this.emit('update', signer)
+        })
+
+        signer.pairing = {
+          availableMethods: payload.availableMethods,
+          selectedMethod: payload.selectedMethod,
+          nfcData: payload.nfcData
+        }
+        signer.status = Status.NEEDS_PAIRING
+        this.emit('update', signer)
+      })
+    })
+
     TrezorBridge.open()
     super.open()
   }
@@ -178,7 +211,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
     ])
 
     setTimeout(() => {
-      if (trezor.status === Status.INITIAL && !trezor.device) {
+      if (trezor.status === Status.INITIAL && !trezor.device && !this.pendingSessionProbes[trezor.id]) {
         // if the trezor hasn't connected in a reasonable amount of time, consider it disconnected
         trezor.status = Status.DISCONNECTED
         this.emit('update', trezor)
@@ -186,6 +219,28 @@ export default class TrezorSignerAdapter extends SignerAdapter {
     }, 10_000)
 
     return trezor
+  }
+
+  private probeSession(path: string) {
+    const id = Trezor.generateId(path)
+
+    if (this.pendingSessionProbes[id]) return
+
+    const signer = this.knownSigners[id]?.signer
+
+    if (!signer || signer.device) return
+
+    this.pendingSessionProbes[id] = true
+
+    log.info(`probing Trezor ${id} session`)
+
+    TrezorBridge.getFeatures({ device: { path: signer.path as DeviceUniquePath } })
+      .catch((err) => {
+        log.debug(`initial Trezor session probe finished with error for ${id}`, err)
+      })
+      .finally(() => {
+        delete this.pendingSessionProbes[id]
+      })
   }
 
   close() {

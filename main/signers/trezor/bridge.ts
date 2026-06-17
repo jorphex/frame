@@ -1,5 +1,6 @@
 import log from 'electron-log'
 import { EventEmitter } from 'events'
+import type { ThpPairingMethod } from '@trezor/protocol'
 import TrezorConnect, {
   CommonParams,
   Device,
@@ -22,12 +23,13 @@ export class DeviceError extends Error {
   }
 }
 
-const manifest = { email: 'dev@frame.sh', appUrl: 'https://frame.sh' }
+type TrezorPairingResponse = { tag: string } | { selectedMethod: ThpPairingMethod | keyof typeof ThpPairingMethod }
+
+const manifest = { email: 'dev@frame.sh', appName: 'Frame', appUrl: 'https://frame.sh' }
 
 const config = {
   manifest,
   popup: false,
-  webusb: false,
   debug: false,
   lazyLoad: false,
   transports: ['NodeUsbTransport' as const]
@@ -177,6 +179,14 @@ class TrezorBridge extends EventEmitter {
     this.emit('trezor:enteringPhrase', deviceId)
   }
 
+  pairingEntered(deviceId: string, payload: TrezorPairingResponse) {
+    log.debug('pairing response entered for device', { deviceId, payload })
+
+    TrezorConnect.uiResponse({ type: UI.RECEIVE_THP_PAIRING_TAG, payload })
+
+    this.emit('trezor:entered:pairing', deviceId)
+  }
+
   private async makeRequest<T>(fn: () => Response<T>, retries = 20) {
     try {
       const result = await handleResponse(fn())
@@ -230,6 +240,8 @@ class TrezorBridge extends EventEmitter {
       this.emit('trezor:needPin', e.payload.device)
     } else if (e.type === UI.REQUEST_PASSPHRASE) {
       this.emit('trezor:needPhrase', e.payload.device)
+    } else if (e.type === UI.REQUEST_THP_PAIRING) {
+      this.emit('trezor:needPairing', e.payload)
     }
   }
 }

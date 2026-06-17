@@ -83,6 +83,10 @@ const rpc = {
     cb()
     TrezorBridge.passphraseEntered(id, phrase)
   },
+  trezorPairing: (id, payload, cb) => {
+    cb()
+    TrezorBridge.pairingEntered(id, payload)
+  },
   trezorEnterPhrase: (id, cb) => {
     cb()
     TrezorBridge.enterPassphraseOnDevice(id)

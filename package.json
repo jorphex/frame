@@ -75,7 +75,7 @@
     "@ledgerhq/hw-transport-web-ble": "6.29.4",
     "@metamask/eth-sig-util": "5.0.2",
     "@sentry/electron": "4.3.0",
-    "@trezor/connect": "9.4.7",
+    "@trezor/connect": "9.7.3",
     "auto-launch": "5.0.5",
     "bip39": "3.1.0",
     "cheerio": "1.0.0-rc.12",
@@ -245,7 +245,15 @@
   },
   "repository": "github:floating/frame",
   "overrides": {
-    "@framelabs/logger": "1.1.1"
+    "@framelabs/logger": "1.1.1",
+    "@trezor/connect": {
+      "@noble/curves": "1.9.7",
+      "@noble/hashes": "1.8.0"
+    },
+    "@trezor/device-authenticity": {
+      "@noble/curves": "1.9.7",
+      "@noble/hashes": "1.8.0"
+    }
   },
   "lavamoat": {
     "allowScripts": {
@@ -259,6 +267,9 @@
       "@ledgerhq/hw-transport-node-hid-singleton>usb": false,
       "@parcel/core>@parcel/cache>lmdb": true,
       "@parcel/core>msgpackr>msgpackr-extract": false,
+      "@trezor/connect>@trezor/blockchain-link-utils>@trezor/protobuf>protobufjs": false,
+      "@trezor/connect>@trezor/blockchain-link>@stellar/stellar-sdk": false,
+      "@trezor/connect>@trezor/device-authenticity>@trezor/protobuf>protobufjs": false,
       "@trezor/connect>@trezor/protobuf>protobufjs": false,
       "@trezor/connect>@trezor/transport>protobufjs": false,
       "@trezor/connect>@trezor/transport>usb": false,

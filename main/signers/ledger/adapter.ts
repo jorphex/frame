@@ -55,24 +55,29 @@ export default class LedgerSignerAdapter extends SignerAdapter {
       })
     })
 
-    this.usbListener = TransportNodeHid.listen({
-      next: (evt) => {
-        log.debug(`received ${evt.type} USB event`)
+    try {
+      this.usbListener = TransportNodeHid.listen({
+        next: (evt) => {
+          log.debug(`received ${evt.type} USB event`)
 
-        if (!evt.deviceModel) {
-          log.warn('received USB event with no Ledger device model', evt)
-          return
+          if (!evt.deviceModel) {
+            log.warn('received USB event with no Ledger device model', evt)
+            return
+          }
+
+          this.handleDeviceChanges()
+        },
+        complete: () => {
+          log.debug('received USB complete event')
+        },
+        error: (err) => {
+          log.error('USB error', err)
         }
-
-        this.handleDeviceChanges()
-      },
-      complete: () => {
-        log.debug('received USB complete event')
-      },
-      error: (err) => {
-        log.error('USB error', err)
-      }
-    })
+      })
+    } catch (err) {
+      log.warn('Ledger HID transport unavailable; skipping Ledger USB monitoring', err)
+      this.usbListener = null
+    }
 
     super.open()
   }

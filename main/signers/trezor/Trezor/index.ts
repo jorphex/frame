@@ -29,7 +29,14 @@ export const Status = {
   NEEDS_RECONNECTION: 'Please reconnect this Trezor device',
   NEEDS_PIN: 'Need Pin',
   NEEDS_PASSPHRASE: 'Enter Passphrase',
+  NEEDS_PAIRING: 'Need Pairing Code',
   ENTERING_PASSPHRASE: 'waiting for input on device'
+}
+
+type TrezorPairing = {
+  availableMethods: Array<string | number>
+  selectedMethod: string | number
+  nfcData?: string
 }
 
 function createError(message: string, code: string, cause: string = '') {
@@ -44,6 +51,7 @@ export default class Trezor extends Signer {
 
   device?: TrezorDevice
   derivation: Derivation | undefined
+  pairing?: TrezorPairing
 
   constructor(path: string) {
     super()
@@ -79,9 +87,12 @@ export default class Trezor extends Signer {
     }
 
     try {
-      // this prompts a login of pin and/or passphrase
-      await TrezorBridge.getAccountInfo(device, this.getPath(0))
+      // Use a simple device-only Ethereum call to establish the session.
+      // `getAccountInfo` routes through backend/discovery and is a poor fit as a login probe.
+      await TrezorBridge.getAddress(device, this.getPath(0), false)
     } catch (e) {
+      log.error('could not establish Trezor session', e)
+
       const deviceError = createError(
         Status.NEEDS_RECONNECTION,
         'ACCOUNT_ACCESS_FAILURE',
@@ -107,7 +118,8 @@ export default class Trezor extends Signer {
 
     return {
       ...summary,
-      capabilities: this.device?.features?.capabilities || []
+      capabilities: this.device?.features?.capabilities || [],
+      pairing: this.pairing
     }
   }
 

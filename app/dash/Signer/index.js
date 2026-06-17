@@ -23,7 +23,8 @@ class Signer extends React.Component {
       addressLimit: 5,
       latticePairCode: '',
       tPin: '',
-      tPhrase: ''
+      tPhrase: '',
+      tPairing: ''
     }
   }
 
@@ -44,6 +45,11 @@ class Signer extends React.Component {
   submitPhrase() {
     this.setState({ tPhrase: '' })
     link.rpc('trezorPhrase', this.props.id, this.state.tPhrase || '', () => {})
+  }
+
+  submitPairing() {
+    this.setState({ tPairing: '' })
+    link.rpc('trezorPairing', this.props.id, { tag: this.state.tPairing || '' }, () => {})
   }
 
   renderLoadingLive() {
@@ -165,6 +171,49 @@ class Signer extends React.Component {
             ) : (
               <></>
             )}
+          </>
+        ) : null}
+      </div>
+    )
+  }
+
+  renderTrezorPairing(active) {
+    const pairing = this.props.pairing || {}
+    const isCodeEntry = pairing.selectedMethod === 'CodeEntry' || pairing.selectedMethod === 2
+    const title = isCodeEntry
+      ? 'Enter the 6-character pairing code shown on your Trezor'
+      : 'Enter the pairing tag shown on your Trezor'
+
+    return (
+      <div className='trezorPinWrap' style={active ? {} : { height: '0px', padding: '0px 0px 0px 0px' }}>
+        {active ? (
+          <>
+            <div className='signerLatticePairTitle'>{title}</div>
+            <div className='trezorPhraseInput'>
+              <input
+                type='text'
+                autoFocus
+                maxLength={isCodeEntry ? 6 : undefined}
+                value={this.state.tPairing}
+                onChange={(e) => this.setState({ tPairing: (e.target.value || '').trim().toUpperCase() })}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    this.submitPairing()
+                  }
+                }}
+              />
+            </div>
+            <div
+              className='signerPinMessage signerPinSubmit'
+              onMouseDown={(evt) => {
+                if (evt.button === 0) {
+                  this.submitPairing()
+                }
+              }}
+            >
+              Submit Pairing Code
+            </div>
           </>
         ) : null}
       </div>
@@ -447,10 +496,12 @@ class Signer extends React.Component {
               </div>
             </div>
           </>
-        ) : type === 'trezor' && (status === 'need pin' || status === 'enter passphrase') ? (
+        ) : type === 'trezor' &&
+          (status === 'need pin' || status === 'enter passphrase' || status === 'need pairing code') ? (
           <div className='signerInterface'>
             {this.renderTrezorPin(this.props.type === 'trezor' && status === 'need pin')}
             {this.renderTrezorPhrase(this.props.type === 'trezor' && status === 'enter passphrase')}
+            {this.renderTrezorPairing(this.props.type === 'trezor' && status === 'need pairing code')}
           </div>
         ) : loading ? (
           <div className='signerLoading'>
