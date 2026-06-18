@@ -40,6 +40,17 @@ function compareVersions(a: string, b: string) {
   return 0
 }
 
+function extractVersion(tag: string) {
+  const direct = semver.valid(tag)
+  if (direct) return direct
+
+  const withoutV = tag.startsWith('v') ? semver.valid(tag.slice(1)) : null
+  if (withoutV) return withoutV
+
+  const match = tag.match(/v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/)
+  return match ? semver.valid(match[1]) : null
+}
+
 export default function (opts?: CheckOptions) {
   log.verbose('Performing manual check for updates', { prereleaseTrack: opts?.prereleaseTrack })
 
@@ -75,10 +86,13 @@ export default function (opts?: CheckOptions) {
           const latestRelease = releases[0] || { tag_name: '' }
 
           if (latestRelease.tag_name) {
-            const latestVersion =
-              latestRelease.tag_name.charAt(0) === 'v'
-                ? latestRelease.tag_name.substring(1)
-                : latestRelease.tag_name
+            const latestVersion = extractVersion(latestRelease.tag_name)
+            if (!latestVersion) {
+              log.warn('Manual check found release with unparseable version tag', {
+                tag: latestRelease.tag_name
+              })
+              return resolve(undefined)
+            }
             const isNewerVersion = compareVersions(latestVersion, version) === 1
 
             log.verbose('Manual check found release', {
