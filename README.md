@@ -1,3 +1,5 @@
+## This fork includes Trezor Safe 7 support. Use at your own risk.
+
 <h2 align="center">
   <br>
   <img src="/asset/png/FrameLogo512.png?raw=true" alt="Frame" width="150" />
