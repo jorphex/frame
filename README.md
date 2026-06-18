@@ -1,4 +1,4 @@
-## This fork includes Trezor Safe 7 support. Use at your own risk.
+## This fork adds Trezor Safe 7 support to Frame. Use at your own risk.
 
 <h2 align="center">
   <br>
