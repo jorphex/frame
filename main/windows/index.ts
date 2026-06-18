@@ -72,6 +72,15 @@ const systemTrayEventHandlers: SystemTrayEventHandlers = {
 }
 const systemTray = new SystemTray(systemTrayEventHandlers)
 const getDisplaySummonShortcut = () => store('main.shortcuts.altSlash')
+const logLinuxWindowBounds = (label: string, window?: BrowserWindow) => {
+  if (process.platform !== 'linux' || !window || window.isDestroyed()) return
+
+  try {
+    log.info(`${label} bounds`, window.getBounds())
+  } catch (err) {
+    log.info(`${label} bounds unavailable`, err)
+  }
+}
 
 const topRight = (window: BrowserWindow) => {
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
@@ -291,7 +300,6 @@ export class Tray {
     if (store('main.reveal')) {
       detectMouse()
     }
-    windows.tray.emit('hide')
     windows.tray.hide()
     events.emit('tray:hide')
   }
@@ -328,7 +336,6 @@ export class Tray {
     const pos = topRight(windows.tray)
     windows.tray.setPosition(pos.x, pos.y)
     store.trayOpen(true)
-    windows.tray.emit('show')
     if (glide && isMacOS) {
       windows.tray.showInactive()
     } else {
@@ -367,27 +374,47 @@ class Dash {
     }
     if (isMacOS) {
       dashOpts.type = 'panel'
+    } else if (process.platform === 'linux') {
+      dashOpts.type = 'toolbar'
     }
     initWindow('dash', dashOpts)
 
     if (process.platform === 'linux') {
       const positionDash = () => {
-        setTimeout(() => this.positionNextToTray(), 0)
-        setTimeout(() => this.positionNextToTray(), 50)
-        setTimeout(() => this.positionNextToTray(), 150)
+        setTimeout(() => this.positionNextToTray(undefined, 'linux tray/dash show 0ms'), 0)
+        setTimeout(() => this.positionNextToTray(undefined, 'linux tray/dash show 50ms'), 50)
+        setTimeout(() => this.positionNextToTray(undefined, 'linux tray/dash show 150ms'), 150)
       }
 
       windows.tray.on('show', positionDash)
       windows.tray.on('move', positionDash)
       windows.dash.on('show', positionDash)
+      windows.tray.on('show', () => logLinuxWindowBounds('tray native show', windows.tray))
+      windows.tray.on('hide', () => logLinuxWindowBounds('tray native hide', windows.tray))
+      windows.tray.on('move', () => logLinuxWindowBounds('tray native move', windows.tray))
+      windows.dash.on('show', () => logLinuxWindowBounds('dash native show', windows.dash))
+      windows.dash.on('hide', () => logLinuxWindowBounds('dash native hide', windows.dash))
+      windows.dash.on('move', () => logLinuxWindowBounds('dash native move', windows.dash))
+      windows.dash.on('focus', () => logLinuxWindowBounds('dash native focus', windows.dash))
     }
   }
 
-  private positionNextToTray(height?: number) {
+  private positionNextToTray(height?: number, source = 'positionNextToTray') {
     if (!windows.tray || !windows.dash) return
 
     const trayBounds = windows.tray.getBounds()
     const dashBounds = windows.dash.getBounds()
+
+    log.info(`${source} target`, {
+      trayBounds,
+      dashBounds,
+      target: {
+        x: trayBounds.x - dashBounds.width - 5,
+        y: trayBounds.y,
+        width: dashBounds.width,
+        height: height || dashBounds.height
+      }
+    })
 
     windows.dash.setBounds(
       {
@@ -428,6 +455,9 @@ class Dash {
       this.recentDisplayEvent = false
     }, 150)
     setTimeout(() => {
+      logLinuxWindowBounds('tray before dash.show flow', windows.tray)
+      logLinuxWindowBounds('dash before dash.show flow', windows.dash)
+
       if (!windows.tray.isVisible()) tray.show()
 
       if (isMacOS) {
@@ -445,14 +475,16 @@ class Dash {
       windows.dash.setMinimumSize(trayWidth, height)
       windows.dash.setSize(trayWidth, height)
       windows.dash.setMaximumSize(trayWidth, height)
-      this.positionNextToTray(height)
+      this.positionNextToTray(height, 'dash.show pre-show')
       windows.dash.show()
-      setTimeout(() => this.positionNextToTray(height), 50)
+      setTimeout(() => this.positionNextToTray(height, 'dash.show post-show 50ms'), 50)
       windows.dash.focus()
+      logLinuxWindowBounds('dash after focus', windows.dash)
       windows.dash.setVisibleOnAllWorkspaces(false, {
         visibleOnFullScreen: true,
         skipTransformProcessType: true
       })
+      logLinuxWindowBounds('dash after visibleOnAllWorkspaces(false)', windows.dash)
       if (devToolsEnabled) {
         windows.dash.webContents.openDevTools()
       }
