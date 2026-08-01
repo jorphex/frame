@@ -3,6 +3,7 @@ import Restore from 'react-restore'
 import store from '../../../../../../main/store'
 import { screen, render } from '../../../../../componentSetup'
 import TxRequestComponent from '../../../../../../app/tray/Account/Requests/TransactionRequest'
+import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew'
 import { TxClassification } from '../../../../../../main/accounts/types'
 
 jest.mock('../../../../../../main/store/persist')
@@ -61,5 +62,21 @@ describe('confirm', () => {
 
     const notice = screen.getByRole('alert')
     expect(notice.textContent).toMatch(/insufficient funds for gas/i)
+  })
+})
+
+describe('replacement status', () => {
+  it('maps the shared fee assessment to the existing transaction-card notice', () => {
+    const req = { data: { nonce: '0x7', gasPrice: '0x6e' } }
+    const requests = {
+      existing: { mode: 'monitor', status: 'sent', data: { nonce: '0x7', gasPrice: '0x64' } }
+    }
+
+    expect(new TxMain({}).getReplacementStatus(req, requests)).toEqual({
+      replacement: true,
+      possible: false,
+      reason: 'gas-price-too-low',
+      notice: 'gas price too low'
+    })
   })
 })

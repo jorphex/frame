@@ -1,4 +1,8 @@
-import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from '../../../main/provider/quantity'
+import {
+  MAX_UINT256,
+  parseRpcQuantity,
+  toRpcQuantity
+} from '../../../../resources/domain/transaction/quantity'
 
 it.each([
   ['0x0', 0n],

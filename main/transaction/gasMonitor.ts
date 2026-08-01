@@ -1,7 +1,7 @@
 import { intToHex } from '@ethereumjs/util'
 
 import type { Block } from '../chains/gas'
-import { parseRpcQuantity } from '../provider/quantity'
+import { parseRpcQuantity } from '../../resources/domain/transaction/quantity'
 
 interface FeeHistoryResponse {
   baseFeePerGas?: unknown

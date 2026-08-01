@@ -1,5 +1,5 @@
 import { chainUsesOptimismFees } from '../../../resources/utils/chains'
-import { toRpcQuantity } from '../../provider/quantity'
+import { toRpcQuantity } from '../../../resources/domain/transaction/quantity'
 
 import type { GasFees } from '../../store/state'
 

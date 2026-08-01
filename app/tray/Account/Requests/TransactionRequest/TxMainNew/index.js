@@ -2,9 +2,16 @@ import React from 'react'
 import Restore from 'react-restore'
 
 import RequestItem from '../../../../../../resources/Components/RequestItem'
+import { getReplacementStatus } from '../../../../../../resources/domain/transaction/replacement'
 import TxOverview from './overview'
 
-class TxMain extends React.Component {
+const replacementNotices = {
+  'nonce-used': 'nonce used',
+  'gas-price-too-low': 'gas price too low',
+  'gas-fees-too-low': 'gas fees too low'
+}
+
+export class TxMain extends React.Component {
   constructor(...args) {
     super(...args)
     this.state = {
@@ -13,39 +20,8 @@ class TxMain extends React.Component {
   }
 
   getReplacementStatus(req, r) {
-    const replacementStatus = { replacement: false, possible: true, notice: '' }
-    if (req.mode !== 'monitor' && req.data.nonce) {
-      const requests = Object.keys(r || {}).map((key) => r[key])
-      const monitor = requests.filter((req) => req.mode === 'monitor')
-      const monitorFilter = monitor.filter((r) => r.status !== 'error')
-      const existingNonces = monitorFilter.map((m) => m.data.nonce)
-      existingNonces.forEach((nonce, i) => {
-        if (req.data.nonce === nonce) {
-          replacementStatus.replacement = true
-          if (monitorFilter[i].status === 'confirming' || monitorFilter[i].status === 'confirmed') {
-            replacementStatus.possible = false
-            replacementStatus.notice = 'nonce used'
-          } else if (
-            req.data.gasPrice &&
-            parseInt(monitorFilter[i].data.gasPrice, 'hex') >= parseInt(req.data.gasPrice, 'hex')
-          ) {
-            replacementStatus.possible = false
-            replacementStatus.notice = 'gas price too low'
-          } else if (
-            req.data.maxPriorityFeePerGas &&
-            req.data.maxFeePerGas &&
-            Math.ceil(parseInt(monitorFilter[i].data.maxPriorityFeePerGas, 'hex') * 1.1) >
-              parseInt(req.data.maxPriorityFeePerGas, 'hex') &&
-            Math.ceil(parseInt(monitorFilter[i].data.maxFeePerGas, 'hex') * 1.1) >
-              parseInt(req.data.maxFeePerGas, 'hex')
-          ) {
-            replacementStatus.possible = false
-            replacementStatus.notice = 'gas fees too low'
-          }
-        }
-      })
-    }
-    return replacementStatus
+    const status = getReplacementStatus(req, Object.values(r || {}))
+    return { ...status, notice: replacementNotices[status.reason] || '' }
   }
 
   render() {

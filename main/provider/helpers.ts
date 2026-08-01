@@ -17,7 +17,13 @@ import { isHexString } from 'ethers/lib/utils'
 import store from '../store'
 import { usesBaseFee, TransactionData, GasFeesSource } from '../../resources/domain/transaction'
 import { getAddress } from '../../resources/utils'
-import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from './quantity'
+import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from '../../resources/domain/transaction/quantity'
+import {
+  increaseByTenPercent,
+  maximumRpcQuantity,
+  minimumReplacementFee,
+  requiresReplacementFeeBump
+} from '../../resources/domain/transaction/replacement'
 
 import type { Chain } from '../store/state'
 
@@ -42,18 +48,7 @@ export function checkExistingNonceGas(tx: TransactionData) {
   )
 
   const maxStoredQuantity = (field: 'gasPrice' | 'maxFeePerGas' | 'maxPriorityFeePerGas') =>
-    existing.reduce<bigint | undefined>((maximum, request) => {
-      const quantity = parseRpcQuantity(request.data[field])
-      if (quantity === undefined) return maximum
-      return maximum === undefined || quantity > maximum ? quantity : maximum
-    }, undefined)
-
-  const increasedByTenPercent = (value: bigint) => (value * 11n + 9n) / 10n
-  const replacementIncrease = (value: bigint) => {
-    const increased = increasedByTenPercent(value)
-    return increased > value ? increased : value + 1n
-  }
-  const isBelowReplacementThreshold = (current: bigint, requested: bigint) => current * 11n >= requested * 10n
+    maximumRpcQuantity(existing, (request) => request.data[field])
 
   if (existing.length > 0) {
     if (tx.maxPriorityFeePerGas && tx.maxFeePerGas) {
@@ -68,13 +63,13 @@ export function checkExistingNonceGas(tx: TransactionData) {
         requestedMax !== undefined &&
         existingMax >= existingFee &&
         requestedMax >= requestedFee &&
-        (isBelowReplacementThreshold(existingFee, requestedFee) ||
-          isBelowReplacementThreshold(existingMax, requestedMax))
+        (requiresReplacementFeeBump(existingFee, requestedFee) ||
+          requiresReplacementFeeBump(existingMax, requestedMax))
       ) {
         // Bump fees by 10%
-        const bumpedFee = [replacementIncrease(existingFee), requestedFee].reduce((a, b) => (a > b ? a : b))
+        const bumpedFee = [minimumReplacementFee(existingFee), requestedFee].reduce((a, b) => (a > b ? a : b))
         const bumpedBase = [
-          increasedByTenPercent(existingMax - existingFee),
+          increaseByTenPercent(existingMax - existingFee),
           requestedMax - requestedFee
         ].reduce((a, b) => (a > b ? a : b))
         const bumpedMax = bumpedBase + bumpedFee
@@ -91,10 +86,10 @@ export function checkExistingNonceGas(tx: TransactionData) {
       if (
         existingPrice !== undefined &&
         requestedPrice !== undefined &&
-        isBelowReplacementThreshold(existingPrice, requestedPrice)
+        requiresReplacementFeeBump(existingPrice, requestedPrice)
       ) {
         // Bump price by 10%
-        const bumpedPrice = replacementIncrease(existingPrice)
+        const bumpedPrice = minimumReplacementFee(existingPrice)
         const replacementPrice = bumpedPrice > requestedPrice ? bumpedPrice : requestedPrice
         if (replacementPrice > MAX_UINT256) return tx
 

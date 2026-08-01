@@ -34,7 +34,7 @@ import { openBlockExplorer } from '../windows/window'
 import { ApprovalType } from '../../resources/constants'
 import { accountNS } from '../../resources/domain/account'
 import { chainUsesOptimismFees } from '../../resources/utils/chains'
-import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from '../provider/quantity'
+import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from '../../resources/domain/transaction/quantity'
 
 const MAX_FEE_PER_GAS = 9_999n * 1_000_000_000n
 const MAX_GAS_LIMIT = 12_500_000n

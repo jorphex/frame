@@ -7,7 +7,7 @@ import provider from '../../../main/provider'
 import Accounts from '../../../main/accounts'
 import signers from '../../../main/signers'
 import { signerCompatibility, maxFee } from '../../../main/transaction'
-import { toRpcQuantity } from '../../../main/provider/quantity'
+import { toRpcQuantity } from '../../../resources/domain/transaction/quantity'
 import { GasFeesSource } from '../../../resources/domain/transaction'
 import { gweiToHex } from '../../util'
 

@@ -8,7 +8,7 @@ import {
   getSignedAddress,
   resError
 } from '../../../main/provider/helpers'
-import { MAX_UINT256, toRpcQuantity } from '../../../main/provider/quantity'
+import { MAX_UINT256, toRpcQuantity } from '../../../resources/domain/transaction/quantity'
 
 jest.mock('../../../main/store')
 

@@ -8,7 +8,7 @@ import { GasFeesSource, TransactionData, typeSupportsBaseFee } from '../../resou
 import { isNonZeroHex } from '../../resources/utils'
 import chainConfig from '../chains/config'
 import { TransactionRequest, TxClassification } from '../accounts/types'
-import { parseRpcQuantity } from '../provider/quantity'
+import { parseRpcQuantity } from '../../resources/domain/transaction/quantity'
 
 import type { Gas } from '../store/state'
 
