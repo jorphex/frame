@@ -8,6 +8,7 @@ import { Cluster, ClusterRow, ClusterValue } from '../../../../../../resources/C
 import { DisplayValue } from '../../../../../../resources/Components/DisplayValue'
 import RequestHeader from '../../../../../../resources/Components/RequestHeader'
 import BigNumber from 'bignumber.js'
+import { MAX_UINT256 } from '../../../../../../resources/domain/transaction/quantity'
 
 const SimpleContractCallOverview = ({ method }) => {
   const body = method ? `Calling Contract Method ${method}` : 'Calling Contract'
@@ -111,6 +112,28 @@ export function getSimulationPresentation(simulation) {
   }
 }
 
+const MAX_UINT256_DECIMAL = MAX_UINT256.toString(10)
+
+export function getSimulationEffectsPresentation(simulation) {
+  if (simulation?.status !== 'succeeded' || simulation.source !== 'eth_simulateV1') return null
+
+  const effects = simulation.effects || []
+  if (!effects.length && !simulation.effectsTruncated) return null
+
+  const broadApproval = effects.some(
+    (effect) =>
+      (effect.type === 'approval' && effect.standard === 'erc20' && effect.amount === MAX_UINT256_DECIMAL) ||
+      (effect.type === 'operator-approval' && effect.approved)
+  )
+  const count = effects.length
+  const countLabel = `${count} RPC-reported token effect${count === 1 ? '' : 's'}`
+
+  return {
+    broadApproval,
+    label: `${countLabel}${simulation.effectsTruncated ? ' (truncated)' : ''}`
+  }
+}
+
 const BaseOverviews = {
   CONTRACT_DEPLOY: DeployContractOverview,
   CONTRACT_CALL: ContractCallOverview,
@@ -131,6 +154,7 @@ const TxOverview = ({
   const { data: tx = {}, classification } = req
   const { data: calldata } = tx
   const simulation = getSimulationPresentation(req.simulation)
+  const simulationEffects = getSimulationEffectsPresentation(req.simulation)
 
   const Description = BaseOverviews[classification]
 
@@ -185,6 +209,20 @@ const TxOverview = ({
           <ClusterRow>
             <ClusterValue>
               <div className={`_txMainTag ${simulation.className}`}>{simulation.label}</div>
+            </ClusterValue>
+          </ClusterRow>
+        )}
+        {simulationEffects && (
+          <ClusterRow>
+            <ClusterValue>
+              <div className='_txMainTag _txMainTagWarning'>{simulationEffects.label}</div>
+            </ClusterValue>
+          </ClusterRow>
+        )}
+        {simulationEffects?.broadApproval && (
+          <ClusterRow>
+            <ClusterValue>
+              <div className='_txMainTag _txMainTagBad'>RPC reports broad token approval</div>
             </ClusterValue>
           </ClusterRow>
         )}

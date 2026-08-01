@@ -1,6 +1,8 @@
 import type { Chain } from '../chains'
 import type { TransactionData } from '../../resources/domain/transaction'
 import { parseRpcQuantity } from '../../resources/domain/transaction/quantity'
+import { parseSimulationEffects } from './effects'
+import type { SimulationEffect } from './effects'
 
 const DEFAULT_TIMEOUT_MS = 15_000
 const MAX_ERROR_MESSAGE_LENGTH = 240
@@ -15,6 +17,8 @@ export interface TransactionSimulation {
   source?: SimulationSource
   gasUsed?: string
   reason?: string
+  effects?: SimulationEffect[]
+  effectsTruncated?: boolean
 }
 
 type ChainSend = (payload: JSONRPCRequestPayload, callback: RPCRequestCallback, targetChain: Chain) => void
@@ -144,7 +148,14 @@ export function parseSimulateResult(result: unknown): TransactionSimulation | un
 
   if (call.status === '0x1') {
     if (!Array.isArray(call.logs)) return
-    return { status: 'succeeded', source: 'eth_simulateV1', gasUsed }
+    const { effects, truncated } = parseSimulationEffects(call.logs)
+    return {
+      status: 'succeeded',
+      source: 'eth_simulateV1',
+      gasUsed,
+      ...(effects.length ? { effects } : {}),
+      ...(truncated ? { effectsTruncated: true } : {})
+    }
   }
 
   if (call.status === '0x0' && isRecord(call.error)) {

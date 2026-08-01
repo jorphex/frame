@@ -4,7 +4,11 @@ import store from '../../../../../../main/store'
 import { screen, render } from '../../../../../componentSetup'
 import TxRequestComponent from '../../../../../../app/tray/Account/Requests/TransactionRequest'
 import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew'
-import { getSimulationPresentation } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
+import {
+  getSimulationEffectsPresentation,
+  getSimulationPresentation
+} from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
+import { SimulationEffects } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData/effects'
 import { canApproveTransaction } from '../../../../../../app/tray/Footer/RequestCommand'
 import TxApproval from '../../../../../../app/tray/Footer/RequestCommand/TxApproval'
 import link from '../../../../../../resources/link'
@@ -127,6 +131,57 @@ describe('simulation review', () => {
       {},
       expect.any(Function)
     )
+  })
+
+  it('qualifies RPC-reported effects and highlights broad approvals', () => {
+    const account = '0x1111111111111111111111111111111111111111'
+    const token = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const max = (2n ** 256n - 1n).toString(10)
+    const simulation = {
+      status: 'succeeded',
+      source: 'eth_simulateV1',
+      effectsTruncated: true,
+      effects: [
+        {
+          type: 'transfer',
+          standard: 'erc20',
+          token,
+          from: account,
+          to: '0x2222222222222222222222222222222222222222',
+          amount: '10'
+        },
+        {
+          type: 'approval',
+          standard: 'erc20',
+          token,
+          owner: account,
+          spender: '0x3333333333333333333333333333333333333333',
+          amount: max
+        }
+      ]
+    }
+
+    expect(getSimulationEffectsPresentation(simulation)).toEqual({
+      broadApproval: true,
+      label: '2 RPC-reported token effects (truncated)'
+    })
+
+    render(<SimulationEffects account={account} simulation={simulation} />)
+
+    expect(screen.getByText('RPC-Reported Effects')).toBeTruthy()
+    expect(screen.getByRole('note').textContent).toMatch(/not a verified or complete balance diff/i)
+    expect(screen.getByText('ERC-20 Send')).toBeTruthy()
+    expect(screen.getByText('ERC-20 Unlimited Approval')).toBeTruthy()
+    expect(screen.getAllByText(token)).toHaveLength(2)
+    expect(screen.getByRole('alert').textContent).toMatch(/preview truncated/i)
+  })
+
+  it('does not claim effects for an eth_call fallback', () => {
+    const simulation = { status: 'succeeded', source: 'eth_call' }
+
+    expect(getSimulationEffectsPresentation(simulation)).toBeNull()
+    render(<SimulationEffects account='0x1' simulation={simulation} />)
+    expect(screen.queryByText('RPC-Reported Effects')).toBeNull()
   })
 })
 

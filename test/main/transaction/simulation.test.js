@@ -67,6 +67,47 @@ it('strictly parses one successful simulation call', () => {
   )
 })
 
+it('attaches normalized effects only to a successful eth_simulateV1 result', () => {
+  const addressTopic = (address) => `0x${'0'.repeat(24)}${address.slice(2)}`
+  const amount = 10n.toString(16).padStart(64, '0')
+  const result = parseSimulateResult([
+    {
+      calls: [
+        {
+          status: '0x1',
+          gasUsed: '0x5208',
+          returnData: '0x',
+          logs: [
+            {
+              address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              topics: [
+                '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+                addressTopic(transaction.from),
+                addressTopic(transaction.to)
+              ],
+              data: `0x${amount}`
+            }
+          ]
+        }
+      ]
+    }
+  ])
+
+  expect(result).toMatchObject({
+    status: 'succeeded',
+    source: 'eth_simulateV1',
+    effects: [
+      {
+        type: 'transfer',
+        standard: 'erc20',
+        from: transaction.from,
+        to: transaction.to,
+        amount: '10'
+      }
+    ]
+  })
+})
+
 it('parses a bounded revert result', () => {
   const reason = 'execution reverted: ' + 'x'.repeat(500)
   const result = parseSimulateResult([
