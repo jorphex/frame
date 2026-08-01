@@ -285,9 +285,16 @@ export class Provider extends EventEmitter {
       resError(error.message, req.payload, res)
       return cb(error)
     }
+    const signRequest = storedRequest as SignRequest
+    if (
+      !Array.isArray(signRequest.approvals) ||
+      signRequest.approvals.some((approval) => !approval.approved)
+    ) {
+      return cb(new Error('Message signature approval state is missing or unconfirmed'))
+    }
 
-    const { payload, data } = storedRequest as SignRequest
-    const address = storedRequest.account
+    const { payload, data } = signRequest
+    const address = signRequest.account
     const message = data.rawMessage
 
     accounts.signMessage(address, message, (err, signed) => {
@@ -315,11 +322,8 @@ export class Provider extends EventEmitter {
       delete this.handlers[req.handlerId]
     }
 
-    if (
-      req.type === 'signErc20Permit' &&
-      (!Array.isArray(req.approvals) || req.approvals.some((approval) => !approval.approved))
-    ) {
-      return cb(new Error('Token permit approval state is missing or unconfirmed'))
+    if (!Array.isArray(req.approvals) || req.approvals.some((approval) => !approval.approved)) {
+      return cb(new Error('Typed signature approval state is missing or unconfirmed'))
     }
 
     const { payload, typedMessage } = req
@@ -702,7 +706,8 @@ export class Provider extends EventEmitter {
         rawMessage: parsedRequest.rawMessage,
         decodedMessage: parsedRequest.decodedMessage,
         context: parsedRequest.context
-      }
+      },
+      approvals: []
     }
 
     const _res = (data: any) => {
@@ -809,7 +814,8 @@ export class Provider extends EventEmitter {
       payload,
       account: targetAccount.address,
       origin: payload._origin,
-      context
+      context,
+      approvals: []
     }
 
     // TODO: all of this below code to construct the original request can be added to

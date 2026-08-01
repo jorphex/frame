@@ -134,6 +134,7 @@ export interface SignRequest extends AccountRequest<'sign'> {
     decodedMessage: string
     context: MessageSigningContext
   }
+  approvals: Approval[]
 }
 
 export type MessageSigningMethod = 'personal_sign' | 'eth_sign'
@@ -203,6 +204,7 @@ export type SignatureRequest = SignTypedDataRequest | SignRequest
 export interface DefaultSignTypedDataRequest extends AccountRequest<'signTypedData'> {
   typedMessage: TypedMessage
   context: TypedDataContext
+  approvals: Approval[]
 }
 
 interface EIP2612PermitDomain {

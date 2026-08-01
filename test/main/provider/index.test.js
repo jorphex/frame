@@ -127,6 +127,23 @@ describe('#approveTransactionRequest', () => {
 })
 
 describe('#approveSignTypedData', () => {
+  it('refuses to sign generic typed data while risk consent is unconfirmed', (done) => {
+    accounts.signTypedData = jest.fn()
+
+    provider.approveSignTypedData(
+      {
+        handlerId: 'unconfirmed-typed-data',
+        type: 'signTypedData',
+        approvals: [{ type: 'approveDangerousSignature', approved: false }]
+      },
+      (error) => {
+        expect(error.message).toMatch(/missing or unconfirmed/i)
+        expect(accounts.signTypedData).not.toHaveBeenCalled()
+        done()
+      }
+    )
+  })
+
   it('refuses to sign a permit while its required approval is unconfirmed', (done) => {
     accounts.signTypedData = jest.fn()
 
@@ -155,6 +172,27 @@ describe('#approveSignTypedData', () => {
         done()
       }
     )
+  })
+})
+
+describe('#approveSign', () => {
+  it('refuses to sign a message while risk consent is unconfirmed', (done) => {
+    const request = {
+      handlerId: 'unconfirmed-message',
+      type: 'sign',
+      account: address,
+      payload: { params: [address, '0x01'] },
+      data: { rawMessage: '0x01' },
+      approvals: [{ type: 'approveDangerousSignature', approved: false }]
+    }
+    accountRequests.push(request)
+    accounts.signMessage = jest.fn()
+
+    provider.approveSign(request, (error) => {
+      expect(error.message).toMatch(/missing or unconfirmed/i)
+      expect(accounts.signMessage).not.toHaveBeenCalled()
+      done()
+    })
   })
 })
 

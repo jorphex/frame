@@ -174,6 +174,18 @@ describe('simulation review', () => {
     ).toBe(false)
   })
 
+  it('advances through composed signature approvals in order', () => {
+    const signatureRisk = { type: 'approveDangerousSignature', approved: false }
+    const permitRisk = { type: 'approveUnlimitedTokenPermit', approved: false }
+    const req = { type: 'signErc20Permit', approvals: [signatureRisk, permitRisk] }
+
+    expect(getRequiredRequestApproval(req)).toBe(signatureRisk)
+    signatureRisk.approved = true
+    expect(getRequiredRequestApproval(req)).toBe(permitRisk)
+    permitRisk.approved = true
+    expect(getRequiredRequestApproval(req)).toBeUndefined()
+  })
+
   it('renders and confirms unlimited permit consent through the shared warning UI', async () => {
     const req = { handlerId: 'unlimited-token-permit', type: 'signErc20Permit' }
     const approval = {

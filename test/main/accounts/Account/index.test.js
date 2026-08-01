@@ -92,6 +92,38 @@ const permitRequest = (value, handlerId = 'token-permit') => ({
   approvals: []
 })
 
+const messageRequest = (risks, handlerId = 'message-signature') => ({
+  handlerId,
+  type: 'sign',
+  account: accountState.address,
+  origin: 'example.test',
+  payload: { params: [accountState.address, '0x01'] },
+  data: {
+    rawMessage: '0x01',
+    decodedMessage: '0x01',
+    context: {
+      method: 'personal_sign',
+      requestChainId: 1,
+      origin: 'example.test',
+      encoding: 'hex',
+      byteLength: 1,
+      risks
+    }
+  },
+  approvals: []
+})
+
+const typedRequest = (risks, handlerId = 'typed-signature') => ({
+  handlerId,
+  type: 'signTypedData',
+  account: accountState.address,
+  origin: 'example.test',
+  payload: { params: [accountState.address, {}] },
+  typedMessage: { data: {}, version: 'V4' },
+  context: { requestChainId: 1, risks },
+  approvals: []
+})
+
 beforeEach(() => {
   jest.clearAllTimers()
   simulateTransaction.mockImplementation(() => new Promise(() => {}))
@@ -100,6 +132,54 @@ beforeEach(() => {
 })
 
 describe('#addRequest', () => {
+  it('requires explicit consent for normalized dangerous message risks', () => {
+    const request = messageRequest(['opaque-message', 'legacy-eth-sign', 'siwe-expired'])
+
+    account.addRequest(request)
+
+    expect(request.approvals).toHaveLength(1)
+    expect(request.approvals[0]).toMatchObject({
+      type: ApprovalType.SignatureRisk,
+      approved: false,
+      data: {
+        title: 'Dangerous Message Signature',
+        confirmLabel: 'Sign Anyway',
+        riskCodes: 'legacy-eth-sign,siwe-expired'
+      }
+    })
+  })
+
+  it('keeps informational message risks on the normal one-step review path', () => {
+    const request = messageRequest(['opaque-message', 'siwe-origin-unverified'])
+
+    account.addRequest(request)
+
+    expect(request.approvals).toEqual([])
+  })
+
+  it('requires explicit consent for typed-data domain risks', () => {
+    const request = typedRequest(['domain-chain-mismatch'])
+
+    account.addRequest(request)
+
+    expect(request.approvals[0]).toMatchObject({
+      type: ApprovalType.SignatureRisk,
+      data: { title: 'Risky Typed Signature', riskCodes: 'domain-chain-mismatch' }
+    })
+  })
+
+  it('composes typed-data and unlimited-permit approvals independently', () => {
+    const request = permitRequest(maxTokenAmount.toString(10), 'risky-unlimited-permit')
+    request.context.risks = ['domain-chain-mismatch']
+
+    account.addRequest(request)
+
+    expect(request.approvals.map(({ type }) => type)).toEqual([
+      ApprovalType.SignatureRisk,
+      ApprovalType.TokenPermitRisk
+    ])
+  })
+
   it('requires explicit consent for an unlimited EIP-2612 permit', () => {
     const request = permitRequest(maxTokenAmount.toString(10))
 

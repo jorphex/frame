@@ -28,13 +28,14 @@ import { Type as SignerType, getSignerType } from '../../../resources/domain/sig
 import provider from '../../provider'
 import { ApprovalType } from '../../../resources/constants'
 import { parseTokenBaseUnitAmount } from '../../../resources/domain/token/amount'
+import { requiredSignatureRisks } from '../../../resources/domain/signature/risk'
 
 import reveal from '../../reveal'
 import { isTransactionRequest, isTypedMessageSignatureRequest } from '../../../resources/domain/request'
 import Erc20Contract from '../../contracts/erc20'
 import { simulateTransaction } from '../../transaction/simulation'
 
-import type { PermitSignatureRequest, SignRequest, TypedMessage } from '../types'
+import type { PermitSignatureRequest, SignatureRequest, SignRequest, TypedMessage } from '../types'
 import type { Permission } from '../../store/state'
 import type { TransactionSimulation } from '../../transaction/simulation'
 
@@ -50,7 +51,7 @@ interface SignerOptions {
   type?: string
 }
 
-type ManagedApprovalRequest = TransactionRequest | PermitSignatureRequest
+type ManagedApprovalRequest = TransactionRequest | SignatureRequest
 
 interface AccountOptions {
   address?: Address
@@ -534,6 +535,26 @@ class FrameAccount {
     })
   }
 
+  syncSignatureApprovalRisk(req: SignatureRequest) {
+    const kind = req.type === 'sign' ? 'message' : 'typed-data'
+    const context = req.type === 'sign' ? req.data?.context : req.context
+    const risks = requiredSignatureRisks(kind, context?.risks)
+    if (risks.length === 0) {
+      this.removeApproval(req, ApprovalType.SignatureRisk)
+      return
+    }
+
+    const subject = kind === 'message' ? 'message signing request' : 'typed-data signing request'
+    this.syncManagedApproval(req, ApprovalType.SignatureRisk, {
+      title: kind === 'message' ? 'Dangerous Message Signature' : 'Risky Typed Signature',
+      message: `Frame detected ${risks.length} high-risk condition${
+        risks.length === 1 ? '' : 's'
+      } in this ${subject}. Review every displayed warning before proceeding.`,
+      confirmLabel: 'Sign Anyway',
+      riskCodes: risks.join(',')
+    })
+  }
+
   private applySimulationResult(req: TransactionRequest, simulation: TransactionSimulation) {
     req.simulation = simulation
     this.syncSimulationApproval(req, simulation)
@@ -632,8 +653,11 @@ class FrameAccount {
       this.requests[r.handlerId].created = Date.now()
       this.requests[r.handlerId].res = res
 
-      if (req.type === 'signErc20Permit') {
+      if (['sign', 'signTypedData', 'signErc20Permit'].includes(req.type)) {
         req.approvals = req.approvals || []
+        this.syncSignatureApprovalRisk(req)
+      }
+      if (req.type === 'signErc20Permit') {
         this.syncPermitApprovalRisk(req)
       }
 
