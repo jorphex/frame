@@ -18,7 +18,8 @@ import accounts, {
   SignTypedDataRequest,
   AddChainRequest,
   SwitchChainRequest,
-  AddTokenRequest
+  AddTokenRequest,
+  WalletCallsRequest
 } from '../accounts'
 
 import FrameAccount from '../accounts/Account'
@@ -42,6 +43,10 @@ import {
 } from './permissions'
 import Erc20Contract from '../contracts/erc20'
 import { getOriginAccess, requestOriginAccess } from '../api/origins'
+import { parseSendCalls } from './walletCalls'
+import { WalletCallLifecycleController } from './walletCallLifecycle'
+import walletCallBatchLedger from './walletCallLedger'
+import { executeWalletCallRuntime } from './walletCallRuntime'
 
 import { Subscription, SubscriptionType, hasSubscriptionPermission } from './subscriptions'
 import {
@@ -483,6 +488,116 @@ export class Provider extends EventEmitter {
     this.handlers[handlerId] = res
 
     return handlerId
+  }
+
+  private createWalletCallLifecycle() {
+    return new WalletCallLifecycleController({
+      ledger: walletCallBatchLedger,
+      accounts,
+      execute: (input) =>
+        executeWalletCallRuntime(input, {
+          accounts,
+          connection: this.connection,
+          ledger: walletCallBatchLedger
+        }),
+      reportError: (error) => log.error('Wallet-call lifecycle error', error)
+    })
+  }
+
+  sendWalletCalls(payload: RPCRequestPayload, res: RPCRequestCallback) {
+    try {
+      const access = getOriginAccess(payload)
+      if (!access?.permission?.provider) {
+        throw { code: 4100, message: 'Origin is not authorized for wallet calls' }
+      }
+
+      const currentAccount = accounts.current()
+      if (!currentAccount || currentAccount.id.toLowerCase() !== access.address.toLowerCase()) {
+        throw { code: 4100, message: 'Wallet-call account is no longer selected' }
+      }
+
+      const request = parseSendCalls(payload.params)
+      if (request.from && request.from !== currentAccount.id.toLowerCase()) {
+        throw { code: 4100, message: 'Wallet-call sender is not the selected account' }
+      }
+
+      const chainId = Number(BigInt(request.chainId))
+      if (!this.walletCallChainAvailable(chainId)) {
+        throw { code: 5710, message: `Unsupported chain id: ${request.chainId}` }
+      }
+
+      return this.createWalletCallLifecycle().admit(
+        {
+          handlerId: uuid(),
+          origin: payload._origin,
+          account: currentAccount.id,
+          payload
+        },
+        res
+      )
+    } catch (error) {
+      return resError(error as EVMError, payload, res)
+    }
+  }
+
+  approveWalletCallsRequest(accountId: string, handlerId: string) {
+    try {
+      const request = accounts.getRequestForAccount<WalletCallsRequest>(accountId, handlerId)
+      if (request.type !== 'walletCalls') throw new Error('Wallet-call request is no longer available')
+
+      let rejection: EVMError | undefined
+      if (!this.walletCallOriginAuthorized(request.origin, request.account)) {
+        rejection = { code: 4100, message: 'Wallet-call origin is no longer authorized' }
+      } else {
+        try {
+          if (!this.walletCallChainAvailable(Number(BigInt(request.chainId)))) {
+            rejection = { code: 5710, message: `Unsupported chain id: ${request.chainId}` }
+          }
+        } catch (_) {
+          rejection = { code: -32602, message: 'Invalid wallet-call chain id' }
+        }
+      }
+
+      if (rejection) {
+        accounts.rejectRequestForAccount(accountId, handlerId, rejection)
+        throw Object.assign(new Error(rejection.message), { code: rejection.code })
+      }
+
+      return this.createWalletCallLifecycle().approve(accountId, handlerId)
+    } catch (error) {
+      return Promise.reject(error)
+    }
+  }
+
+  declineWalletCallsRequest(accountId: string, handlerId: string) {
+    return accounts.rejectRequestForAccount(accountId, handlerId, {
+      code: 4001,
+      message: 'User rejected the wallet-call request'
+    })
+  }
+
+  private walletCallOriginAuthorized(originId: string, accountId: string) {
+    const origin = store('main.origins', originId)
+    if (!origin || typeof origin.name !== 'string') return false
+    const permissions = (store('main.permissions', accountId.toLowerCase()) || {}) as Record<
+      string,
+      { origin?: string; provider?: boolean }
+    >
+    return Object.values(permissions).some(
+      (permission) => permission.origin === origin.name && permission.provider === true
+    )
+  }
+
+  private walletCallChainAvailable(chainId: number) {
+    if (!Number.isSafeInteger(chainId) || chainId <= 0) return false
+    const network = store('main.networks.ethereum', chainId)
+    const connection = this.connection.connections?.ethereum?.[chainId]
+    return Boolean(
+      network &&
+        network.on !== false &&
+        connection?.chainConfig &&
+        (connection.primary?.connected || connection.secondary?.connected)
+    )
   }
 
   private async getGasEstimate(rawTx: TransactionData) {

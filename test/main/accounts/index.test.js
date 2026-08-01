@@ -1064,6 +1064,54 @@ describe('#rejectRequest', () => {
     })
     expect(Object.keys(Accounts.current().requests)).toHaveLength(0)
   })
+
+  it('rejects from the explicit account while another account remains current', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const response = jest.fn()
+    const explicit = {
+      ...request,
+      handlerId: 'explicit-rejection',
+      account: account2.address,
+      data: { ...request.data, from: account2.address }
+    }
+    targetAccount.addRequest(explicit, response)
+
+    expect(
+      Accounts.rejectRequestForAccount(account2.address.toUpperCase(), explicit.handlerId, {
+        code: 4001,
+        message: 'User rejected the request'
+      })
+    ).toBe(true)
+
+    expect(Accounts.current().id).toBe(account.address)
+    expect(response).toHaveBeenCalledWith({
+      id: request.payload.id,
+      jsonrpc: request.payload.jsonrpc,
+      error: { code: 4001, message: 'User rejected the request' }
+    })
+    expect(targetAccount.requests[explicit.handlerId]).toBeUndefined()
+  })
+
+  it('does not reject a request through the wrong account identity', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const response = jest.fn()
+    const explicit = {
+      ...request,
+      handlerId: 'wrong-account-rejection',
+      account: account2.address,
+      data: { ...request.data, from: account2.address }
+    }
+    targetAccount.addRequest(explicit, response)
+
+    expect(() =>
+      Accounts.rejectRequestForAccount(account.address, explicit.handlerId, {
+        code: 4001,
+        message: 'User rejected the request'
+      })
+    ).toThrow(/locate account request/i)
+    expect(response).not.toHaveBeenCalled()
+    expect(targetAccount.requests[explicit.handlerId]).toBe(explicit)
+  })
 })
 
 describe('#removeRequest', () => {

@@ -903,6 +903,43 @@ export class Accounts extends EventEmitter {
     }
   }
 
+  rejectRequestForAccount(accountId: string, handlerId: string, error: EVMError) {
+    if (
+      typeof accountId !== 'string' ||
+      typeof handlerId !== 'string' ||
+      !handlerId ||
+      !error ||
+      typeof error !== 'object' ||
+      typeof error.code !== 'number' ||
+      typeof error.message !== 'string' ||
+      !error.message
+    ) {
+      throw new Error('Invalid account rejection')
+    }
+
+    const request = this.getRequestForAccount(accountId, handlerId)
+    const account = this.accounts[accountId.toLowerCase()]
+
+    account.rejectRequest(request, error)
+    return true
+  }
+
+  getRequestForAccount<T extends AccountRequest = AccountRequest>(accountId: string, handlerId: string) {
+    if (typeof accountId !== 'string' || typeof handlerId !== 'string' || !handlerId) {
+      throw new Error('Invalid account request identity')
+    }
+
+    const account = this.accounts[accountId.toLowerCase()]
+    if (!account) throw new Error('Could not locate request account')
+    const request = account.getRequest<T>(handlerId)
+    if (!request) throw new Error('Could not locate account request')
+    if (typeof request.account !== 'string' || request.account.toLowerCase() !== account.id) {
+      throw new Error('Request does not belong to account')
+    }
+
+    return request
+  }
+
   addRequest(req: AccountRequest, res?: RPCCallback<any>) {
     log.info('addRequest', JSON.stringify(req))
 

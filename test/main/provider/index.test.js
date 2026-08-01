@@ -14,6 +14,8 @@ import { toRpcQuantity } from '../../../resources/domain/transaction/quantity'
 import { gweiToHex } from '../../../resources/utils'
 import { Type as SignerType } from '../../../resources/domain/signer'
 import Erc20Contract from '../../../main/contracts/erc20'
+import walletCallBatchLedger from '../../../main/provider/walletCallLedger'
+import { executeWalletCallRuntime } from '../../../main/provider/walletCallRuntime'
 
 const address = '0x22dd63c3619818fdbc262c78baee43cb61e9cccf'
 
@@ -27,6 +29,7 @@ jest.mock('../../../main/reveal', () => ({
   resolveEntityType: jest.fn().mockResolvedValue('external')
 }))
 jest.mock('../../../main/contracts/erc20', () => jest.fn())
+jest.mock('../../../main/provider/walletCallRuntime', () => ({ executeWalletCallRuntime: jest.fn() }))
 
 jest.mock('../../../main/provider/subscriptions', () => {
   const { SubscriptionType } = jest.requireActual('../../../main/provider/subscriptions')
@@ -51,6 +54,8 @@ beforeEach(() => {
   store.set('main.accounts', {})
   store.set('main.origins', {})
   store.set('main.permissions', {})
+  store.set('main.walletCallBatches', {})
+  store.setWalletCallBatches = jest.fn((batches) => store.set('main.walletCallBatches', batches))
 
   provider.handlers = {}
 
@@ -62,6 +67,47 @@ beforeEach(() => {
     store.set('main.accounts', req.account, 'requests', { [req.handlerId]: req })
     accountRequests.push(req)
     if (res) res()
+  })
+  accounts.addRequestForAccount = jest.fn((accountId, req, res) => {
+    if (accountId !== req.account) throw new Error('wrong request account')
+    req.res = res
+    accountRequests.push(req)
+    return true
+  })
+  accounts.claimWalletCallsRequestWithResponse = jest.fn((accountId, handlerId) => {
+    const request = accountRequests.find((candidate) => candidate.handlerId === handlerId)
+    if (!request || request.account !== accountId || typeof request.res?.accept !== 'function') {
+      throw new Error('wallet-call request unavailable')
+    }
+    request.locked = true
+    request.status = 'pending'
+    const responder = request.res
+    delete request.res
+    return {
+      snapshot: {
+        id: request.batchId,
+        origin: request.origin,
+        account: request.account,
+        chainId: request.chainId,
+        calls: request.calls,
+        preparation: request.preparation
+      },
+      responder
+    }
+  })
+  accounts.settleWalletCallsRequest = jest.fn(() => true)
+  accounts.getRequestForAccount = jest.fn((accountId, handlerId) => {
+    const request = accountRequests.find((candidate) => candidate.handlerId === handlerId)
+    if (!request || request.account !== accountId) throw new Error('wallet-call request unavailable')
+    return request
+  })
+  accounts.rejectRequestForAccount = jest.fn((accountId, handlerId, error) => {
+    const index = accountRequests.findIndex((candidate) => candidate.handlerId === handlerId)
+    const request = accountRequests[index]
+    if (!request || request.account !== accountId) throw new Error('wallet-call request unavailable')
+    request.res({ id: request.payload.id, jsonrpc: request.payload.jsonrpc, error })
+    accountRequests.splice(index, 1)
+    return true
   })
 
   connection.send = jest.fn()
@@ -89,6 +135,8 @@ beforeEach(() => {
   accounts.setTxSigned = jest.fn()
   accounts.lockRequest = jest.fn()
   accounts.rejectUnapprovedRequestsForOriginChain = jest.fn()
+  executeWalletCallRuntime.mockReset()
+  executeWalletCallRuntime.mockResolvedValue(['0xhash'])
 })
 
 describe('#approveTransactionRequest', () => {
@@ -193,6 +241,157 @@ describe('#approveSign', () => {
       expect(accounts.signMessage).not.toHaveBeenCalled()
       done()
     })
+  })
+})
+
+describe('#wallet-call provider boundary', () => {
+  const originId = '8073729a-5e59-53b7-9e69-5d9bcff94087'
+  const payload = (overrides = {}) => ({
+    id: 71,
+    jsonrpc: '2.0',
+    method: 'wallet_sendCalls',
+    _origin: originId,
+    params: [
+      {
+        version: '2.0.0',
+        from: address,
+        chainId: '0x1',
+        atomicRequired: false,
+        calls: [{ to: address, data: '0x', value: '0x0' }],
+        ...overrides
+      }
+    ]
+  })
+
+  const authorize = () => {
+    store.set('main.origins', originId, {
+      chain: { id: 1, type: 'ethereum' },
+      name: 'example.test'
+    })
+    store.set('main.permissions', address, {
+      [originId]: { handlerId: originId, origin: 'example.test', provider: true }
+    })
+    store.set('main.networks.ethereum', 1, { id: 1, on: true })
+  }
+
+  beforeEach(authorize)
+
+  it('admits an authorized request without allocating a global provider handler', () => {
+    const respond = jest.fn()
+
+    const admitted = provider.sendWalletCalls(payload(), respond)
+
+    expect(admitted).toMatchObject({ origin: originId, account: address, chainId: '0x1' })
+    expect(validateUUID(admitted.handlerId)).toBe(true)
+    expect(accountRequests).toHaveLength(1)
+    expect(accountRequests[0]).toMatchObject({
+      handlerId: admitted.handlerId,
+      batchId: admitted.id,
+      origin: originId,
+      account: address,
+      type: 'walletCalls'
+    })
+    expect(provider.handlers).toEqual({})
+    expect(respond).not.toHaveBeenCalled()
+    expect(walletCallBatchLedger.getStatus(originId, address, admitted.id).status).toBe(100)
+  })
+
+  it.each([
+    ['unauthorized origin', () => store.set('main.permissions', {}), payload(), 4100],
+    ['wrong sender', () => {}, payload({ from: '0x3333333333333333333333333333333333333333' }), 4100],
+    ['unknown chain', () => {}, payload({ chainId: '0xa' }), 5710],
+    ['disabled chain', () => store.set('main.networks.ethereum', 1, { id: 1, on: false }), payload(), 5710],
+    [
+      'disconnected chain',
+      () => {
+        connection.connections.ethereum[1].primary.connected = false
+      },
+      payload(),
+      5710
+    ]
+  ])('rejects a request from an %s before admission', (_label, arrange, request, code) => {
+    arrange()
+    const respond = jest.fn()
+
+    expect(provider.sendWalletCalls(request, respond)).toBeUndefined()
+
+    expect(respond).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.objectContaining({ code }) })
+    )
+    expect(accounts.addRequestForAccount).not.toHaveBeenCalled()
+    expect(store('main.walletCallBatches')).toEqual({})
+    expect(provider.handlers).toEqual({})
+  })
+
+  it('approves against the captured account after current-account selection changes', async () => {
+    const events = []
+    const respond = jest.fn(() => events.push('response'))
+    executeWalletCallRuntime.mockImplementationOnce(async () => {
+      events.push('execute')
+      return ['0xhash']
+    })
+    const admitted = provider.sendWalletCalls(payload(), respond)
+    currentAccount = { id: '0x3333333333333333333333333333333333333333' }
+
+    await expect(provider.approveWalletCallsRequest(address, admitted.handlerId)).resolves.toEqual(['0xhash'])
+
+    expect(respond).toHaveBeenCalledWith({ id: 71, jsonrpc: '2.0', result: { id: admitted.id } })
+    expect(events).toEqual(['response', 'execute'])
+    expect(accounts.claimWalletCallsRequestWithResponse).toHaveBeenCalledWith(address, admitted.handlerId)
+    expect(executeWalletCallRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ id: admitted.id, origin: originId, account: address, chainId: '0x1' }),
+      expect.objectContaining({ accounts, connection, ledger: walletCallBatchLedger })
+    )
+    expect(accounts.settleWalletCallsRequest).toHaveBeenCalledWith(address, admitted.handlerId, undefined)
+    expect(provider.handlers).toEqual({})
+  })
+
+  it('declines against the captured account and durably closes the batch', () => {
+    const respond = jest.fn()
+    const admitted = provider.sendWalletCalls(payload(), respond)
+    currentAccount = { id: '0x3333333333333333333333333333333333333333' }
+
+    expect(provider.declineWalletCallsRequest(address, admitted.handlerId)).toBe(true)
+
+    expect(accounts.rejectRequestForAccount).toHaveBeenCalledWith(address, admitted.handlerId, {
+      code: 4001,
+      message: 'User rejected the wallet-call request'
+    })
+    expect(respond).toHaveBeenCalledWith({
+      id: 71,
+      jsonrpc: '2.0',
+      error: { code: 4001, message: 'User rejected the wallet-call request' }
+    })
+    expect(walletCallBatchLedger.getStatus(originId, address, admitted.id).status).toBe(400)
+    expect(executeWalletCallRuntime).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['revoked origin permission', () => store.set('main.permissions', {}), 4100],
+    ['disabled target chain', () => store.set('main.networks.ethereum', 1, { id: 1, on: false }), 5710],
+    [
+      'malformed stored chain',
+      () => {
+        accountRequests[0].chainId = 'not-a-chain'
+      },
+      -32602
+    ]
+  ])('rejects approval after %s without executing', async (_label, arrange, code) => {
+    const respond = jest.fn()
+    const admitted = provider.sendWalletCalls(payload(), respond)
+    arrange()
+
+    await expect(provider.approveWalletCallsRequest(address, admitted.handlerId)).rejects.toMatchObject({
+      code
+    })
+
+    expect(respond).toHaveBeenCalledWith({
+      id: 71,
+      jsonrpc: '2.0',
+      error: expect.objectContaining({ code })
+    })
+    expect(walletCallBatchLedger.getStatus(originId, address, admitted.id).status).toBe(400)
+    expect(executeWalletCallRuntime).not.toHaveBeenCalled()
   })
 })
 
