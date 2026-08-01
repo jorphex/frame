@@ -142,6 +142,41 @@ it('snapshots input and runtime method references before asynchronous work', asy
   expect(originalSend).toHaveBeenCalledTimes(2)
 })
 
+it('publishes durable evidence before a broadcast callback can stall', async () => {
+  const source = input()
+  source.calls = [source.calls[0]]
+  source.preparation.calls = [source.preparation.calls[0]]
+  source.preparation.maxFee = '0x52080'
+  const deps = dependencies()
+  deps.evidenceAvailable = jest.fn()
+  let broadcastCallback
+  deps.connection.send.mockImplementation((_payload, callback) => {
+    broadcastCallback = callback
+  })
+
+  const execution = executeWalletCallRuntime(source, deps)
+  for (let index = 0; index < 10; index += 1) await Promise.resolve()
+
+  expect(deps.ledger.reserveTransaction).toHaveBeenCalledTimes(1)
+  expect(deps.evidenceAvailable).toHaveBeenCalledTimes(1)
+  expect(deps.ledger.markTransactionSubmitted).not.toHaveBeenCalled()
+
+  const payload = deps.connection.send.mock.calls[0][0]
+  broadcastCallback({ id: payload.id, jsonrpc: '2.0', result: hashSignedTransaction(payload.params[0]) })
+  await expect(execution).resolves.toHaveLength(1)
+  expect(deps.evidenceAvailable).toHaveBeenCalledTimes(2)
+})
+
+it('does not let evidence notification failures interrupt execution', async () => {
+  const deps = dependencies()
+  deps.evidenceAvailable = jest.fn(() => {
+    throw new Error('poller unavailable')
+  })
+
+  await expect(executeWalletCallRuntime(input(), deps)).resolves.toHaveLength(2)
+  expect(deps.evidenceAvailable).toHaveBeenCalledTimes(4)
+})
+
 it.each([
   ['callback error', (callback) => callback(new Error('device declined')), /device declined/],
   [

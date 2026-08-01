@@ -25,6 +25,7 @@ export interface WalletCallRuntimeDependencies {
   accounts: WalletCallRuntimeAccounts
   connection: WalletCallRuntimeConnection
   ledger: WalletCallRuntimeLedger
+  evidenceAvailable?(): void
 }
 
 function runtimeError(error: unknown, fallback: string) {
@@ -54,7 +55,12 @@ export async function executeWalletCallRuntime(
     typeof dependencies.accounts.signTransactionForAccount !== 'function' ||
     !dependencies.connection ||
     typeof dependencies.connection.send !== 'function' ||
-    !dependencies.ledger
+    !dependencies.ledger ||
+    typeof dependencies.ledger.reserveTransaction !== 'function' ||
+    typeof dependencies.ledger.markTransactionSubmitted !== 'function' ||
+    typeof dependencies.ledger.complete !== 'function' ||
+    typeof dependencies.ledger.fail !== 'function' ||
+    (dependencies.evidenceAvailable !== undefined && typeof dependencies.evidenceAvailable !== 'function')
   ) {
     throw new Error('Invalid wallet-call runtime dependencies')
   }
@@ -63,11 +69,34 @@ export async function executeWalletCallRuntime(
     dependencies.accounts
   )
   const send = dependencies.connection.send.bind(dependencies.connection)
+  const reserveTransaction = dependencies.ledger.reserveTransaction.bind(dependencies.ledger)
+  const markTransactionSubmitted = dependencies.ledger.markTransactionSubmitted.bind(dependencies.ledger)
+  const completeBatch = dependencies.ledger.complete.bind(dependencies.ledger)
+  const failBatch = dependencies.ledger.fail.bind(dependencies.ledger)
+  const evidenceAvailable = dependencies.evidenceAvailable?.bind(dependencies)
+  const notifyEvidenceAvailable = () => {
+    try {
+      evidenceAvailable?.()
+    } catch (_) {
+      return
+    }
+  }
   const account = snapshot.account
   const targetChain = Object.freeze({ type: 'ethereum', id: Number(BigInt(snapshot.chainId)) })
 
   return executePreparedWalletCallBatch(snapshot, {
-    ledger: dependencies.ledger,
+    ledger: Object.freeze({
+      reserveTransaction(origin: string, account: string, id: string, hash: string) {
+        reserveTransaction(origin, account, id, hash)
+        notifyEvidenceAvailable()
+      },
+      markTransactionSubmitted(origin: string, account: string, id: string, hash: string) {
+        markTransactionSubmitted(origin, account, id, hash)
+        notifyEvidenceAvailable()
+      },
+      complete: completeBatch,
+      fail: failBatch
+    }),
     signTransaction: (transaction) =>
       new Promise((resolve, reject) => {
         let settled = false

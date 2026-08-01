@@ -47,6 +47,7 @@ import { parseCallsStatus, parseGetCapabilities, parseSendCalls } from './wallet
 import { WalletCallLifecycleController } from './walletCallLifecycle'
 import walletCallBatchLedger from './walletCallLedger'
 import { executeWalletCallRuntime } from './walletCallRuntime'
+import walletCallEvidenceRuntime from './walletCallEvidenceRuntime'
 
 import { Subscription, SubscriptionType, hasSubscriptionPermission } from './subscriptions'
 import {
@@ -498,7 +499,8 @@ export class Provider extends EventEmitter {
         executeWalletCallRuntime(input, {
           accounts,
           connection: this.connection,
-          ledger: walletCallBatchLedger
+          ledger: walletCallBatchLedger,
+          evidenceAvailable: () => walletCallEvidenceRuntime.wake()
         }),
       reportError: (error) => log.error('Wallet-call lifecycle error', error)
     })

@@ -16,6 +16,7 @@ import { Type as SignerType } from '../../../resources/domain/signer'
 import Erc20Contract from '../../../main/contracts/erc20'
 import walletCallBatchLedger from '../../../main/provider/walletCallLedger'
 import { executeWalletCallRuntime } from '../../../main/provider/walletCallRuntime'
+import walletCallEvidenceRuntime from '../../../main/provider/walletCallEvidenceRuntime'
 
 const address = '0x22dd63c3619818fdbc262c78baee43cb61e9cccf'
 
@@ -30,6 +31,10 @@ jest.mock('../../../main/reveal', () => ({
 }))
 jest.mock('../../../main/contracts/erc20', () => jest.fn())
 jest.mock('../../../main/provider/walletCallRuntime', () => ({ executeWalletCallRuntime: jest.fn() }))
+jest.mock('../../../main/provider/walletCallEvidenceRuntime', () => ({
+  __esModule: true,
+  default: { wake: jest.fn() }
+}))
 
 jest.mock('../../../main/provider/subscriptions', () => {
   const { SubscriptionType } = jest.requireActual('../../../main/provider/subscriptions')
@@ -137,6 +142,7 @@ beforeEach(() => {
   accounts.rejectUnapprovedRequestsForOriginChain = jest.fn()
   executeWalletCallRuntime.mockReset()
   executeWalletCallRuntime.mockResolvedValue(['0xhash'])
+  walletCallEvidenceRuntime.wake.mockReset()
 })
 
 describe('#approveTransactionRequest', () => {
@@ -342,8 +348,9 @@ describe('#wallet-call provider boundary', () => {
   it('approves against the captured account after current-account selection changes', async () => {
     const events = []
     const respond = jest.fn(() => events.push('response'))
-    executeWalletCallRuntime.mockImplementationOnce(async () => {
+    executeWalletCallRuntime.mockImplementationOnce(async (_input, dependencies) => {
       events.push('execute')
+      dependencies.evidenceAvailable()
       return ['0xhash']
     })
     const admitted = provider.sendWalletCalls(payload(), respond)
@@ -356,10 +363,30 @@ describe('#wallet-call provider boundary', () => {
     expect(accounts.claimWalletCallsRequestWithResponse).toHaveBeenCalledWith(address, admitted.handlerId)
     expect(executeWalletCallRuntime).toHaveBeenCalledWith(
       expect.objectContaining({ id: admitted.id, origin: originId, account: address, chainId: '0x1' }),
-      expect.objectContaining({ accounts, connection, ledger: walletCallBatchLedger })
+      expect.objectContaining({
+        accounts,
+        connection,
+        ledger: walletCallBatchLedger,
+        evidenceAvailable: expect.any(Function)
+      })
     )
     expect(accounts.settleWalletCallsRequest).toHaveBeenCalledWith(address, admitted.handlerId, undefined)
+    expect(walletCallEvidenceRuntime.wake).toHaveBeenCalledTimes(1)
     expect(provider.handlers).toEqual({})
+  })
+
+  it('wakes evidence reconciliation after an execution failure', async () => {
+    const failure = new Error('broadcast outcome is ambiguous')
+    executeWalletCallRuntime.mockImplementationOnce(async (_input, dependencies) => {
+      dependencies.evidenceAvailable()
+      throw failure
+    })
+    const admitted = provider.sendWalletCalls(payload(), jest.fn())
+
+    await expect(provider.approveWalletCallsRequest(address, admitted.handlerId)).rejects.toThrow(failure)
+
+    expect(walletCallEvidenceRuntime.wake).toHaveBeenCalledTimes(1)
+    expect(accounts.settleWalletCallsRequest).toHaveBeenCalledWith(address, admitted.handlerId, failure)
   })
 
   it('declines against the captured account and durably closes the batch', () => {
@@ -380,6 +407,7 @@ describe('#wallet-call provider boundary', () => {
     })
     expect(walletCallBatchLedger.getStatus(originId, address, admitted.id).status).toBe(400)
     expect(executeWalletCallRuntime).not.toHaveBeenCalled()
+    expect(walletCallEvidenceRuntime.wake).not.toHaveBeenCalled()
   })
 
   it.each([

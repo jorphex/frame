@@ -22,6 +22,7 @@ import { openBlockExplorer, openExternal } from './windows/window'
 import { FrameInstance } from './windows/frames/frameInstances'
 import Erc20Contract from './contracts/erc20'
 import { getErrorCode } from '../resources/utils'
+import walletCallEvidenceRuntime from './provider/walletCallEvidenceRuntime'
 
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
@@ -61,6 +62,16 @@ log.info(`Node: v${process.versions.node}`)
 
 // prevent showing the exit dialog more than once
 let closing = false
+let walletCallEvidenceLifecycleReady = false
+
+function startWalletCallEvidenceRuntime() {
+  if (!walletCallEvidenceLifecycleReady) {
+    walletCallEvidenceLifecycleReady = true
+    powerMonitor.on('suspend', () => walletCallEvidenceRuntime.stop())
+    powerMonitor.on('resume', () => walletCallEvidenceRuntime.start())
+  }
+  walletCallEvidenceRuntime.start()
+}
 
 process.on('uncaughtException', (e) => {
   log.error('Uncaught Exception!', e)
@@ -259,6 +270,7 @@ ipcMain.on('tray:syncPath', (e, path, value) => {
 
 ipcMain.on('tray:ready', () => {
   require('./api')
+  startWalletCallEvidenceRuntime()
 
   if (!isDev) {
     startUpdater()
@@ -349,6 +361,7 @@ app.on('second-instance', (event, argv, workingDirectory) => {
 app.on('activate', () => windows.showTray())
 
 app.on('before-quit', () => {
+  walletCallEvidenceRuntime.stop()
   if (!updater.updateReady) {
     updater.stop()
   }
