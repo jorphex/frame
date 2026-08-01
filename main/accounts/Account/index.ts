@@ -34,11 +34,11 @@ import { requiredSignatureRisks } from '../../../resources/domain/signature/risk
 import reveal from '../../reveal'
 import { isTransactionRequest, isTypedMessageSignatureRequest } from '../../../resources/domain/request'
 import Erc20Contract from '../../contracts/erc20'
-import { simulateTransaction } from '../../transaction/simulation'
+import { simulateTransaction, simulateWalletCalls } from '../../transaction/simulation'
 
 import type { PermitSignatureRequest, SignatureRequest, SignRequest, TypedMessage } from '../types'
 import type { Permission } from '../../store/state'
-import type { TransactionSimulation } from '../../transaction/simulation'
+import type { TransactionSimulation, WalletCallsSimulationResult } from '../../transaction/simulation'
 import { parseErc20ApprovalIntent } from '../../../resources/domain/transaction/allowance'
 
 const nebula = nebulaApi()
@@ -639,6 +639,52 @@ class FrameAccount {
     }, 0)
   }
 
+  private applyWalletCallsSimulationResult(req: WalletCallsRequest, simulation: WalletCallsSimulationResult) {
+    req.simulation = simulation
+    this.update()
+  }
+
+  refreshWalletCallsSimulation(req: WalletCallsRequest, publishPending = true) {
+    if (this.requests[req.handlerId] !== req) return
+
+    const version = (this.simulationVersions[req.handlerId] || 0) + 1
+    this.simulationVersions[req.handlerId] = version
+    req.simulation = { status: 'pending', calls: [] }
+    if (publishPending) this.update()
+
+    clearTimeout(this.simulationTimers[req.handlerId])
+    this.simulationTimers[req.handlerId] = setTimeout(() => {
+      delete this.simulationTimers[req.handlerId]
+      if (this.requests[req.handlerId] !== req || this.simulationVersions[req.handlerId] !== version) return
+
+      const calls = req.calls.map((call) => ({
+        ...call,
+        chainId: req.chainId,
+        from: req.account
+      }))
+      simulateWalletCalls(calls, {
+        send: (payload, callback, targetChain) => provider.connection.send(payload, callback, targetChain)
+      })
+        .then((simulation) => {
+          const knownRequest = this.requests[req.handlerId]
+          if (knownRequest !== req || this.simulationVersions[req.handlerId] !== version) return
+
+          this.applyWalletCallsSimulationResult(req, simulation)
+        })
+        .catch((error) => {
+          const knownRequest = this.requests[req.handlerId]
+          if (knownRequest !== req || this.simulationVersions[req.handlerId] !== version) return
+
+          this.applyWalletCallsSimulationResult(req, {
+            status: 'failed',
+            source: 'eth_simulateV1',
+            calls: [],
+            reason: error instanceof Error ? error.message.slice(0, 240) : 'Stateful simulation failed'
+          })
+        })
+    }, 0)
+  }
+
   private async decodeTypedMessage(req: SignTypedDataRequest) {
     if (req.type === 'signTypedData') return
 
@@ -679,6 +725,11 @@ class FrameAccount {
       this.recipientIdentity(req)
       this.decodeCalldata(req)
       this.recognizeActions(req)
+      return
+    }
+
+    if (req.type === 'walletCalls') {
+      this.refreshWalletCallsSimulation(req as WalletCallsRequest, false)
       return
     }
 
@@ -827,6 +878,9 @@ class FrameAccount {
   close() {
     Object.values(this.simulationTimers).forEach(clearTimeout)
     this.simulationTimers = {}
+    Object.keys(this.simulationVersions).forEach((handlerId) => {
+      this.simulationVersions[handlerId] += 1
+    })
     this.accountObserver.remove()
   }
 

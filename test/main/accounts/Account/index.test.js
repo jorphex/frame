@@ -2,11 +2,14 @@ import Account from '../../../../main/accounts/Account'
 import { utils } from 'ethers'
 import reveal from '../../../../main/reveal'
 import { fetchContract } from '../../../../main/contracts'
-import { simulateTransaction } from '../../../../main/transaction/simulation'
+import { simulateTransaction, simulateWalletCalls } from '../../../../main/transaction/simulation'
 import { ApprovalType } from '../../../../resources/constants'
 
 jest.mock('../../../../main/reveal')
-jest.mock('../../../../main/transaction/simulation', () => ({ simulateTransaction: jest.fn() }))
+jest.mock('../../../../main/transaction/simulation', () => ({
+  simulateTransaction: jest.fn(),
+  simulateWalletCalls: jest.fn()
+}))
 jest.mock('../../../../main/contracts', () => {
   const real = jest.requireActual('../../../../main/contracts')
 
@@ -124,14 +127,139 @@ const typedRequest = (risks, handlerId = 'typed-signature') => ({
   approvals: []
 })
 
+const walletCallsRequest = (handlerId = 'wallet-calls') => ({
+  handlerId,
+  type: 'walletCalls',
+  account: accountState.address,
+  origin: 'example.test',
+  payload: { id: 1, jsonrpc: '2.0', method: 'wallet_sendCalls', params: [] },
+  version: '2.0.0',
+  batchId: 'batch-id',
+  chainId: '0x1',
+  atomic: false,
+  calls: [
+    { to: tokenContract, value: '0x0', data: '0xabcd' },
+    { value: '0x2', data: '0x6000' }
+  ],
+  simulation: { status: 'pending', calls: [] }
+})
+
 beforeEach(() => {
   jest.clearAllTimers()
   simulateTransaction.mockImplementation(() => new Promise(() => {}))
+  simulateWalletCalls.mockImplementation(() => new Promise(() => {}))
   account = new Account(accountState, accounts)
   fetchContract.mockResolvedValueOnce(undefined)
 })
 
 describe('#addRequest', () => {
+  it('simulates exact wallet calls under the selected account and chain', async () => {
+    const result = {
+      status: 'succeeded',
+      source: 'eth_simulateV1',
+      calls: [
+        { status: 'succeeded', source: 'eth_simulateV1', gasUsed: '0x1' },
+        { status: 'succeeded', source: 'eth_simulateV1', gasUsed: '0x2' }
+      ]
+    }
+    simulateWalletCalls.mockResolvedValueOnce(result)
+    const request = walletCallsRequest()
+    request.calls[0].from = '0x4444444444444444444444444444444444444444'
+    request.calls[0].chainId = '0xa'
+
+    account.addRequest(request)
+    expect(request.simulation).toEqual({ status: 'pending', calls: [] })
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(simulateWalletCalls).toHaveBeenCalledWith(
+      [
+        {
+          chainId: '0x1',
+          from: accountState.address,
+          to: tokenContract,
+          value: '0x0',
+          data: '0xabcd'
+        },
+        {
+          chainId: '0x1',
+          from: accountState.address,
+          value: '0x2',
+          data: '0x6000'
+        }
+      ],
+      { send: expect.any(Function) }
+    )
+    expect(request.simulation).toBe(result)
+  })
+
+  it('keeps only the newest wallet-call simulation result', async () => {
+    let resolveInitial
+    let resolveUpdated
+    simulateWalletCalls
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveInitial = resolve)))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveUpdated = resolve)))
+    const request = walletCallsRequest('wallet-calls-version')
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    account.refreshWalletCallsSimulation(request)
+    jest.advanceTimersByTime(1)
+
+    resolveUpdated({ status: 'unavailable', source: 'eth_simulateV1', calls: [], reason: 'unsupported' })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.simulation.status).toBe('unavailable')
+
+    resolveInitial({ status: 'succeeded', source: 'eth_simulateV1', calls: [] })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.simulation.status).toBe('unavailable')
+  })
+
+  it('does not apply wallet-call simulation after request removal', async () => {
+    let resolveSimulation
+    simulateWalletCalls.mockImplementationOnce(() => new Promise((resolve) => (resolveSimulation = resolve)))
+    const request = walletCallsRequest('removed-wallet-calls')
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    account.clearRequest(request.handlerId)
+    resolveSimulation({ status: 'succeeded', source: 'eth_simulateV1', calls: [] })
+    await Promise.resolve()
+
+    expect(account.requests[request.handlerId]).toBeUndefined()
+  })
+
+  it('does not apply an in-flight wallet-call simulation after account close', async () => {
+    let resolveSimulation
+    simulateWalletCalls.mockImplementationOnce(() => new Promise((resolve) => (resolveSimulation = resolve)))
+    const request = walletCallsRequest('closed-wallet-calls')
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    account.accountObserver = { remove: jest.fn() }
+    account.close()
+    resolveSimulation({ status: 'succeeded', source: 'eth_simulateV1', calls: [] })
+    await Promise.resolve()
+
+    expect(request.simulation).toEqual({ status: 'pending', calls: [] })
+  })
+
+  it('bounds unexpected wallet-call simulation failures', async () => {
+    simulateWalletCalls.mockRejectedValueOnce(new Error('x'.repeat(300)))
+    const request = walletCallsRequest('failed-wallet-calls')
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.simulation).toEqual({
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'x'.repeat(240)
+    })
+  })
+
   it('requires explicit consent for normalized dangerous message risks', () => {
     const request = messageRequest(['opaque-message', 'legacy-eth-sign', 'siwe-expired'])
 

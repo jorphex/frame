@@ -38,12 +38,30 @@ export interface TransactionSimulation {
   allowance?: TokenAllowanceSnapshot
 }
 
-export interface WalletCallsSimulation {
+export interface SimulationCallData {
+  chainId: TransactionData['chainId']
+  type?: TransactionData['type']
+  nonce?: TransactionData['nonce']
+  from?: TransactionData['from']
+  to?: TransactionData['to']
+  gasLimit?: TransactionData['gasLimit']
+  gas?: TransactionData['gas']
+  value?: TransactionData['value']
+  data?: TransactionData['data']
+  gasPrice?: TransactionData['gasPrice']
+  maxPriorityFeePerGas?: TransactionData['maxPriorityFeePerGas']
+  maxFeePerGas?: TransactionData['maxFeePerGas']
+  accessList?: TransactionData['accessList']
+}
+
+export interface WalletCallsSimulationResult {
   status: Exclude<SimulationStatus, 'pending'>
   source: 'eth_simulateV1'
   calls: TransactionSimulation[]
   reason?: string
 }
+
+export type WalletCallsSimulation = { status: 'pending'; calls: [] } | WalletCallsSimulationResult
 
 type ChainSend = (payload: JSONRPCRequestPayload, callback: RPCRequestCallback, targetChain: Chain) => void
 
@@ -134,7 +152,7 @@ function copyCallField(target: Record<string, unknown>, key: string, value: unkn
   if (value !== undefined) target[key] = value
 }
 
-export function buildSimulationCall(transaction: TransactionData) {
+export function buildSimulationCall(transaction: SimulationCallData) {
   const call: Record<string, unknown> = {}
 
   copyCallField(call, 'type', transaction.type)
@@ -152,7 +170,7 @@ export function buildSimulationCall(transaction: TransactionData) {
   return call
 }
 
-export function buildEthCall(transaction: TransactionData) {
+export function buildEthCall(transaction: SimulationCallData) {
   const call = buildSimulationCall(transaction)
   const { input, nonce: _nonce, type: _type, ...ethCall } = call
 
@@ -161,7 +179,7 @@ export function buildEthCall(transaction: TransactionData) {
 }
 
 async function readTokenAllowance(
-  transaction: TransactionData,
+  transaction: SimulationCallData,
   send: ChainSend,
   targetChain: Chain,
   timeoutMs: number,
@@ -358,9 +376,9 @@ export async function simulateTransaction(
 }
 
 export async function simulateWalletCalls(
-  transactions: TransactionData[],
+  transactions: SimulationCallData[],
   dependencies: SimulationDependencies
-): Promise<WalletCallsSimulation> {
+): Promise<WalletCallsSimulationResult> {
   if (transactions.length < 1 || transactions.length > MAX_WALLET_CALLS) {
     return {
       status: 'failed',

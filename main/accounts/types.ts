@@ -10,7 +10,7 @@ import type { TransactionData } from '../../resources/domain/transaction'
 import type { Action } from '../transaction/actions'
 import type { TokenData } from '../contracts/erc20'
 import type { Token } from '../store/state'
-import type { TransactionSimulation } from '../transaction/simulation'
+import type { TransactionSimulation, WalletCallsSimulation } from '../transaction/simulation'
 
 export enum ReplacementType {
   Speed = 'speed',
@@ -261,4 +261,5 @@ export interface WalletCallsRequest extends AccountRequest<'walletCalls'> {
     data: string
     value: string
   }>
+  simulation: WalletCallsSimulation
 }

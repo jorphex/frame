@@ -11,7 +11,8 @@ function request(calls) {
     account,
     chainId: '0x1',
     atomic: false,
-    calls
+    calls,
+    simulation: { status: 'pending', calls: [] }
   }
 }
 
@@ -70,4 +71,70 @@ it('renders complete long calldata rather than a shortened preview', () => {
 
   expect(screen.getByText('256 bytes')).toBeTruthy()
   expect(screen.getByText(calldata).textContent).toBe(calldata)
+})
+
+it('renders ordered RPC execution evidence and qualified token effects', () => {
+  const req = request([
+    { to: target, value: '0x0', data: '0x' },
+    { to: target, value: '0x1', data: '0xabcd' }
+  ])
+  req.simulation = {
+    status: 'reverted',
+    source: 'eth_simulateV1',
+    calls: [
+      {
+        status: 'succeeded',
+        source: 'eth_simulateV1',
+        gasUsed: '0x5208',
+        effects: [
+          {
+            type: 'transfer',
+            standard: 'erc20',
+            token: target,
+            from: account,
+            to: target,
+            amount: '5'
+          }
+        ],
+        allowance: {
+          source: 'eth_call',
+          token: target,
+          owner: account,
+          spender: target,
+          currentAmount: '1',
+          requestedAmount: '5'
+        }
+      },
+      {
+        status: 'reverted',
+        source: 'eth_simulateV1',
+        gasUsed: '0x42',
+        reason: 'execution reverted: denied'
+      }
+    ]
+  }
+
+  render(<WalletCallsRequest originName='example.test' req={req} />)
+
+  expect(screen.getByText('RPC reports one or more calls revert')).toBeTruthy()
+  expect(screen.getByText('RPC result: succeeded - gas used 0x5208')).toBeTruthy()
+  expect(screen.getByText('RPC result: reverted - gas used 0x42')).toBeTruthy()
+  expect(screen.getByText('execution reverted: denied')).toBeTruthy()
+  expect(screen.getByText('ERC-20 Send')).toBeTruthy()
+  expect(screen.getByText('RPC-Reported Current Allowance')).toBeTruthy()
+  expect(screen.getAllByText(/not independently verified/i).length).toBeGreaterThan(0)
+})
+
+it.each([
+  ['unavailable', 'Stateful simulation unavailable', 'Configured RPC does not support stateful simulation'],
+  ['failed', 'Stateful simulation failed', 'RPC returned malformed output']
+])('renders a bounded %s batch result without per-call claims', (status, label, reason) => {
+  const req = request([{ to: target, value: '0x0', data: '0x' }])
+  req.simulation = { status, source: 'eth_simulateV1', calls: [], reason }
+
+  render(<WalletCallsRequest originName='example.test' req={req} />)
+
+  expect(screen.getByText(label)).toBeTruthy()
+  expect(screen.getByText(reason)).toBeTruthy()
+  expect(screen.queryByText(/RPC result:/)).toBeNull()
 })
