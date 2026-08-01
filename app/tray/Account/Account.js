@@ -34,6 +34,7 @@ const requests = {
   transaction: TransactionRequest,
   access: ProviderRequest,
   addChain: ChainRequest,
+  switchChain: ChainRequest,
   addToken: AddTokenRequest
 }
 
@@ -215,6 +216,13 @@ class _AccountBody extends React.Component {
   }
 
   getChainData(req) {
+    if (req.type === 'switchChain') {
+      return {
+        sourceChainName: this.store('main.networks', req.chain.type, req.sourceChainId, 'name'),
+        destinationChainName: this.store('main.networks', req.chain.type, req.chain.id, 'name')
+      }
+    }
+
     const requestChainId =
       req.type === 'sign' ? req.data?.context?.requestChainId : req.context?.requestChainId
     const requestChainName =

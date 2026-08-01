@@ -206,11 +206,6 @@ ipcMain.handle('tray:addChain', async (e, chain, requestReference) => {
   }
 })
 
-ipcMain.on('tray:switchChain', (e, type, id, req) => {
-  if (type && id) store.selectNetwork(type, id)
-  accounts.resolveRequest(req)
-})
-
 ipcMain.handle('tray:getTokenDetails', async (e, contractAddress, chainId) => {
   try {
     const contract = new Erc20Contract(contractAddress, chainId)

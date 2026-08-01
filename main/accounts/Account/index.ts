@@ -5,8 +5,10 @@ import {
   AccessRequest,
   AccountRequest,
   Accounts,
+  AddTokenRequest,
   RequestMode,
   SignTypedDataRequest,
+  SwitchChainRequest,
   TransactionRequest
 } from '..'
 import nebulaApi from '../../nebula'
@@ -24,7 +26,7 @@ import reveal from '../../reveal'
 import { isTransactionRequest, isTypedMessageSignatureRequest } from '../../../resources/domain/request'
 import Erc20Contract from '../../contracts/erc20'
 
-import type { PermitSignatureRequest, TypedMessage } from '../types'
+import type { PermitSignatureRequest, SignRequest, TypedMessage } from '../types'
 import type { Permission } from '../../store/state'
 
 const nebula = nebulaApi()
@@ -199,10 +201,11 @@ class FrameAccount {
     return this.requests[id] as T
   }
 
-  resolveRequest({ handlerId, payload }: AccountRequest, result?: any) {
+  resolveRequest({ handlerId }: AccountRequest, result?: any) {
     const knownRequest = this.requests[handlerId]
 
     if (knownRequest) {
+      const payload = knownRequest.payload
       if (knownRequest.res && payload) {
         const { id, jsonrpc } = payload
         knownRequest.res({ id, jsonrpc, result })
@@ -212,10 +215,11 @@ class FrameAccount {
     }
   }
 
-  rejectRequest({ handlerId, payload }: AccountRequest, error: EVMError) {
+  rejectRequest({ handlerId }: AccountRequest, error: EVMError) {
     const knownRequest = this.requests[handlerId]
 
     if (knownRequest) {
+      const payload = knownRequest.payload
       if (knownRequest.res && payload) {
         const { id, jsonrpc } = payload
         knownRequest.res({ id, jsonrpc, error })
@@ -239,6 +243,40 @@ class FrameAccount {
       if (req.origin === origin) {
         const err = { code: 4001, message: 'User rejected the request' }
         this.rejectRequest(req, err)
+      }
+    })
+  }
+
+  rejectUnapprovedRequestsForOriginChain(origin: string, chainId: number, exceptHandlerId: string) {
+    const requestChainId = (request: AccountRequest) => {
+      if (request.type === 'transaction') {
+        return parseInt((request as TransactionRequest).data.chainId, 16)
+      }
+      if (request.type === 'sign') {
+        return (request as SignRequest).data.context.requestChainId
+      }
+      if (request.type === 'signTypedData' || request.type === 'signErc20Permit') {
+        return (request as SignTypedDataRequest).context.requestChainId
+      }
+      if (request.type === 'addToken') {
+        return Number((request as AddTokenRequest).token.chainId)
+      }
+      if (request.type === 'switchChain') {
+        return (request as SwitchChainRequest).sourceChainId
+      }
+    }
+
+    Object.values(this.requests).forEach((request) => {
+      if (
+        request.handlerId !== exceptHandlerId &&
+        request.origin === origin &&
+        request.status === undefined &&
+        requestChainId(request) === chainId
+      ) {
+        this.rejectRequest(request, {
+          code: 4901,
+          message: `Request cancelled because the origin switched away from chain ${chainId}`
+        })
       }
     })
   }

@@ -17,6 +17,7 @@ import accounts, {
   TransactionRequest,
   SignTypedDataRequest,
   AddChainRequest,
+  SwitchChainRequest,
   AddTokenRequest
 } from '../accounts'
 
@@ -864,22 +865,79 @@ export class Provider extends EventEmitter {
       const chainId = parseChainRequestId(payload.params)
 
       // Check if chain exists
-      const exists = Boolean(store('main.networks.ethereum', chainId))
-      if (!exists) {
+      const targetChain = store('main.networks.ethereum', chainId)
+      if (!targetChain) {
         const err: EVMError = { message: 'Chain does not exist', code: 4902 }
+        return resError(err, payload, res)
+      }
+      if (targetChain.on === false) {
+        const err: EVMError = { message: `Frame is not connected to chain ${chainId}`, code: 4901 }
         return resError(err, payload, res)
       }
 
       const originId = payload._origin
       const origin = getPayloadOrigin(payload)
-      if (origin.chain.id !== chainId) {
-        store.switchOriginChain(originId, chainId, origin.chain.type)
+      if (!origin) {
+        return resError({ message: 'Unknown requesting origin', code: 4100 }, payload, res)
+      }
+      if (origin.chain.id === chainId) return res({ id: payload.id, jsonrpc: '2.0', result: null })
+
+      const currentAccount = accounts.current()
+      if (!currentAccount) {
+        return resError(
+          { message: 'No account selected to approve the chain-switch request', code: 4100 },
+          payload,
+          res
+        )
       }
 
-      return res({ id: payload.id, jsonrpc: '2.0', result: null })
+      const request: SwitchChainRequest = {
+        handlerId: uuid(),
+        type: 'switchChain',
+        chain: { type: origin.chain.type, id: chainId },
+        sourceChainId: origin.chain.id,
+        account: currentAccount.id,
+        origin: originId,
+        payload
+      }
+
+      accounts.addRequest(request, res)
     } catch (e) {
       return resError(e as EVMError, payload, res)
     }
+  }
+
+  approveSwitchChain(handlerId: string, cb: Callback<void>) {
+    const currentAccount = accounts.current()
+    const request = currentAccount?.getRequest<SwitchChainRequest>(handlerId)
+
+    if (!currentAccount || !request || request.type !== 'switchChain') {
+      return cb(new Error('Chain-switch request is no longer available'))
+    }
+
+    const targetChain = store('main.networks', request.chain.type, request.chain.id)
+    if (!targetChain) {
+      const error = { code: 4902, message: 'Requested chain is no longer available' }
+      currentAccount.rejectRequest(request, error)
+      return cb(new Error(error.message))
+    }
+    if (targetChain.on === false) {
+      const error = { code: 4901, message: `Frame is not connected to chain ${request.chain.id}` }
+      currentAccount.rejectRequest(request, error)
+      return cb(new Error(error.message))
+    }
+
+    const origin = storeApi.getOrigin(request.origin)
+    if (!origin || origin.chain.id !== request.sourceChainId || origin.chain.type !== request.chain.type) {
+      const error = { code: 4901, message: 'Chain-switch request is stale' }
+      currentAccount.rejectRequest(request, error)
+      return cb(new Error(error.message))
+    }
+
+    accounts.rejectUnapprovedRequestsForOriginChain(request.origin, request.sourceChainId, request.handlerId)
+    store.switchOriginChain(request.origin, request.chain.id, request.chain.type)
+    currentAccount.resolveRequest(request, null)
+    cb(null)
   }
 
   private addEthereumChain(payload: RPCRequestPayload, res: RPCRequestCallback) {
@@ -1134,6 +1192,8 @@ export class Provider extends EventEmitter {
       return res({ id: payload.id, jsonrpc: '2.0', result: true }) // Subscription was ours
     if (method === 'wallet_getPermissions') return this.getPermissions(payload, res)
     if (method === 'wallet_requestPermissions') return this.requestPermissions(payload, res)
+    if (method === 'wallet_addEthereumChain') return this.addEthereumChain(payload, res)
+    if (method === 'wallet_switchEthereumChain') return this.switchEthereumChain(payload, res)
 
     const targetChain = this.parseTargetChain(payload)
 
@@ -1189,8 +1249,6 @@ export class Provider extends EventEmitter {
       )
     }
 
-    if (method === 'wallet_addEthereumChain') return this.addEthereumChain(payload, res)
-    if (method === 'wallet_switchEthereumChain') return this.switchEthereumChain(payload, res)
     if (method === 'wallet_watchAsset') return this.addCustomToken(payload, res, targetChain)
     if (method === 'wallet_getEthereumChains') return this.getChains(payload, res)
     if (method === 'wallet_getAssets')

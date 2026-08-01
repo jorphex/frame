@@ -88,6 +88,7 @@ export {
   TransactionRequest,
   SignTypedDataRequest,
   AddChainRequest,
+  SwitchChainRequest,
   AddTokenRequest
 } from './types'
 
@@ -929,6 +930,12 @@ export class Accounts extends EventEmitter {
       const account = this.accounts[address]
       if (account) account.clearRequestsByOrigin(origin)
     }
+  }
+
+  rejectUnapprovedRequestsForOriginChain(origin: string, chainId: number, exceptHandlerId: string) {
+    Object.values(this.accounts).forEach((account) => {
+      account.rejectUnapprovedRequestsForOriginChain(origin, chainId, exceptHandlerId)
+    })
   }
 
   remove(address = '') {

@@ -98,7 +98,7 @@ class Footer extends React.Component {
                 className='requestDecline'
                 style={{ pointerEvents: this.state.allowInput ? 'auto' : 'none' }}
                 onClick={() => {
-                  if (this.state.allowInput) link.send('tray:switchChain', false, false, req)
+                  this.rejectRequest(req)
                 }}
               >
                 <div className='requestDeclineButton _txButton _txButtonBad'>
@@ -109,8 +109,7 @@ class Footer extends React.Component {
                 className='requestSign'
                 style={{ pointerEvents: this.state.allowInput ? 'auto' : 'none' }}
                 onClick={() => {
-                  if (this.state.allowInput)
-                    link.send('tray:switchChain', req.chain.type, parseInt(req.chain.id), req)
+                  if (this.state.allowInput) this.approve(req.handlerId, req)
                 }}
               >
                 <div className='requestSignButton _txButton'>

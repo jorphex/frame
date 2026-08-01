@@ -148,6 +148,11 @@ const rpc = {
     accounts.updateRequest(reqId, data, actionId)
   },
   approveRequest(req) {
+    if (!req || typeof req.handlerId !== 'string') return
+    const storedRequest = accounts.current()?.getRequest(req.handlerId)
+    if (!storedRequest) return
+    req = storedRequest
+
     accounts.setRequestPending(req)
     if (req.type === 'transaction') {
       provider.approveTransactionRequest(req, (err, res) => {
@@ -164,9 +169,18 @@ const rpc = {
         if (err) return accounts.setRequestError(req.handlerId, err)
         accounts.setRequestSuccess(req.handlerId, res)
       })
+    } else if (req.type === 'switchChain') {
+      provider.approveSwitchChain(req.handlerId, (err) => {
+        if (err) accounts.setRequestError(req.handlerId, err)
+      })
     }
   },
   declineRequest(req) {
+    if (!req || typeof req.handlerId !== 'string') return
+    const storedRequest = accounts.current()?.getRequest(req.handlerId)
+    if (!storedRequest) return
+    req = storedRequest
+
     if (req.type === 'transaction' || isSignatureRequest(req)) {
       accounts.declineRequest(req.handlerId)
       provider.declineRequest(req)

@@ -156,16 +156,24 @@ it('rejects a non-canonical target chain before provider forwarding', async () =
   expect(updateOrigin).not.toHaveBeenCalled()
 })
 
-it('uses unauthorized rather than user-rejected for permission denial', async () => {
-  accounts.getSelectedAddresses.mockReturnValue(['0xc93452A74e596e81E4f73Ca1AcFF532089AD4c62'])
-  const payload = { id: 7, jsonrpc: '2.0', method: 'eth_accounts', params: [] }
+it.each(['eth_accounts', 'wallet_switchEthereumChain'])(
+  'uses unauthorized rather than user-rejected when %s lacks permission',
+  async (method) => {
+    accounts.getSelectedAddresses.mockReturnValue(['0xc93452A74e596e81E4f73Ca1AcFF532089AD4c62'])
+    const payload = {
+      id: 7,
+      jsonrpc: '2.0',
+      method,
+      params: method === 'wallet_switchEthereumChain' ? [{ chainId: '0x1' }] : []
+    }
 
-  await expect(send({ body: JSON.stringify(payload) })).resolves.toMatchObject({
-    status: 200,
-    body: { id: 7, jsonrpc: '2.0', error: { code: 4100 } }
-  })
-  expect(provider.send).not.toHaveBeenCalled()
-})
+    await expect(send({ body: JSON.stringify(payload) })).resolves.toMatchObject({
+      status: 200,
+      body: { id: 7, jsonrpc: '2.0', error: { code: 4100 } }
+    })
+    expect(provider.send).not.toHaveBeenCalled()
+  }
+)
 
 it('returns after rejecting an invalid polling client id', async () => {
   const payload = { id: 7, jsonrpc: '2.0', method: 'eth_pollSubscriptions', params: [7] }

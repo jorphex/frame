@@ -700,6 +700,25 @@ describe('#resolveRequest', () => {
   })
 })
 
+describe('#rejectRequest', () => {
+  it('uses the main-process payload rather than renderer-returned request data', () => {
+    const response = jest.fn()
+    Accounts.addRequest(request, response)
+
+    Accounts.rejectRequest(
+      { ...request, payload: { id: 'tampered', jsonrpc: '2.0' } },
+      { code: 4001, message: 'User rejected the request' }
+    )
+
+    expect(response).toHaveBeenCalledWith({
+      id: request.payload.id,
+      jsonrpc: request.payload.jsonrpc,
+      error: { code: 4001, message: 'User rejected the request' }
+    })
+    expect(Object.keys(Accounts.current().requests)).toHaveLength(0)
+  })
+})
+
 describe('#removeRequest', () => {
   beforeEach(() => {
     account.clearRequest = jest.fn()
@@ -723,6 +742,67 @@ describe('#clearRequestsByOrigin', () => {
   it('should remove any request from a given origin', () => {
     Accounts.clearRequestsByOrigin(account.id, request.origin)
     expect(Object.keys(Accounts.accounts[account.id].requests)).toHaveLength(1)
+  })
+})
+
+describe('#rejectUnapprovedRequestsForOriginChain', () => {
+  it('rejects only untouched requests for the switching origin and old chain', () => {
+    const activeAccount = Accounts.current()
+    const responses = {
+      transaction: jest.fn(),
+      sign: jest.fn()
+    }
+    const requestFor = (handlerId, overrides) => ({
+      ...request,
+      handlerId,
+      payload: { ...request.payload, id: handlerId },
+      ...overrides
+    })
+
+    Accounts.addRequest(requestFor('old-transaction', {}), responses.transaction)
+    Accounts.addRequest(
+      requestFor('old-sign', {
+        type: 'sign',
+        data: { context: { requestChainId: 1 } }
+      }),
+      responses.sign
+    )
+    Accounts.addRequest(
+      requestFor('other-chain', {
+        type: 'signTypedData',
+        context: { requestChainId: 5 }
+      })
+    )
+    Accounts.addRequest(
+      requestFor('already-approved', {
+        status: 'pending',
+        locked: true
+      })
+    )
+    Accounts.addRequest(
+      requestFor('other-origin', {
+        origin: '07h3r'
+      })
+    )
+    Accounts.addRequest(
+      requestFor('active-switch', {
+        type: 'switchChain',
+        chain: { id: 5, type: 'ethereum' },
+        sourceChainId: 1
+      })
+    )
+
+    activeAccount.rejectUnapprovedRequestsForOriginChain(request.origin, 1, 'active-switch')
+
+    expect(Object.keys(activeAccount.requests).sort()).toEqual(
+      ['active-switch', 'already-approved', 'other-chain', 'other-origin'].sort()
+    )
+    expect(responses.transaction).toHaveBeenCalledWith(
+      expect.objectContaining({ error: { code: 4901, message: expect.stringContaining('chain 1') } })
+    )
+    expect(responses.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ error: { code: 4901, message: expect.stringContaining('chain 1') } })
+    )
   })
 })
 

@@ -2,7 +2,7 @@ import React from 'react'
 import Restore from 'react-restore'
 import svg from '../../../../../resources/svg'
 
-class ChainRequest extends React.Component {
+export class ChainRequest extends React.Component {
   constructor(...args) {
     super(...args)
     this.state = { allowInput: false }
@@ -13,6 +13,9 @@ class ChainRequest extends React.Component {
 
   render() {
     const { status, notice, type, chain } = this.props.req
+    const origin = this.props.originName || 'Unknown'
+    const destinationName = this.props.chainData?.destinationChainName || chain.name || 'Unknown'
+    const sourceName = type === 'switchChain' ? this.props.chainData?.sourceChainName || 'Unknown' : ''
 
     let requestClass = 'signerRequest'
     if (status === 'success') requestClass += ' signerRequestSuccess'
@@ -43,13 +46,13 @@ class ChainRequest extends React.Component {
           ) : (
             <div className='approveTransactionPayload'>
               <div className='requestChainInner'>
-                <div className={originClass}>{this.store('main.origins', this.props.req.origin, 'name')}</div>
+                <div className={originClass}>{origin}</div>
                 <div className={'requestChainOriginSub'}>
-                  {type === 'switchChain' ? 'wants to switch to chain' : 'wants to add chain'}
+                  {type === 'switchChain' ? 'wants to switch chains' : 'wants to add chain'}
                 </div>
                 <div className='requestChainName'>
                   {type === 'switchChain'
-                    ? this.store('main.networks', chain.type, parseInt(chain.id), 'name')
+                    ? `${sourceName} (${this.props.req.sourceChainId}) to ${destinationName} (${chain.id})`
                     : chain.name}
                 </div>
               </div>
