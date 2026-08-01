@@ -102,7 +102,7 @@
     "hotkeys-js": "3.10.1",
     "ipfs-unixfs-importer": "17.0.1",
     "isutf8": "4.0.0",
-    "kubo-rpc-client": "5.2.0",
+    "kubo-rpc-client": "7.1.0",
     "node-fetch": "2.6.7",
     "node-hid": "2.1.2",
     "pngjs": "7.0.0",
