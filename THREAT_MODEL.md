@@ -30,7 +30,8 @@ they are not proof of process identity.
 Protected RPC methods require an account permission. Requests from the companion
 extension have separate recognition logic. The current model does not fully
 isolate permissions by process identity, transport, account, chain, method, or
-expiry. Request bodies and connection counts are not yet strictly bounded.
+expiry. Request bodies are bounded, but connection counts and request rates are
+not yet strictly bounded.
 
 The operating system account is therefore a major trust boundary. Frame is not
 expected to protect wallet data from malware, debuggers, or an administrator that
@@ -40,21 +41,30 @@ can read the user's files or process memory.
 
 Application state is stored in Electron's per-user data directory with mode
 `0600`. Software signer files are stored below its `signers` directory with mode
-`0600`. Seed and private-key material is password-encrypted using scrypt-derived
-AES-256-CBC and is decrypted in a child process while the signer is unlocked.
+`0600`. New seed and private-key material is password-encrypted in a versioned
+envelope using scrypt-derived AES-256-GCM with authenticated metadata. Material
+is decrypted only in a child process while the signer is unlocked.
+
+Legacy AES-256-CBC signer payloads remain decryptable. After a successful unlock,
+the worker validates that the decrypted seed or keys derive the signer's stored
+addresses before returning a new authenticated envelope. Frame retains the first
+legacy signer JSON as a mode-`0600` `.legacy-v1.bak` recovery copy, then atomically
+replaces the active JSON. Recovery copies are ignored by signer scanning and are
+removed with the signer.
 
 Current limitations:
 
-- ciphertext is not authenticated;
+- retained legacy recovery ciphertext is not authenticated and remains protected
+  by the old signer password;
 - encryption is not bound to an OS keychain or hardware-backed secret;
 - metadata, addresses, permissions, and network settings are not encrypted;
 - decrypted material exists in process memory while unlocked; and
 - overwriting a file before deletion is not a secure-erasure guarantee on modern
   filesystems or solid-state storage.
 
-Users should prefer hardware signers and maintain independent backups. A future
-storage migration must be versioned, tested against real persisted-state
-fixtures, and recoverable without silently weakening encryption.
+Users should prefer hardware signers and maintain independent backups. Encryption
+migrations must remain versioned, address-verified, atomic, tested without real
+wallet data, and recoverable without silently weakening encryption.
 
 ### Hardware Signers
 

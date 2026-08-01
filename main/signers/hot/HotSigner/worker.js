@@ -10,6 +10,7 @@ const {
   pubToAddress,
   ecrecover
 } = require('@ethereumjs/util')
+const { encryptSecret } = require('../crypto')
 
 function chainConfig(chain, hardfork) {
   const chainId = BigInt(chain)
@@ -105,29 +106,7 @@ class HotSignerWorker {
   }
 
   _encrypt(string, password) {
-    const salt = crypto.randomBytes(16)
-    const iv = crypto.randomBytes(16)
-    const cipher = crypto.createCipheriv('aes-256-cbc', this._hashPassword(password, salt), iv)
-    const encrypted = Buffer.concat([cipher.update(string), cipher.final()])
-    return salt.toString('hex') + ':' + iv.toString('hex') + ':' + encrypted.toString('hex')
-  }
-
-  _decrypt(string, password) {
-    const parts = string.split(':')
-    const salt = Buffer.from(parts.shift(), 'hex')
-    const iv = Buffer.from(parts.shift(), 'hex')
-    const decipher = crypto.createDecipheriv('aes-256-cbc', this._hashPassword(password, salt), iv)
-    const encryptedString = Buffer.from(parts.join(':'), 'hex')
-    const decrypted = Buffer.concat([decipher.update(encryptedString), decipher.final()])
-    return decrypted.toString()
-  }
-
-  _hashPassword(password, salt) {
-    try {
-      return crypto.scryptSync(password, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 36000000 })
-    } catch (e) {
-      console.error('Error during hashPassword', e) // TODO: Handle Error
-    }
+    return encryptSecret(string, password)
   }
 }
 

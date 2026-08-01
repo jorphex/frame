@@ -15,12 +15,19 @@ class RingSigner extends HotSigner {
     if (this.encryptedKeys) this.update()
   }
 
-  save() {
-    super.save({ encryptedKeys: this.encryptedKeys })
+  save(options) {
+    super.save({ encryptedKeys: this.encryptedKeys }, options)
   }
 
   unlock(password, cb) {
-    super.unlock(password, { encryptedKeys: this.encryptedKeys }, cb)
+    super.unlock(
+      password,
+      { encryptedKeys: this.encryptedKeys, addresses: this.addresses },
+      (err, result) => {
+        if (err) return cb(err)
+        this.persistEncryptionMigration('encryptedKeys', result?.encryptedKeys, cb)
+      }
+    )
   }
 
   addPrivateKey(key, password, cb) {

@@ -1,10 +1,29 @@
 import path from 'path'
+import fs from 'fs'
+import crypto from 'crypto'
 import { remove } from 'fs-extra'
-import { generateMnemonic } from 'bip39'
+import { generateMnemonic, mnemonicToSeedSync } from 'bip39'
 import log from 'electron-log'
 
 const PASSWORD = 'fr@///3_password'
 const SIGNER_PATH = path.resolve(__dirname, '../.userData/signers')
+
+const legacyEncrypt = (plaintext, password) => {
+  const salt = crypto.randomBytes(16)
+  const iv = crypto.randomBytes(16)
+  const key = crypto.scryptSync(password, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 36_000_000 })
+
+  try {
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv)
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()])
+    return `${salt.toString('hex')}:${iv.toString('hex')}:${ciphertext.toString('hex')}`
+  } finally {
+    key.fill(0)
+  }
+}
+
+const waitForCallback = (action) =>
+  new Promise((resolve, reject) => action((error, result) => (error ? reject(error) : resolve(result))))
 
 jest.mock('electron')
 jest.mock('../../../../../main/store/persist')
@@ -18,6 +37,7 @@ let hot, store
 
 describe('Seed signer', () => {
   let signer
+  let seed
 
   beforeAll(async () => {
     log.transports.console.level = false
@@ -57,6 +77,7 @@ describe('Seed signer', () => {
   test('Create from phrase', (done) => {
     try {
       const mnemonic = generateMnemonic()
+      seed = mnemonicToSeedSync(mnemonic).toString('hex')
       hot.createFromPhrase(signers, mnemonic, PASSWORD, (err, result) => {
         signer = result
         expect(err).toBe(null)
@@ -69,6 +90,35 @@ describe('Seed signer', () => {
       done(e)
     }
   }, 7_500)
+
+  test('Creates an authenticated encrypted-seed envelope', () => {
+    expect(signer.encryptedSeed).toMatchObject({
+      version: 2,
+      kdf: { name: 'scrypt', N: 32768, r: 8, p: 1, keyLength: 32 },
+      cipher: { name: 'aes-256-gcm' }
+    })
+
+    const stored = JSON.parse(fs.readFileSync(path.resolve(SIGNER_PATH, `${signer.id}.json`), 'utf8'))
+    expect(stored.encryptedSeed).toEqual(signer.encryptedSeed)
+  })
+
+  test('Migrates a verified legacy seed after unlock', async () => {
+    const signerPath = path.resolve(SIGNER_PATH, `${signer.id}.json`)
+    const backupPath = path.resolve(SIGNER_PATH, `${signer.id}.legacy-v1.bak`)
+    const legacyEncryptedSeed = legacyEncrypt(seed, PASSWORD)
+
+    signer.encryptedSeed = legacyEncryptedSeed
+    signer.save()
+    const legacyFile = fs.readFileSync(signerPath, 'utf8')
+    await waitForCallback((cb) => signer.lock(cb))
+    await waitForCallback((cb) => signer.unlock(PASSWORD, cb))
+
+    const stored = JSON.parse(fs.readFileSync(signerPath, 'utf8'))
+    expect(signer.status).toBe('ok')
+    expect(signer.encryptedSeed).toMatchObject({ version: 2, cipher: { name: 'aes-256-gcm' } })
+    expect(stored.encryptedSeed).toEqual(signer.encryptedSeed)
+    expect(fs.readFileSync(backupPath, 'utf8')).toBe(legacyFile)
+  }, 3_000)
 
   test('Lock', (done) => {
     try {
@@ -90,6 +140,7 @@ describe('Seed signer', () => {
       add: (signer) => {
         signer.close(() => {})
         if (signer.type === 'seed') count++
+        expect(signer.encryptedSeed).toMatchObject({ version: 2 })
         expect(count).toBe(1)
         done()
       },

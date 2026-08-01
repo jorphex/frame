@@ -1,5 +1,7 @@
 const hdKey = require('hdkey')
+const { computeAddress } = require('ethers').utils
 const HotSignerWorker = require('../HotSigner/worker')
+const { decryptSecret } = require('../crypto')
 
 class SeedSignerWorker extends HotSignerWorker {
   constructor() {
@@ -8,10 +10,24 @@ class SeedSignerWorker extends HotSignerWorker {
     process.on('message', (message) => this.handleMessage(message))
   }
 
-  unlock({ encryptedSeed, password }, pseudoCallback) {
+  unlock({ encryptedSeed, password, addresses }, pseudoCallback) {
     try {
-      this.seed = this._decrypt(encryptedSeed, password)
-      pseudoCallback(null)
+      const { plaintext, version } = decryptSecret(encryptedSeed, password)
+      if (!/^[0-9a-f]{128}$/i.test(plaintext)) throw new Error('Invalid seed')
+
+      if (!Array.isArray(addresses) || addresses.length !== 100) throw new Error('Invalid seed addresses')
+      const wallet = hdKey.fromMasterSeed(Buffer.from(plaintext, 'hex'))
+      const addressesMatch = addresses.every((address, index) => {
+        const publicKey = wallet.derive(`m/44'/60'/0'/0/${index}`).publicKey
+        return (
+          typeof address === 'string' && computeAddress(publicKey).toLowerCase() === address.toLowerCase()
+        )
+      })
+      if (!addressesMatch) throw new Error('Seed does not match addresses')
+
+      this.seed = plaintext
+      const result = version === 1 ? { encryptedSeed: this._encrypt(plaintext, password) } : undefined
+      pseudoCallback(null, result)
     } catch (e) {
       pseudoCallback('Invalid password')
     }
@@ -23,7 +39,13 @@ class SeedSignerWorker extends HotSignerWorker {
   }
 
   encryptSeed({ seed, password }, pseudoCallback) {
-    pseudoCallback(null, this._encrypt(seed.toString('hex'), password))
+    try {
+      const plaintext = seed.toString('hex')
+      if (!/^[0-9a-f]{128}$/i.test(plaintext)) throw new Error('Invalid seed')
+      pseudoCallback(null, this._encrypt(plaintext, password))
+    } catch (e) {
+      pseudoCallback('Unable to encrypt seed')
+    }
   }
 
   signMessage({ index, message }, pseudoCallback) {

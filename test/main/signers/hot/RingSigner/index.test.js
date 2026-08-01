@@ -8,6 +8,23 @@ const PASSWORD = 'fr@///3_password'
 const SIGNER_PATH = path.resolve(__dirname, '../.userData/signers')
 const FILE_PATH = path.resolve(__dirname, 'keystore.json')
 
+const legacyEncrypt = (plaintext, password) => {
+  const salt = crypto.randomBytes(16)
+  const iv = crypto.randomBytes(16)
+  const key = crypto.scryptSync(password, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 36_000_000 })
+
+  try {
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv)
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()])
+    return `${salt.toString('hex')}:${iv.toString('hex')}:${ciphertext.toString('hex')}`
+  } finally {
+    key.fill(0)
+  }
+}
+
+const waitForCallback = (action) =>
+  new Promise((resolve, reject) => action((error, result) => (error ? reject(error) : resolve(result))))
+
 jest.mock('electron')
 jest.mock('../../../../../main/store/persist')
 
@@ -20,6 +37,7 @@ let hot, store
 
 describe('Ring signer', () => {
   let signer
+  let privateKey
 
   beforeAll(async () => {
     log.transports.console.level = false
@@ -72,8 +90,8 @@ describe('Ring signer', () => {
 
   test('Create from private key', (done) => {
     try {
-      const privateKey = '0x' + crypto.randomBytes(32).toString('hex')
-      hot.createFromPrivateKey(signers, privateKey, PASSWORD, (err, result) => {
+      privateKey = crypto.randomBytes(32).toString('hex')
+      hot.createFromPrivateKey(signers, `0x${privateKey}`, PASSWORD, (err, result) => {
         signer = result
 
         expect(err).toBe(null)
@@ -87,6 +105,81 @@ describe('Ring signer', () => {
     }
   }, 7_500)
 
+  test('Creates an authenticated encrypted-key envelope', () => {
+    expect(signer.encryptedKeys).toMatchObject({
+      version: 2,
+      kdf: { name: 'scrypt', N: 32768, r: 8, p: 1, keyLength: 32 },
+      cipher: { name: 'aes-256-gcm' }
+    })
+
+    const stored = JSON.parse(fs.readFileSync(path.resolve(SIGNER_PATH, `${signer.id}.json`), 'utf8'))
+    expect(stored.encryptedKeys).toEqual(signer.encryptedKeys)
+  })
+
+  test('Rejects a legacy keyring that does not match its stored addresses', async () => {
+    const signerPath = path.resolve(SIGNER_PATH, `${signer.id}.json`)
+    const backupPath = path.resolve(SIGNER_PATH, `${signer.id}.legacy-v1.bak`)
+    const legacyEncryptedKeys = legacyEncrypt(privateKey, PASSWORD)
+    const addresses = signer.addresses
+
+    signer.encryptedKeys = legacyEncryptedKeys
+    signer.save()
+    await waitForCallback((cb) => signer.lock(cb))
+    signer.addresses = ['0x0000000000000000000000000000000000000001']
+    const error = await new Promise((resolve) => signer.unlock(PASSWORD, resolve))
+    signer.addresses = addresses
+
+    expect(error.message).toBe('Invalid password')
+    expect(signer.status).toBe('locked')
+    expect(JSON.parse(fs.readFileSync(signerPath, 'utf8')).encryptedKeys).toBe(legacyEncryptedKeys)
+    expect(fs.existsSync(backupPath)).toBe(false)
+  }, 3_000)
+
+  test('Relocks and preserves the legacy signer if atomic migration fails', async () => {
+    const signerPath = path.resolve(SIGNER_PATH, `${signer.id}.json`)
+    const backupPath = path.resolve(SIGNER_PATH, `${signer.id}.legacy-v1.bak`)
+    const legacyEncryptedKeys = legacyEncrypt(privateKey, PASSWORD)
+
+    signer.encryptedKeys = legacyEncryptedKeys
+    signer.save()
+    await waitForCallback((cb) => signer.lock(cb))
+
+    const originalFile = fs.readFileSync(signerPath, 'utf8')
+    const rename = jest.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+      throw new Error('synthetic rename failure')
+    })
+
+    let error
+    try {
+      error = await new Promise((resolve) => signer.unlock(PASSWORD, resolve))
+    } finally {
+      rename.mockRestore()
+    }
+
+    expect(error.message).toBe('Unable to upgrade signer encryption')
+    expect(signer.status).toBe('locked')
+    expect(signer.encryptedKeys).toBe(legacyEncryptedKeys)
+    expect(fs.readFileSync(signerPath, 'utf8')).toBe(originalFile)
+    expect(fs.readFileSync(backupPath, 'utf8')).toBe(originalFile)
+    expect(fs.readdirSync(SIGNER_PATH).filter((file) => file.endsWith('.tmp'))).toEqual([])
+    if (process.platform !== 'win32') expect(fs.statSync(backupPath).mode & 0o777).toBe(0o600)
+  }, 3_000)
+
+  test('Migrates a verified legacy keyring and preserves its first backup', async () => {
+    const signerPath = path.resolve(SIGNER_PATH, `${signer.id}.json`)
+    const backupPath = path.resolve(SIGNER_PATH, `${signer.id}.legacy-v1.bak`)
+    const originalBackup = fs.readFileSync(backupPath, 'utf8')
+
+    await waitForCallback((cb) => signer.unlock(PASSWORD, cb))
+
+    const stored = JSON.parse(fs.readFileSync(signerPath, 'utf8'))
+    expect(signer.status).toBe('ok')
+    expect(signer.encryptedKeys).toMatchObject({ version: 2, cipher: { name: 'aes-256-gcm' } })
+    expect(stored.encryptedKeys).toEqual(signer.encryptedKeys)
+    expect(fs.readFileSync(backupPath, 'utf8')).toBe(originalBackup)
+    if (process.platform !== 'win32') expect(fs.statSync(signerPath).mode & 0o777).toBe(0o600)
+  }, 3_000)
+
   test('Scan for signers', (done) => {
     jest.useFakeTimers()
 
@@ -96,6 +189,7 @@ describe('Ring signer', () => {
         try {
           signer.close(() => {})
           if (signer.type === 'ring') count++
+          expect(signer.encryptedKeys).toMatchObject({ version: 2 })
           expect(count).toBe(1)
           done()
         } catch (e) {
@@ -109,6 +203,19 @@ describe('Ring signer', () => {
 
     jest.runAllTimers()
   }, 800)
+
+  test('Delete removes both the current signer and its legacy recovery copy', () => {
+    const signerPath = path.resolve(SIGNER_PATH, `${signer.id}.json`)
+    const backupPath = path.resolve(SIGNER_PATH, `${signer.id}.legacy-v1.bak`)
+
+    expect(fs.existsSync(signerPath)).toBe(true)
+    expect(fs.existsSync(backupPath)).toBe(true)
+
+    signer.delete()
+
+    expect(fs.existsSync(signerPath)).toBe(false)
+    expect(fs.existsSync(backupPath)).toBe(false)
+  })
 
   test('Close signer', (done) => {
     try {

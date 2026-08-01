@@ -48,12 +48,19 @@ class SeedSigner extends HotSigner {
     this.addSeed(seed.toString('hex'), password, cb)
   }
 
-  save() {
-    super.save({ encryptedSeed: this.encryptedSeed })
+  save(options) {
+    super.save({ encryptedSeed: this.encryptedSeed }, options)
   }
 
   unlock(password, cb) {
-    super.unlock(password, { encryptedSeed: this.encryptedSeed }, cb)
+    super.unlock(
+      password,
+      { encryptedSeed: this.encryptedSeed, addresses: this.addresses },
+      (err, result) => {
+        if (err) return cb(err)
+        this.persistEncryptionMigration('encryptedSeed', result?.encryptedSeed, cb)
+      }
+    )
   }
 }
 

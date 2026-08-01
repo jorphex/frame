@@ -26,7 +26,7 @@ class HotSigner extends Signer {
     this.ready = false
   }
 
-  save(data) {
+  save(data, { backupLegacy = false } = {}) {
     // Construct signer
     const { id, addresses, type, network } = this
     const signer = { id, addresses, type, network, ...data }
@@ -34,23 +34,61 @@ class HotSigner extends Signer {
     // Ensure signers directory exists
     ensureDirSync(SIGNERS_PATH)
 
-    // Write signer to disk
-    fs.writeFileSync(path.resolve(SIGNERS_PATH, `${id}.json`), JSON.stringify(signer), { mode: 0o600 })
+    const signerPath = path.resolve(SIGNERS_PATH, `${id}.json`)
+    const backupPath = path.resolve(SIGNERS_PATH, `${id}.legacy-v1.bak`)
+    const temporaryPath = path.resolve(SIGNERS_PATH, `${id}.${uuid()}.tmp`)
+
+    if (backupLegacy && fs.existsSync(signerPath)) {
+      if (!fs.existsSync(backupPath)) {
+        fs.copyFileSync(signerPath, backupPath, fs.constants.COPYFILE_EXCL)
+      }
+      fs.chmodSync(backupPath, 0o600)
+    }
+
+    let descriptor
+    try {
+      descriptor = fs.openSync(temporaryPath, 'wx', 0o600)
+      fs.writeFileSync(descriptor, JSON.stringify(signer))
+      fs.fsyncSync(descriptor)
+      fs.closeSync(descriptor)
+      descriptor = undefined
+      fs.renameSync(temporaryPath, signerPath)
+    } catch (error) {
+      if (descriptor !== undefined) {
+        try {
+          fs.closeSync(descriptor)
+        } catch {}
+      }
+      try {
+        if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath)
+      } catch {}
+      throw error
+    }
 
     // Log
     log.debug('Signer saved to disk')
   }
 
   delete() {
-    const signerPath = path.resolve(SIGNERS_PATH, `${this.id}.json`)
+    const signerPaths = [
+      path.resolve(SIGNERS_PATH, `${this.id}.json`),
+      path.resolve(SIGNERS_PATH, `${this.id}.legacy-v1.bak`)
+    ]
 
-    // Overwrite file
-    fs.writeFileSync(signerPath, '00000000000000000000000000000000000000000000000000000000000000000000', {
-      mode: 0o600
+    signerPaths.filter(fs.existsSync).forEach((signerPath) => {
+      const size = fs.statSync(signerPath).size
+      const descriptor = fs.openSync(signerPath, 'r+')
+      const buffer = Buffer.alloc(Math.min(Math.max(size, 1), 64 * 1024))
+      try {
+        for (let offset = 0; offset < size; offset += buffer.length) {
+          fs.writeSync(descriptor, buffer, 0, Math.min(buffer.length, size - offset), offset)
+        }
+        fs.fsyncSync(descriptor)
+      } finally {
+        fs.closeSync(descriptor)
+      }
+      removeSync(signerPath)
     })
-
-    // Remove file
-    removeSync(signerPath)
 
     // Log
     log.info('Signer erased from disk')
@@ -72,8 +110,25 @@ class HotSigner extends Signer {
       this.status = 'ok'
       this.update()
       log.info('Signer unlocked')
-      cb(null)
+      cb(null, result)
     })
+  }
+
+  persistEncryptionMigration(field, encryptedSecret, cb) {
+    if (!encryptedSecret) return cb(null)
+
+    const previousSecret = this[field]
+    this[field] = encryptedSecret
+
+    try {
+      this.save({ backupLegacy: true })
+      log.info('Signer encryption upgraded')
+      cb(null)
+    } catch (error) {
+      this[field] = previousSecret
+      log.error('Unable to persist signer encryption upgrade', error)
+      this.lock(() => cb(new Error('Unable to upgrade signer encryption')))
+    }
   }
 
   close() {
@@ -92,7 +147,7 @@ class HotSigner extends Signer {
       // Update id
       this.id = derivedId
       // Write to disk
-      this.save({ encryptedKeys: this.encryptedKeys, encryptedSeed: this.encryptedSeed })
+      this.save()
     } else if (this.id !== derivedId) {
       // On changed ID
       // Erase from disk
@@ -102,7 +157,7 @@ class HotSigner extends Signer {
       // Update id
       this.id = derivedId
       // Write to disk
-      this.save({ encryptedKeys: this.encryptedKeys, encryptedSeed: this.encryptedSeed })
+      this.save()
     }
 
     store.updateSigner(this.summary())
