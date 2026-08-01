@@ -12,6 +12,7 @@ import chainConfig from '../../../main/chains/config'
 import { hasSubscriptionPermission } from '../../../main/provider/subscriptions'
 import { gweiToHex } from '../../../resources/utils'
 import { Type as SignerType } from '../../../resources/domain/signer'
+import Erc20Contract from '../../../main/contracts/erc20'
 
 const address = '0x22dd63c3619818fdbc262c78baee43cb61e9cccf'
 
@@ -23,6 +24,7 @@ jest.mock('../../../main/accounts', () => ({}))
 jest.mock('../../../main/reveal', () => ({
   resolveEntityType: jest.fn().mockResolvedValue('external')
 }))
+jest.mock('../../../main/contracts/erc20', () => jest.fn())
 
 jest.mock('../../../main/provider/subscriptions', () => {
   const { SubscriptionType } = jest.requireActual('../../../main/provider/subscriptions')
@@ -450,22 +452,40 @@ describe('#send', () => {
   })
 
   describe('#wallet_watchAsset', () => {
-    let request
+    let getTokenData, request
+
+    const checksumAddress = '0xBfa641051Ba0a0Ad1b0AcF549a89536A0D76472E'
+    const settle = async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    }
+    const sendRequest = (payload = request) => new Promise((resolve) => send(payload, resolve))
 
     beforeEach(() => {
       store.set('main.networks.ethereum.1', { id: 1, on: true })
+      store.set('main.networks.ethereum.5', { id: 5, on: true })
       store.set('main.tokens.custom', [])
+
+      getTokenData = jest.fn().mockResolvedValue({
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18,
+        totalSupply: '21000000000000000000000000'
+      })
+      Erc20Contract.mockClear()
+      Erc20Contract.mockImplementation(() => ({ getTokenData }))
 
       request = {
         id: 10,
+        jsonrpc: '2.0',
         method: 'wallet_watchAsset',
         params: {
           type: 'ERC20',
           options: {
-            address: '0xbfa641051ba0a0ad1b0acf549a89536a0d76472e',
-            symbol: 'BADGER',
-            name: 'BadgerDAO Token',
-            decimals: 18,
+            address: checksumAddress,
+            symbol: 'SPOOF',
+            name: 'Spoofed Token',
+            decimals: 2,
             image: 'https://badgerdao.io/icon.jpg'
           }
         },
@@ -473,85 +493,199 @@ describe('#send', () => {
       }
     })
 
-    it('adds a request for a custom token', () => {
-      send(request, () => {
-        expect(accountRequests).toHaveLength(1)
-        expect(validateUUID(accountRequests[0].handlerId)).toBe(true)
-        expect(accountRequests[0]).toEqual(
-          expect.objectContaining({
-            type: 'addToken',
-            account: address,
-            token: {
-              chainId: 1,
-              address: '0xbfa641051ba0a0ad1b0acf549a89536a0d76472e',
-              symbol: 'BADGER',
-              name: 'BadgerDAO Token',
-              decimals: 18,
-              logoURI: 'https://badgerdao.io/icon.jpg'
-            },
-            payload: request
+    it('acknowledges before metadata lookup and queues verified contract data', async () => {
+      const events = []
+      let resolveMetadata
+      getTokenData.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            events.push('metadata')
+            resolveMetadata = resolve
           })
-        )
+      )
+
+      const responsePromise = new Promise((resolve) =>
+        send(request, (response) => {
+          events.push('response')
+          resolve(response)
+        })
+      )
+
+      await expect(responsePromise).resolves.toMatchObject({ result: true })
+      expect(events).toEqual(['response', 'metadata'])
+      expect(accountRequests).toHaveLength(0)
+
+      resolveMetadata({
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18,
+        totalSupply: '21000000000000000000000000'
       })
+      await settle()
+
+      expect(Erc20Contract).toHaveBeenCalledWith(checksumAddress, 1)
+      expect(accountRequests).toHaveLength(1)
+      expect(validateUUID(accountRequests[0].handlerId)).toBe(true)
+      expect(accountRequests[0]).toEqual(
+        expect.objectContaining({
+          type: 'addToken',
+          account: address,
+          token: {
+            chainId: 1,
+            address: checksumAddress,
+            symbol: 'BADGER',
+            name: 'BadgerDAO Token',
+            decimals: 18,
+            logoURI: ''
+          },
+          payload: request
+        })
+      )
+      expect(provider.handlers).toEqual({})
     })
 
-    it('does not add a request for a token that is already added', () => {
+    it('uses the optional asset chain rather than the origin chain', async () => {
+      request.params.options.chainId = 5
+
+      await expect(sendRequest()).resolves.toMatchObject({ result: true })
+      await settle()
+
+      expect(Erc20Contract).toHaveBeenCalledWith(checksumAddress, 5)
+      expect(accountRequests[0].token.chainId).toBe(5)
+    })
+
+    it('does not look up or prompt for a token that is already added', async () => {
       store.set('main.tokens.custom', [{ address: '0xbfa641051ba0a0ad1b0acf549a89536a0d76472e', chainId: 1 }])
 
-      send(request, ({ result }) => {
-        expect(result).toBe(true)
-        expect(accountRequests).toHaveLength(0)
-      })
+      await expect(sendRequest()).resolves.toMatchObject({ result: true })
+
+      expect(Erc20Contract).not.toHaveBeenCalled()
+      expect(accountRequests).toHaveLength(0)
     })
 
-    it('rejects a request when the chain does not exist', () => {
-      store.set('main.networks.ethereum.1', undefined)
+    it('coalesces simultaneous suggestions for the same account and token', async () => {
+      let resolveMetadata
+      getTokenData.mockImplementation(() => new Promise((resolve) => (resolveMetadata = resolve)))
 
-      send(request, ({ error }) => {
-        expect(error.code).toBe(-1)
-        expect(error.message).toMatch('not connected')
-        expect(accountRequests).toHaveLength(0)
+      await Promise.all([sendRequest(), sendRequest()])
+
+      expect(Erc20Contract).toHaveBeenCalledTimes(1)
+      resolveMetadata({
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18,
+        totalSupply: '1'
       })
+      await settle()
+
+      expect(accountRequests).toHaveLength(1)
     })
 
-    it('rejects a request when the chain is disabled', () => {
-      store.set('main.networks.ethereum.1', { id: 1, on: false })
+    it('clears in-flight deduplication after a metadata timeout', async () => {
+      getTokenData.mockImplementation(() => new Promise(() => {}))
 
-      send(request, ({ error }) => {
-        expect(error.code).toBe(-1)
-        expect(error.message).toMatch('not connected')
-        expect(accountRequests).toHaveLength(0)
-      })
+      await expect(sendRequest()).resolves.toMatchObject({ result: true })
+      jest.advanceTimersByTime(15_000)
+      await settle()
+      await settle()
+
+      await expect(sendRequest()).resolves.toMatchObject({ result: true })
+      expect(Erc20Contract).toHaveBeenCalledTimes(2)
+
+      jest.advanceTimersByTime(15_000)
+      await settle()
+      await settle()
     })
 
-    it('rejects a request with no type', () => {
-      delete request.params.type
+    it('does not prompt if the selected account changes during metadata lookup', async () => {
+      let resolveMetadata
+      getTokenData.mockImplementation(() => new Promise((resolve) => (resolveMetadata = resolve)))
 
-      send(request, ({ error }) => {
-        expect(error.code).toBe(-1)
-        expect(error.message).toMatch('only ERC-20 tokens are supported')
-        expect(accountRequests).toHaveLength(0)
+      await expect(sendRequest()).resolves.toMatchObject({ result: true })
+      accounts.current.mockReturnValue({ id: '0x3333333333333333333333333333333333333333' })
+      resolveMetadata({
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18,
+        totalSupply: '1'
       })
+      await settle()
+
+      expect(accountRequests).toHaveLength(0)
     })
 
-    it('rejects a request with for a non-ERC-20 token', () => {
-      request.params.type = 'ERC721'
+    it('supports ERC-20 tokens with zero decimals', async () => {
+      getTokenData.mockResolvedValue({ name: 'Zero', symbol: 'ZERO', decimals: 0, totalSupply: '1' })
 
-      send(request, ({ error }) => {
-        expect(error.code).toBe(-1)
-        expect(error.message).toMatch('only ERC-20 tokens are supported')
-        expect(accountRequests).toHaveLength(0)
-      })
+      await expect(sendRequest()).resolves.toMatchObject({ result: true })
+      await settle()
+
+      expect(accountRequests[0].token.decimals).toBe(0)
     })
 
-    it('rejects a request with no token address', () => {
-      delete request.params.options.address
+    it.each([
+      ['a metadata lookup failure', () => getTokenData.mockRejectedValue(new Error('RPC unavailable'))],
+      [
+        'missing required metadata',
+        () => getTokenData.mockResolvedValue({ name: '', symbol: 'BADGER', decimals: 18, totalSupply: '1' })
+      ],
+      [
+        'invalid decimals',
+        () =>
+          getTokenData.mockResolvedValue({
+            name: 'BadgerDAO Token',
+            symbol: 'BADGER',
+            decimals: 256,
+            totalSupply: '1'
+          })
+      ],
+      [
+        'unavailable decimals',
+        () =>
+          getTokenData.mockResolvedValue({
+            name: 'BadgerDAO Token',
+            symbol: 'BADGER',
+            decimals: undefined,
+            totalSupply: '1'
+          })
+      ],
+      [
+        'oversized display metadata',
+        () =>
+          getTokenData.mockResolvedValue({
+            name: 'x'.repeat(129),
+            symbol: 'BADGER',
+            decimals: 18,
+            totalSupply: '1'
+          })
+      ]
+    ])('acknowledges but does not prompt after %s', async (_description, arrange) => {
+      arrange()
 
-      send(request, ({ error }) => {
-        expect(error.code).toBe(-1)
-        expect(error.message).toMatch('tokens must define an address')
-        expect(accountRequests).toHaveLength(0)
-      })
+      await expect(sendRequest()).resolves.toMatchObject({ result: true })
+      await settle()
+
+      expect(accountRequests).toHaveLength(0)
+    })
+
+    it.each([
+      ['an unknown chain', 99],
+      ['a disabled chain', 5]
+    ])('rejects %s before metadata lookup', async (_description, chainId) => {
+      request.params.options.chainId = chainId
+      if (chainId === 5) store.set('main.networks.ethereum.5', { id: 5, on: false })
+
+      await expect(sendRequest()).resolves.toMatchObject({ error: { code: 4901 } })
+      expect(Erc20Contract).not.toHaveBeenCalled()
+      expect(accountRequests).toHaveLength(0)
+    })
+
+    it('rejects when no account can review the suggestion', async () => {
+      accounts.current.mockReturnValueOnce(null)
+
+      await expect(sendRequest()).resolves.toMatchObject({ error: { code: 4100 } })
+      expect(Erc20Contract).not.toHaveBeenCalled()
+      expect(accountRequests).toHaveLength(0)
     })
   })
 

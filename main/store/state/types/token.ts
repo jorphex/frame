@@ -8,7 +8,7 @@ export const TokenIdSchema = z.object({
 const CoreTokenSchema = z.object({
   name: z.string(),
   symbol: z.string(),
-  decimals: z.number().positive(),
+  decimals: z.number().int().nonnegative(),
   logoURI: z.string().default('').optional()
 })
 

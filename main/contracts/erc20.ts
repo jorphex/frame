@@ -80,7 +80,7 @@ export default class Erc20Contract {
 
   async getTokenData(): Promise<TokenData> {
     const calls = await Promise.all([
-      this.contract.decimals().catch(() => 0),
+      this.contract.decimals().catch(() => undefined),
       this.contract.name().catch(() => ''),
       this.contract.symbol().catch(() => ''),
       this.contract

@@ -32,6 +32,8 @@ import { ApprovalType } from '../../resources/constants'
 import { createObserver as AssetsObserver, loadAssets } from './assets'
 import { getVersionFromTypedData } from './typedData'
 import { parseAddChainRequest, parseChainRequestId } from './chainRequests'
+import { parseWatchAssetRequest } from './watchAsset'
+import Erc20Contract from '../contracts/erc20'
 
 import { Subscription, SubscriptionType, hasSubscriptionPermission } from './subscriptions'
 import {
@@ -81,12 +83,30 @@ const storeApi = {
 }
 
 const getAccounts = () => accounts
+const MAX_TOKEN_NAME_LENGTH = 128
+const MAX_TOKEN_SYMBOL_LENGTH = 32
+const TOKEN_METADATA_TIMEOUT_MS = 15_000
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Token metadata request timed out')), timeoutMs)
+    timer.unref()
+  })
+
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 
 const getPayloadOrigin = ({ _origin }: RPCRequestPayload) => storeApi.getOrigin(_origin)
 
 export class Provider extends EventEmitter {
   connected = false
   connection = Chains
+  private pendingAssetSuggestions = new Set<string>()
 
   handlers: { [id: string]: any } = {}
   subscriptions: { [key in SubscriptionType]: Subscription[] } = {
@@ -889,66 +909,107 @@ export class Provider extends EventEmitter {
     }
   }
 
-  private addCustomToken(payload: RPCRequestPayload, cb: RPCRequestCallback, targetChain: Chain) {
-    const { type, options: tokenData } = (payload.params || {}) as any
+  private async queueCustomTokenRequest(
+    payload: RPCRequestPayload,
+    accountId: Address,
+    address: Address,
+    chainId: number
+  ) {
+    try {
+      const tokenData = await withTimeout(
+        new Erc20Contract(address, chainId).getTokenData(),
+        TOKEN_METADATA_TIMEOUT_MS
+      )
+      const name = tokenData.name.trim()
+      const symbol = tokenData.symbol.trim()
+      const decimals = tokenData.decimals
 
-    if ((type || '').toLowerCase() !== 'erc20') {
-      return resError('only ERC-20 tokens are supported', payload, cb)
+      if (
+        !name ||
+        name.length > MAX_TOKEN_NAME_LENGTH ||
+        !symbol ||
+        symbol.length > MAX_TOKEN_SYMBOL_LENGTH ||
+        !tokenData.totalSupply ||
+        typeof decimals !== 'number' ||
+        !Number.isInteger(decimals) ||
+        decimals < 0 ||
+        decimals > 255
+      ) {
+        return log.warn('Could not verify suggested ERC-20 token metadata', { address, chainId })
+      }
+
+      if (accounts.current()?.id !== accountId) {
+        return log.info('Ignoring asset suggestion after selected account changed', { address, chainId })
+      }
+
+      const tokenExists = store('main.tokens.custom').some(
+        (token: Token) => token.chainId === chainId && token.address.toLowerCase() === address.toLowerCase()
+      )
+      if (tokenExists) return
+
+      const token: Token = {
+        chainId,
+        name,
+        address,
+        symbol,
+        decimals,
+        logoURI: ''
+      }
+
+      accounts.addRequest({
+        handlerId: uuid(),
+        type: 'addToken',
+        token,
+        account: accountId,
+        origin: payload._origin,
+        payload
+      } as AddTokenRequest)
+    } catch (error) {
+      log.warn('Could not verify suggested ERC-20 token', { address, chainId, error })
     }
+  }
 
-    this.getChainId(
-      payload,
-      (resp: RPCResponsePayload) => {
-        if (resp.error) {
-          return resError(resp.error, payload, cb)
-        }
+  private addCustomToken(payload: RPCRequestPayload, cb: RPCRequestCallback, targetChain: Chain) {
+    try {
+      const request = parseWatchAssetRequest(payload.params, targetChain.id)
+      const chain = store('main.networks.ethereum', request.chainId)
+      const connection = this.connection.connections.ethereum[request.chainId]
 
-        const chainId = parseInt(resp.result)
-        const address = (tokenData.address || '').toLowerCase()
-        const symbol = (tokenData.symbol || '').toUpperCase()
-        const decimals = parseInt(tokenData.decimals || '1')
-
-        if (!address) {
-          return resError('tokens must define an address', payload, cb)
-        }
-
-        const res = () => {
-          cb({ id: payload.id, jsonrpc: '2.0', result: true })
-        }
-
-        // don't attempt to add the token if it's already been added
-        const tokenExists = store('main.tokens.custom').some(
-          (token: Token) => token.chainId === chainId && token.address === address
+      if (!chain?.on || !connection?.chainConfig) {
+        return resError(
+          { code: 4901, message: `Frame is not connected to chain ${request.chainId}` },
+          payload,
+          cb
         )
-        if (tokenExists) {
-          return res()
-        }
+      }
 
-        const token = {
-          chainId,
-          name: tokenData.name || capitalize(symbol),
-          address,
-          symbol,
-          decimals,
-          logoURI: tokenData.image || tokenData.logoURI || ''
-        }
+      const currentAccount = accounts.current()
+      if (!currentAccount) {
+        return resError({ code: 4100, message: 'No account selected to review the asset' }, payload, cb)
+      }
 
-        const handlerId = this.addRequestHandler(res)
+      const tokenExists = store('main.tokens.custom').some(
+        (token: Token) =>
+          token.chainId === request.chainId && token.address.toLowerCase() === request.address.toLowerCase()
+      )
 
-        accounts.addRequest(
-          {
-            handlerId,
-            type: 'addToken',
-            token,
-            account: (accounts.current() as FrameAccount).id,
-            origin: payload._origin,
-            payload
-          } as AddTokenRequest,
-          res
-        )
-      },
-      targetChain
-    )
+      cb({ id: payload.id, jsonrpc: '2.0', result: true })
+
+      const suggestionKey = `${currentAccount.id.toLowerCase()}:${
+        request.chainId
+      }:${request.address.toLowerCase()}`
+      if (!tokenExists && !this.pendingAssetSuggestions.has(suggestionKey)) {
+        this.pendingAssetSuggestions.add(suggestionKey)
+        void this.queueCustomTokenRequest(
+          payload,
+          currentAccount.id,
+          request.address,
+          request.chainId
+        ).finally(() => this.pendingAssetSuggestions.delete(suggestionKey))
+      }
+    } catch (error) {
+      return resError(error as EVMError, payload, cb)
+    }
   }
 
   private parseTargetChain(payload: RPCRequestPayload): Chain {

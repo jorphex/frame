@@ -6,7 +6,7 @@ const CoreBalanceSchema = z.object({
   name: z.string(),
   symbol: z.string(),
   balance: z.string().describe('Raw balance, in hex'),
-  decimals: z.number().positive(),
+  decimals: z.number().int().nonnegative(),
   displayBalance: z.string()
 })
 
