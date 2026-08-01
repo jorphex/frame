@@ -195,11 +195,15 @@ it('migrates the version 37 network boundary without losing custom state', async
   expect(migrations.apply(clone(migrated))).toEqual(migrated)
 })
 
-it('loads a current fixture without applying another migration', async () => {
+it('migrates the version 41 boundary and reloads it without another migration', async () => {
   const fixture = loadFixture('v41-current-state.json')
   const { migrated, reloaded } = await migrateTemporaryProfile(fixture)
 
-  expect(migrated.main).toMatchObject(fixture.state.main)
+  expect(migrated.main).toMatchObject({
+    ...fixture.state.main,
+    _version: migrations.latest,
+    walletCallBatches: {}
+  })
   expect(migrated.main._version).toBe(migrations.latest)
   expect(reloaded.main).toEqual(migrated.main)
 })

@@ -8,6 +8,7 @@ import { DappSchema } from './dapp'
 import { OriginSchema } from './origin'
 import { PermissionSchema } from './permission'
 import { ShortcutSchema } from './shortcuts'
+import { WalletCallBatchesSchema } from './walletCallBatch'
 
 const ShortcutsSchema = z.object({
   summon: ShortcutSchema
@@ -68,6 +69,7 @@ export const MainSchema = z.object({
   colorwayPrimary: ColorwayPrimarySchema,
   shortcuts: ShortcutsSchema,
   updater: UpdaterPreferencesSchema,
+  walletCallBatches: WalletCallBatchesSchema,
   ...PreferencesSchema
 })
 

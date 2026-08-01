@@ -118,6 +118,9 @@ module.exports = {
       return dontRemind
     })
   },
+  setWalletCallBatches: (u, batches) => {
+    u('main.walletCallBatches', () => batches)
+  },
   setAccount: (u, account) => {
     u('selected.current', () => account.id)
     u('selected.minimized', () => false)

@@ -23,6 +23,7 @@ export type { NativeCurrency } from './types/nativeCurrency'
 export type { Gas, GasFees } from './types/gas'
 export type { Rate } from './types/rate'
 export type { ColorwayPalette } from './types/colors'
+export type { WalletCallBatch, WalletCallBatches, WalletCallReceipt } from './types/walletCallBatch'
 
 const StateSchema = z.object({
   main: MainSchema
@@ -96,7 +97,7 @@ type M = Main & {
 }
 
 const mainState: M = {
-  _version: main('_version', 41),
+  _version: main('_version', 42),
   instanceId: main('instanceId', generateUuid()),
   colorway: main('colorway', 'dark'),
   colorwayPrimary: {
@@ -169,6 +170,7 @@ const mainState: M = {
   updater: {
     dontRemind: main('updater.dontRemind', [])
   },
+  walletCallBatches: main('walletCallBatches', {}),
   networks: main('networks', {
     ethereum: {
       1: {
