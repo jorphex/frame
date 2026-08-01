@@ -1,8 +1,10 @@
 import {
   buildEthCall,
   buildSimulationCall,
+  parseSimulateCallsResult,
   parseSimulateResult,
-  simulateTransaction
+  simulateTransaction,
+  simulateWalletCalls
 } from '../../../main/transaction/simulation'
 
 const transaction = {
@@ -72,6 +74,21 @@ it('strictly parses one successful simulation call', () => {
   expect(parseSimulateResult([{ calls: [{ ...simulateSuccess[0].calls[0], gasUsed: '0x00' }] }])).toBe(
     undefined
   )
+})
+
+it('strictly parses an exact ordered simulation call count', () => {
+  const first = simulateSuccess[0].calls[0]
+  const second = { ...first, gasUsed: '0x5300' }
+
+  expect(parseSimulateCallsResult([{ calls: [first, second] }], 2)).toEqual([
+    { status: 'succeeded', source: 'eth_simulateV1', gasUsed: '0x5208' },
+    { status: 'succeeded', source: 'eth_simulateV1', gasUsed: '0x5300' }
+  ])
+  expect(parseSimulateCallsResult([{ calls: [first] }], 2)).toBeUndefined()
+  expect(parseSimulateCallsResult([{ calls: [first, { ...second, returnData: '0x0' }] }], 2)).toBeUndefined()
+  expect(parseSimulateCallsResult([{ calls: [first] }], 0)).toBeUndefined()
+  expect(parseSimulateCallsResult([{ calls: [first] }], 1.5)).toBeUndefined()
+  expect(parseSimulateCallsResult([{ calls: Array(17).fill(first) }], 17)).toBeUndefined()
 })
 
 it('attaches normalized effects only to a successful eth_simulateV1 result', () => {
@@ -269,6 +286,197 @@ it('shares one timeout budget with the fallback call', async () => {
     status: 'failed',
     source: 'eth_call',
     reason: 'RPC execution check timed out'
+  })
+})
+
+describe('wallet call batches', () => {
+  const secondTransaction = {
+    ...transaction,
+    nonce: '0x8',
+    to: '0x3333333333333333333333333333333333333333',
+    value: '0x2',
+    data: '0xabcd'
+  }
+
+  it('simulates all calls in one ordered evolving-state request', async () => {
+    const result = [
+      {
+        calls: [simulateSuccess[0].calls[0], { ...simulateSuccess[0].calls[0], gasUsed: '0x5300' }]
+      }
+    ]
+    const send = jest.fn((payload, callback) => callback({ id: 1, jsonrpc: '2.0', result }))
+
+    await expect(simulateWalletCalls([transaction, secondTransaction], { send })).resolves.toEqual({
+      status: 'succeeded',
+      source: 'eth_simulateV1',
+      calls: [
+        { status: 'succeeded', source: 'eth_simulateV1', gasUsed: '0x5208' },
+        { status: 'succeeded', source: 'eth_simulateV1', gasUsed: '0x5300' }
+      ]
+    })
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send).toHaveBeenCalledWith(
+      {
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'eth_simulateV1',
+        params: [
+          {
+            blockStateCalls: [
+              { calls: [buildSimulationCall(transaction), buildSimulationCall(secondTransaction)] }
+            ],
+            validation: false
+          },
+          'latest'
+        ]
+      },
+      expect.any(Function),
+      { type: 'ethereum', id: 1 }
+    )
+  })
+
+  it('reports an ordered mixed batch as reverted', async () => {
+    const send = jest.fn((_payload, callback) =>
+      callback({
+        id: 1,
+        jsonrpc: '2.0',
+        result: [
+          {
+            calls: [
+              simulateSuccess[0].calls[0],
+              {
+                status: '0x0',
+                gasUsed: '0x42',
+                returnData: '0x',
+                error: { code: 3, message: 'execution reverted: denied' }
+              }
+            ]
+          }
+        ]
+      })
+    )
+
+    const result = await simulateWalletCalls([transaction, secondTransaction], { send })
+    expect(result.status).toBe('reverted')
+    expect(result.calls).toEqual([
+      { status: 'succeeded', source: 'eth_simulateV1', gasUsed: '0x5208' },
+      {
+        status: 'reverted',
+        source: 'eth_simulateV1',
+        gasUsed: '0x42',
+        reason: 'execution reverted: denied'
+      }
+    ])
+  })
+
+  it('does not substitute independent eth_call checks when stateful simulation is unsupported', async () => {
+    const send = jest.fn((_payload, callback) => callback(rpcError(-32601, 'Method not found')))
+
+    await expect(simulateWalletCalls([transaction, secondTransaction], { send })).resolves.toEqual({
+      status: 'unavailable',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'Configured RPC does not support stateful wallet call simulation'
+    })
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed on malformed result counts and RPC errors', async () => {
+    const malformed = jest.fn((_payload, callback) =>
+      callback({ id: 1, jsonrpc: '2.0', result: simulateSuccess })
+    )
+    await expect(simulateWalletCalls([transaction, secondTransaction], { send: malformed })).resolves.toEqual(
+      {
+        status: 'failed',
+        source: 'eth_simulateV1',
+        calls: [],
+        reason: 'RPC returned an invalid batch simulation result'
+      }
+    )
+
+    const failed = jest.fn((_payload, callback) => callback(rpcError(-32000, 'batch failed')))
+    await expect(simulateWalletCalls([transaction, secondTransaction], { send: failed })).resolves.toEqual({
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'batch failed'
+    })
+  })
+
+  it('rejects bounded, sender, and chain input violations before RPC', async () => {
+    const send = jest.fn()
+    const tooMany = Array.from({ length: 17 }, () => transaction)
+
+    await expect(simulateWalletCalls([], { send })).resolves.toMatchObject({ status: 'failed', calls: [] })
+    await expect(simulateWalletCalls(tooMany, { send })).resolves.toMatchObject({
+      status: 'failed',
+      calls: []
+    })
+    await expect(simulateWalletCalls([{ ...transaction, chainId: '0x01' }], { send })).resolves.toMatchObject(
+      { status: 'failed', calls: [] }
+    )
+    await expect(simulateWalletCalls([{ ...transaction, from: undefined }], { send })).resolves.toMatchObject(
+      { status: 'failed', calls: [] }
+    )
+    await expect(
+      simulateWalletCalls(
+        [transaction, { ...secondTransaction, from: '0x4444444444444444444444444444444444444444' }],
+        {
+          send
+        }
+      )
+    ).resolves.toMatchObject({ status: 'failed', calls: [] })
+    await expect(
+      simulateWalletCalls([transaction, { ...secondTransaction, chainId: '0xa' }], { send })
+    ).resolves.toMatchObject({ status: 'failed', calls: [] })
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('uses one bounded timeout for a nonresponsive batch RPC', async () => {
+    const pending = simulateWalletCalls([transaction, secondTransaction], {
+      send: jest.fn(),
+      timeoutMs: 25
+    })
+    jest.advanceTimersByTime(25)
+
+    await expect(pending).resolves.toEqual({
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'Stateful wallet call simulation timed out'
+    })
+  })
+
+  it('attaches pre-state allowance evidence only to the first call', async () => {
+    const send = jest.fn((payload, callback) => {
+      if (payload.method === 'eth_simulateV1') {
+        return callback({
+          id: 1,
+          jsonrpc: '2.0',
+          result: [
+            {
+              calls: [simulateSuccess[0].calls[0], simulateSuccess[0].calls[0]]
+            }
+          ]
+        })
+      }
+
+      callback({ id: payload.id, jsonrpc: '2.0', result: `0x${'0'.repeat(63)}7` })
+    })
+
+    const laterApproval = { ...approvalTransaction, nonce: '0x8' }
+    const result = await simulateWalletCalls([approvalTransaction, laterApproval], { send })
+    expect(result.calls[0].allowance).toMatchObject({
+      source: 'eth_call',
+      token: approvalTransaction.to,
+      owner: approvalTransaction.from,
+      spender: approvalSpender,
+      currentAmount: '7',
+      requestedAmount: '42'
+    })
+    expect(result.calls[1].allowance).toBeUndefined()
+    expect(send.mock.calls.find(([payload]) => payload.method === 'eth_call')[0].id).toBe(2)
+    expect(send.mock.calls.filter(([payload]) => payload.method === 'eth_call')).toHaveLength(1)
   })
 })
 

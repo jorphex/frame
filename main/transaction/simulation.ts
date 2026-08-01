@@ -12,7 +12,9 @@ import type { SimulationEffect } from './effects'
 const DEFAULT_TIMEOUT_MS = 15_000
 const MAX_ERROR_MESSAGE_LENGTH = 240
 const MAX_RETURN_DATA_BYTES = 128 * 1024
+const MAX_WALLET_CALLS = 16
 const MAX_UINT64 = (1n << 64n) - 1n
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/
 
 type SimulationSource = 'eth_simulateV1' | 'eth_call'
 type SimulationStatus = 'pending' | 'succeeded' | 'reverted' | 'unavailable' | 'failed'
@@ -34,6 +36,13 @@ export interface TransactionSimulation {
   effects?: SimulationEffect[]
   effectsTruncated?: boolean
   allowance?: TokenAllowanceSnapshot
+}
+
+export interface WalletCallsSimulation {
+  status: Exclude<SimulationStatus, 'pending'>
+  source: 'eth_simulateV1'
+  calls: TransactionSimulation[]
+  reason?: string
 }
 
 type ChainSend = (payload: JSONRPCRequestPayload, callback: RPCRequestCallback, targetChain: Chain) => void
@@ -155,7 +164,8 @@ async function readTokenAllowance(
   transaction: TransactionData,
   send: ChainSend,
   targetChain: Chain,
-  timeoutMs: number
+  timeoutMs: number,
+  requestId = 2
 ): Promise<TokenAllowanceSnapshot | undefined> {
   const intent = parseErc20ApprovalIntent(transaction.data)
   const owner = typeof transaction.from === 'string' ? transaction.from.toLowerCase() : undefined
@@ -168,7 +178,7 @@ async function readTokenAllowance(
   const outcome = await requestRpc(
     send,
     {
-      id: 2,
+      id: requestId,
       jsonrpc: '2.0',
       method: 'eth_call',
       params: [{ to: token, data: allowanceData }, 'latest']
@@ -191,13 +201,8 @@ async function readTokenAllowance(
   }
 }
 
-export function parseSimulateResult(result: unknown): TransactionSimulation | undefined {
-  if (!Array.isArray(result) || result.length !== 1 || !isRecord(result[0])) return
-
-  const calls = result[0].calls
-  if (!Array.isArray(calls) || calls.length !== 1 || !isRecord(calls[0])) return
-
-  const call = calls[0]
+function parseSimulatedCall(call: unknown): TransactionSimulation | undefined {
+  if (!isRecord(call)) return
   const gasUsed = parseGasUsed(call.gasUsed)
   if (!gasUsed || !isData(call.returnData)) return
 
@@ -224,6 +229,24 @@ export function parseSimulateResult(result: unknown): TransactionSimulation | un
       reason: boundedMessage(call.error.message, 'Execution reverted')
     }
   }
+}
+
+export function parseSimulateCallsResult(
+  result: unknown,
+  expectedCalls: number
+): TransactionSimulation[] | undefined {
+  if (!Number.isInteger(expectedCalls) || expectedCalls < 1 || expectedCalls > MAX_WALLET_CALLS) return
+  if (!Array.isArray(result) || result.length !== 1 || !isRecord(result[0])) return
+
+  const calls = result[0].calls
+  if (!Array.isArray(calls) || calls.length !== expectedCalls) return
+
+  const parsed = calls.map(parseSimulatedCall)
+  return parsed.every((call): call is TransactionSimulation => call !== undefined) ? parsed : undefined
+}
+
+export function parseSimulateResult(result: unknown): TransactionSimulation | undefined {
+  return parseSimulateCallsResult(result, 1)?.[0]
 }
 
 async function simulateExecution(
@@ -332,4 +355,129 @@ export async function simulateTransaction(
   ])
 
   return allowance ? { ...simulation, allowance } : simulation
+}
+
+export async function simulateWalletCalls(
+  transactions: TransactionData[],
+  dependencies: SimulationDependencies
+): Promise<WalletCallsSimulation> {
+  if (transactions.length < 1 || transactions.length > MAX_WALLET_CALLS) {
+    return {
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'Wallet call simulation requires between 1 and 16 calls'
+    }
+  }
+
+  const senders = transactions.map((transaction) =>
+    typeof transaction.from === 'string' && ADDRESS.test(transaction.from)
+      ? transaction.from.toLowerCase()
+      : undefined
+  )
+  const sender = senders[0]
+  if (!sender || senders.some((candidate) => candidate !== sender)) {
+    return {
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'Wallet call batch has invalid or mismatched sender addresses'
+    }
+  }
+
+  const chainIds = transactions.map((transaction) => parseRpcQuantity(transaction.chainId))
+  const chainId = chainIds[0]
+  if (
+    chainId === undefined ||
+    chainId === 0n ||
+    chainId > BigInt(Number.MAX_SAFE_INTEGER) ||
+    chainIds.some((candidate) => candidate !== chainId)
+  ) {
+    return {
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'Wallet call batch has invalid or mismatched chain IDs'
+    }
+  }
+
+  const configuredTimeout = dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const timeoutMs =
+    Number.isFinite(configuredTimeout) && configuredTimeout > 0
+      ? Math.min(configuredTimeout, DEFAULT_TIMEOUT_MS)
+      : DEFAULT_TIMEOUT_MS
+  const targetChain: Chain = { type: 'ethereum', id: Number(chainId) }
+  const payload: JSONRPCRequestPayload = {
+    id: 1,
+    jsonrpc: '2.0',
+    method: 'eth_simulateV1',
+    params: [
+      {
+        blockStateCalls: [{ calls: transactions.map(buildSimulationCall) }],
+        validation: false
+      },
+      'latest'
+    ]
+  }
+
+  const [outcome, firstAllowance] = await Promise.all([
+    requestRpc(dependencies.send, payload, targetChain, timeoutMs),
+    readTokenAllowance(transactions[0], dependencies.send, targetChain, timeoutMs)
+  ])
+
+  if ('timedOut' in outcome) {
+    return {
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'Stateful wallet call simulation timed out'
+    }
+  }
+  if (!isRecord(outcome.response)) {
+    return {
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'RPC returned an invalid batch simulation response'
+    }
+  }
+  if (outcome.response.error !== undefined) {
+    const error = normalizeRpcError(outcome.response.error)
+    if (!error) {
+      return {
+        status: 'failed',
+        source: 'eth_simulateV1',
+        calls: [],
+        reason: 'RPC returned an invalid batch simulation error'
+      }
+    }
+
+    return {
+      status: isUnsupportedMethod(error) ? 'unavailable' : 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: isUnsupportedMethod(error)
+        ? 'Configured RPC does not support stateful wallet call simulation'
+        : boundedMessage(error.message, 'Stateful wallet call simulation failed')
+    }
+  }
+
+  const calls = parseSimulateCallsResult(outcome.response.result, transactions.length)
+  if (!calls) {
+    return {
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'RPC returned an invalid batch simulation result'
+    }
+  }
+
+  const callsWithAllowances = calls.map((call, index) =>
+    index === 0 && firstAllowance ? { ...call, allowance: firstAllowance } : call
+  )
+  return {
+    status: callsWithAllowances.some((call) => call.status === 'reverted') ? 'reverted' : 'succeeded',
+    source: 'eth_simulateV1',
+    calls: callsWithAllowances
+  }
 }
