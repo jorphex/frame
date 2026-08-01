@@ -1,0 +1,57 @@
+{
+  "metadata": {
+    "formatVersion": 1,
+    "sourceVersion": 41,
+    "synthetic": true,
+    "title": "Synthetic minimal version 41 migration state"
+  },
+  "state": {
+    "main": {
+      "_version": 41,
+      "instanceId": "fixture-instance-v41",
+      "networks": {
+        "ethereum": {
+          "31337": {
+            "id": 31337,
+            "name": "Fixture Local Chain",
+            "on": true,
+            "connection": {
+              "primary": {
+                "on": true,
+                "connected": false,
+                "status": "loading",
+                "current": "local",
+                "custom": ""
+              },
+              "secondary": {
+                "on": false,
+                "connected": false,
+                "status": "loading",
+                "current": "custom",
+                "custom": "http://127.0.0.1:9545"
+              }
+            }
+          }
+        }
+      },
+      "networksMeta": { "ethereum": {} },
+      "mute": { "migrateToPylon": true },
+      "accounts": {
+        "0x000000000000000000000000000000000000dead": {
+          "name": "Fixture Hardware Account",
+          "lastSignerType": "trezor",
+          "signer": "fixture-safe7"
+        }
+      },
+      "permissions": {
+        "0x000000000000000000000000000000000000dead": {
+          "fixture-origin-id": {
+            "origin": "fixture.example",
+            "provider": true,
+            "handlerId": "fixture-origin-id"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "metadata": {
+    "formatVersion": 1,
+    "sourceVersion": 37,
+    "synthetic": true,
+    "title": "Synthetic version 37 network state"
+  },
+  "state": {
+    "main": {
+      "_version": 37,
+      "networks": {
+        "ethereum": {
+          "1": {
+            "id": 1,
+            "name": "Mainnet",
+            "on": true,
+            "connection": {
+              "primary": {
+                "on": true,
+                "connected": false,
+                "status": "loading",
+                "current": "infura",
+                "custom": ""
+              },
+              "secondary": {
+                "on": false,
+                "connected": false,
+                "status": "loading",
+                "current": "custom",
+                "custom": "http://127.0.0.1:8545"
+              }
+            }
+          },
+          "5": {
+            "id": 5,
+            "name": "Goerli",
+            "on": false,
+            "connection": {
+              "primary": {
+                "on": true,
+                "connected": false,
+                "status": "loading",
+                "current": "pylon",
+                "custom": ""
+              },
+              "secondary": {
+                "on": false,
+                "connected": false,
+                "status": "loading",
+                "current": "custom",
+                "custom": ""
+              }
+            }
+          },
+          "100": {
+            "id": 100,
+            "name": "Gnosis",
+            "on": false,
+            "connection": {
+              "primary": {
+                "on": true,
+                "connected": false,
+                "status": "loading",
+                "current": "poa",
+                "custom": ""
+              },
+              "secondary": {
+                "on": false,
+                "connected": false,
+                "status": "loading",
+                "current": "custom",
+                "custom": ""
+              }
+            }
+          },
+          "84531": {
+            "id": 84531,
+            "name": "Base Goerli",
+            "on": false,
+            "connection": {
+              "primary": {
+                "on": true,
+                "connected": false,
+                "status": "loading",
+                "current": "pylon",
+                "custom": ""
+              },
+              "secondary": {
+                "on": false,
+                "connected": false,
+                "status": "loading",
+                "current": "custom",
+                "custom": ""
+              }
+            }
+          },
+          "31337": {
+            "id": 31337,
+            "name": "Fixture Local Chain",
+            "on": true,
+            "connection": {
+              "primary": {
+                "on": true,
+                "connected": false,
+                "status": "loading",
+                "current": "local",
+                "custom": ""
+              },
+              "secondary": {
+                "on": false,
+                "connected": false,
+                "status": "loading",
+                "current": "custom",
+                "custom": "http://127.0.0.1:9545"
+              }
+            }
+          }
+        }
+      },
+      "networksMeta": { "ethereum": {} },
+      "mute": { "migrateToPylon": true },
+      "accounts": {
+        "0x000000000000000000000000000000000000dead": {
+          "name": "Fixture Hardware Account",
+          "lastSignerType": "trezor",
+          "signer": "fixture-safe7"
+        }
+      },
+      "permissions": {
+        "0x000000000000000000000000000000000000dead": {
+          "fixture-origin-id": {
+            "origin": "fixture.example",
+            "provider": true,
+            "handlerId": "fixture-origin-id"
+          }
+        }
+      }
+    }
+  }
+}

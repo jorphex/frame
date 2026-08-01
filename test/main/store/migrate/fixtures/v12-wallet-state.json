@@ -1,0 +1,121 @@
+{
+  "metadata": {
+    "formatVersion": 1,
+    "sourceVersion": 12,
+    "synthetic": true,
+    "title": "Synthetic version 12 wallet state"
+  },
+  "state": {
+    "main": {
+      "_version": 12,
+      "instanceId": "fixture-instance-v12",
+      "networks": {
+        "ethereum": {
+          "1": {
+            "id": "1",
+            "type": "ethereum",
+            "layer": "mainnet",
+            "name": "Mainnet",
+            "on": true,
+            "symbol": "ETH",
+            "connection": {
+              "primary": {
+                "on": true,
+                "connected": false,
+                "status": "loading",
+                "current": "infura",
+                "custom": ""
+              },
+              "secondary": {
+                "on": false,
+                "connected": false,
+                "status": "loading",
+                "current": "custom",
+                "custom": "http://127.0.0.1:8545"
+              }
+            }
+          },
+          "5": {
+            "id": "5",
+            "type": "ethereum",
+            "layer": "testnet",
+            "name": "Goerli",
+            "on": false,
+            "symbol": "ETH",
+            "connection": {
+              "primary": {
+                "on": true,
+                "connected": false,
+                "status": "loading",
+                "current": "pylon",
+                "custom": ""
+              },
+              "secondary": {
+                "on": false,
+                "connected": false,
+                "status": "loading",
+                "current": "custom",
+                "custom": ""
+              }
+            }
+          },
+          "100": {
+            "id": "100",
+            "type": "ethereum",
+            "layer": "sidechain",
+            "name": "Gnosis",
+            "on": false,
+            "symbol": "xDAI",
+            "connection": {
+              "primary": {
+                "on": true,
+                "connected": false,
+                "status": "loading",
+                "current": "poa",
+                "custom": ""
+              },
+              "secondary": {
+                "on": false,
+                "connected": false,
+                "status": "loading",
+                "current": "custom",
+                "custom": ""
+              }
+            }
+          }
+        }
+      },
+      "networksMeta": { "ethereum": {} },
+      "currentNetwork": { "type": "ethereum", "id": "1" },
+      "clients": { "geth": {}, "parity": {} },
+      "accounts": {
+        "0x000000000000000000000000000000000000dead": {
+          "id": "0x000000000000000000000000000000000000dead",
+          "address": "0x000000000000000000000000000000000000dead",
+          "name": "Fixture Hardware Account",
+          "lastSignerType": "trezor",
+          "created": "fixture:1",
+          "status": "ok",
+          "active": false,
+          "signer": "fixture-safe7",
+          "requests": {},
+          "ensName": "",
+          "balances": {}
+        }
+      },
+      "permissions": {
+        "0x000000000000000000000000000000000000dead": {
+          "fixture-origin-id": {
+            "origin": "fixture.example",
+            "provider": true,
+            "handlerId": "fixture-origin-id"
+          }
+        }
+      },
+      "balances": { "0x000000000000000000000000000000000000dead": [] },
+      "tokens": [],
+      "mute": {},
+      "shortcuts": { "altSlash": true }
+    }
+  }
+}

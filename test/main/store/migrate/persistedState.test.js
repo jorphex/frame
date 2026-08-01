@@ -1,0 +1,205 @@
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+
+import migrations from '../../../../main/store/migrate'
+import { assertSafeMigrationFixture } from './fixtureValidation'
+
+let mockPersistedMain
+
+jest.mock('../../../../main/store/persist', () => ({
+  get: (key) => (key === 'main' ? mockPersistedMain : undefined)
+}))
+jest.mock('electron-log', () => ({
+  debug: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn()
+}))
+
+const fixtureDirectory = path.join(__dirname, 'fixtures')
+const fixtureFiles = fs
+  .readdirSync(fixtureDirectory)
+  .filter((name) => name.endsWith('.json'))
+  .sort()
+const fixtureAccount = '0x000000000000000000000000000000000000dead'
+
+const clone = (value) => JSON.parse(JSON.stringify(value))
+const loadFixture = (filename) => {
+  const fixture = JSON.parse(fs.readFileSync(path.join(fixtureDirectory, filename), 'utf8'))
+  return assertSafeMigrationFixture(fixture, filename)
+}
+
+const writePersistedVersion = (directory, state) => {
+  const configPath = path.join(directory, 'config.json')
+  const envelope = { main: { __: { [state.main._version]: state } } }
+
+  fs.writeFileSync(configPath, JSON.stringify(envelope), { mode: 0o600 })
+  return configPath
+}
+
+const loadApplicationState = async (configPath) => {
+  mockPersistedMain = JSON.parse(fs.readFileSync(configPath, 'utf8')).main
+  jest.resetModules()
+
+  const { default: log } = await import('electron-log')
+  const { default: createState } = await import('../../../../main/store/state')
+  log.error.mockClear()
+  log.warn.mockClear()
+
+  const state = createState()
+  const diagnostics = [...log.error.mock.calls, ...log.warn.mock.calls]
+
+  if (diagnostics.length) {
+    throw new Error(`State initialization logged diagnostics: ${JSON.stringify(diagnostics)}`)
+  }
+
+  return state
+}
+
+const migrateTemporaryProfile = async (fixture) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'frame-migration-'))
+
+  try {
+    const sourcePath = writePersistedVersion(directory, clone(fixture.state))
+    const migrated = await loadApplicationState(sourcePath)
+    const migratedPath = writePersistedVersion(directory, { main: migrated.main })
+    const reloaded = await loadApplicationState(migratedPath)
+    const mode = fs.statSync(migratedPath).mode & 0o777
+
+    return { migrated, mode, reloaded }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+beforeAll(() => {
+  jest.spyOn(Date, 'now').mockReturnValue(1700000000000)
+})
+
+afterAll(() => {
+  Date.now.mockRestore()
+})
+
+it.each(fixtureFiles)('validates sanitized migration fixture %s', (filename) => {
+  expect(() => loadFixture(filename)).not.toThrow()
+})
+
+it('rejects secret-shaped and malformed fixtures', () => {
+  const fixture = loadFixture('v41-current-state.json')
+
+  expect(() =>
+    assertSafeMigrationFixture({
+      ...clone(fixture),
+      state: { main: { ...clone(fixture.state.main), privateKey: `0x${'1'.repeat(64)}` } }
+    })
+  ).toThrow('Forbidden secret-shaped key')
+
+  expect(() =>
+    assertSafeMigrationFixture({
+      ...clone(fixture),
+      state: { main: { ...clone(fixture.state.main), encryptedSeed: 'synthetic-value' } }
+    })
+  ).toThrow('Forbidden secret-shaped key')
+
+  expect(() =>
+    assertSafeMigrationFixture({
+      ...clone(fixture),
+      state: { main: { ...clone(fixture.state.main), unsafeValue: `0x${'1'.repeat(64)}` } }
+    })
+  ).toThrow('Raw private-key-shaped value')
+
+  expect(() =>
+    assertSafeMigrationFixture({
+      ...clone(fixture),
+      metadata: { ...fixture.metadata, sourceVersion: 40 }
+    })
+  ).toThrow('source version must match')
+
+  expect(() =>
+    assertSafeMigrationFixture({
+      ...clone(fixture),
+      metadata: { ...fixture.metadata, sourceVersion: migrations.latest + 1 },
+      state: { main: { ...clone(fixture.state.main), _version: migrations.latest + 1 } }
+    })
+  ).toThrow('newer than the latest known migration')
+})
+
+it('migrates a representative version 12 profile through application state initialization', async () => {
+  const fixture = loadFixture('v12-wallet-state.json')
+  const preserved = {
+    account: clone(fixture.state.main.accounts[fixtureAccount]),
+    permission: clone(fixture.state.main.permissions[fixtureAccount])
+  }
+  const { migrated, mode, reloaded } = await migrateTemporaryProfile(fixture)
+
+  expect(migrated.main._version).toBe(migrations.latest)
+  expect(migrated.main.accounts[fixtureAccount]).toMatchObject(preserved.account)
+  expect(migrated.main.accounts[fixtureAccount]).toMatchObject({
+    lastSignerType: 'trezor',
+    signer: 'fixture-safe7'
+  })
+  expect(migrated.main.permissions[fixtureAccount]).toEqual(preserved.permission)
+  expect(Object.values(migrated.main.accountsMeta)).toContainEqual({
+    name: 'Fixture Hardware Account',
+    lastUpdated: 1700000000000
+  })
+  expect(migrated.main.shortcuts.summon).toEqual({
+    modifierKeys: ['Alt'],
+    shortcutKey: 'Slash',
+    enabled: true,
+    configuring: false
+  })
+  expect(migrated.main.tokens).toEqual({ custom: [], known: {} })
+  expect(migrated.main.networks.ethereum[1].connection.primary).toMatchObject({
+    current: 'custom',
+    custom: ''
+  })
+  expect(migrated.main.networks.ethereum[5].connection.primary).toMatchObject({
+    current: 'custom',
+    custom: 'wss://evm.pylon.link/goerli'
+  })
+  expect(migrated.main.networks.ethereum[100].connection.primary).toMatchObject({
+    current: 'custom',
+    custom: 'https://rpc.gnosischain.com'
+  })
+  expect(Object.keys(migrated.main.networks.ethereum)).toEqual(
+    expect.arrayContaining(['8453', '84532', '11155420'])
+  )
+  expect(mode).toBe(0o600)
+  expect(reloaded.main).toEqual(migrated.main)
+  expect(migrations.apply(clone(migrated))).toEqual(migrated)
+})
+
+it('migrates the version 37 network boundary without losing custom state', async () => {
+  const fixture = loadFixture('v37-network-state.json')
+  const customChain = clone(fixture.state.main.networks.ethereum[31337])
+  const permission = clone(fixture.state.main.permissions[fixtureAccount])
+  const { migrated, reloaded } = await migrateTemporaryProfile(fixture)
+
+  expect(migrated.main.networks.ethereum[31337]).toMatchObject(customChain)
+  expect(migrated.main.accounts[fixtureAccount]).toMatchObject({
+    lastSignerType: 'trezor',
+    signer: 'fixture-safe7'
+  })
+  expect(migrated.main.permissions[fixtureAccount]).toEqual(permission)
+  expect(migrated.main.networks.ethereum[84531].connection.primary).toMatchObject({
+    on: false,
+    current: 'custom',
+    custom: ''
+  })
+  expect(Object.keys(migrated.main.networks.ethereum)).toEqual(
+    expect.arrayContaining(['8453', '84532', '11155420'])
+  )
+  expect(reloaded.main).toEqual(migrated.main)
+  expect(migrations.apply(clone(migrated))).toEqual(migrated)
+})
+
+it('loads a current fixture without applying another migration', async () => {
+  const fixture = loadFixture('v41-current-state.json')
+  const { migrated, reloaded } = await migrateTemporaryProfile(fixture)
+
+  expect(migrated.main).toMatchObject(fixture.state.main)
+  expect(migrated.main._version).toBe(migrations.latest)
+  expect(reloaded.main).toEqual(migrated.main)
+})
