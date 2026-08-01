@@ -14,3 +14,5 @@ test/.userData
 .parcel-cache
 *.tsbuildinfo
 *.code-workspace
+/PLAN.md
+/NOTES.md
