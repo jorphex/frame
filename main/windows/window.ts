@@ -1,4 +1,4 @@
-import { BrowserWindow, BrowserView, BrowserWindowConstructorOptions, shell } from 'electron'
+import { BrowserWindow, BrowserWindowConstructorOptions, shell, WebContentsView } from 'electron'
 import log from 'electron-log'
 import path from 'path'
 
@@ -50,7 +50,7 @@ export function createViewInstance(
   ens = '',
   webPreferences: BrowserWindowConstructorOptions['webPreferences'] = {}
 ) {
-  const viewInstance = new BrowserView({
+  const viewInstance = new WebContentsView({
     webPreferences: {
       ...webPreferences,
       contextIsolation: true,
@@ -65,6 +65,7 @@ export function createViewInstance(
       partition: `persist:${ens}`
     }
   })
+  viewInstance.setBackgroundColor('#00000000')
 
   viewInstance.webContents.on('will-navigate', (e) => e.preventDefault())
   viewInstance.webContents.on('will-attach-webview', (e) => e.preventDefault())

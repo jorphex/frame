@@ -1,6 +1,6 @@
 import log from 'electron-log'
 import pixels from 'get-pixels'
-import { BrowserWindow, BrowserView } from 'electron'
+import { BrowserWindow, WebContentsView } from 'electron'
 
 import { createViewInstance } from '../window'
 
@@ -55,7 +55,7 @@ async function pixelColor(image: Electron.NativeImage) {
   })
 }
 
-async function getColor(view: BrowserView) {
+async function getColor(view: WebContentsView) {
   const image = await view.webContents.capturePage()
   return pixelColor(image)
 }
@@ -97,7 +97,7 @@ async function extractColors(url: string, ens: string) {
     }
   })
 
-  let view: BrowserView | null = createViewInstance(ens, { offscreen: true })
+  let view: WebContentsView | null = createViewInstance(ens, { offscreen: true })
 
   view.webContents.session.webRequest.onBeforeSendHeaders((details, cb) => {
     if (!details || !details.frame) return cb({ cancel: true }) // Reject the request
@@ -110,7 +110,7 @@ async function extractColors(url: string, ens: string) {
     return cb({ requestHeaders: details.requestHeaders }) // Leave untouched
   })
 
-  window.addBrowserView(view)
+  window.contentView.addChildView(view)
   view.setBounds({ x: 0, y: 0, width: 800, height: 800 })
 
   const { session } = extractSession(url)
@@ -131,8 +131,8 @@ async function extractColors(url: string, ens: string) {
     log.error(`error extracting colors for ${ens}`, e)
   } finally {
     if (view) {
-      const webcontents = view.webContents as any
-      webcontents.destroy()
+      if (window) window.contentView.removeChildView(view)
+      view.webContents.close({ waitForBeforeUnload: false })
 
       view = null
     }

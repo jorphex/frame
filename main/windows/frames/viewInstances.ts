@@ -61,7 +61,7 @@ export default {
 
     const { width, height } = frameInstance.getBounds()
 
-    frameInstance.addBrowserView(viewInstance)
+    frameInstance.contentView.addChildView(viewInstance)
 
     const dappBackground = store('main.dapps', view.dappId, 'colors', 'background')
     if (dappBackground) frameInstance.setBackgroundColor(dappBackground)
@@ -73,11 +73,9 @@ export default {
       height: fullscreen ? height : height - 32
     })
 
-    viewInstance.setAutoResize({ width: true, height: true })
-
     viewInstance.webContents.setVisualZoomLevelLimits(1, 3)
 
-    frameInstance.removeBrowserView(viewInstance)
+    frameInstance.contentView.removeChildView(viewInstance)
 
     // viewInstance.webContents.openDevTools({ mode: 'detach' })
 
@@ -110,10 +108,11 @@ export default {
     const { ens, session } = extract(url)
     server.sessions.remove(ens, session)
 
-    if (frameInstance && !frameInstance.isDestroyed()) frameInstance.removeBrowserView(views[viewId])
+    if (frameInstance && !frameInstance.isDestroyed()) {
+      frameInstance.contentView.removeChildView(views[viewId])
+    }
 
-    const webcontents = views[viewId].webContents as any
-    webcontents.destroy()
+    views[viewId].webContents.close({ waitForBeforeUnload: false })
 
     delete views[viewId]
   },
@@ -130,7 +129,6 @@ export default {
         height: fullscreen ? height : height - 32
       })
       // viewInstance.setBounds({ x: 73, y: 16, width: width - 73, height: height - 16 })
-      viewInstance.setAutoResize({ width: true, height: true })
     }
   }
 }

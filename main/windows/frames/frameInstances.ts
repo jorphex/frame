@@ -1,4 +1,4 @@
-import electron, { BrowserView, BrowserWindow } from 'electron'
+import electron, { BrowserWindow, WebContentsView } from 'electron'
 import path from 'path'
 
 import { createWindow } from '../window'
@@ -8,7 +8,7 @@ const isDev = process.env.NODE_ENV === 'development'
 
 export interface FrameInstance extends BrowserWindow {
   frameId?: string
-  views?: Record<string, BrowserView>
+  views?: Record<string, WebContentsView>
   showingView?: string
 }
 

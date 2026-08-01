@@ -3,7 +3,7 @@
 import log from 'electron-log'
 import store from '../../store'
 
-import frameInstances, { FrameInstance } from './frameInstances.js'
+import frameInstances, { FrameInstance } from './frameInstances'
 import viewInstances from './viewInstances'
 
 function getFrames(): Record<string, Frame> {
@@ -73,6 +73,11 @@ export default class FrameManager {
           }
         })
 
+        frameInstance.on('resize', () => {
+          const currentView = getFrames()[frameId]?.currentView
+          if (currentView) viewInstances.position(frameInstance, currentView)
+        })
+
         frameInstance.on('focus', () => {
           // Give focus to current view
           const { currentView } = frames[frameId]
@@ -134,14 +139,14 @@ export default class FrameManager {
           viewData.ready &&
           frameInstance.showingView !== frameViewId
         ) {
-          frameInstance.addBrowserView(viewInstance)
+          frameInstance.contentView.addChildView(viewInstance)
           frameInstance.showingView = frameViewId
           viewInstances.position(frameInstance, frameViewId)
           setTimeout(() => {
             if (frameInstance.isFocused()) viewInstance.webContents.focus()
           }, 100)
         } else if (frame.currentView !== frameViewId && frameInstance.showingView === frameViewId) {
-          frameInstance.removeBrowserView(viewInstance)
+          frameInstance.contentView.removeChildView(viewInstance)
           frameInstance.showingView = ''
         }
       })
