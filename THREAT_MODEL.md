@@ -100,6 +100,11 @@ incorrect, or malicious. Decoding is explanatory and is not transaction
 simulation. Users must verify chain, recipient, value, calldata, and signing
 details on the hardware device whenever possible.
 
+This fork does not initialize or ship a hosted crash-telemetry client. Uncaught
+main-process errors are written to the local Electron log and may display a local
+dialog, but Frame does not transmit crash events, instance identifiers, network
+configuration, or token metadata to the upstream project's Sentry service.
+
 ### Builds And Updates
 
 Dependencies are locked and install scripts are allowlisted. CI actions are

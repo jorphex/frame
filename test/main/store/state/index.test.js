@@ -30,7 +30,8 @@ jest.mock('../../../../main/store/persist', () => {
           2: {
             main: {
               _version: 2,
-              instanceId: 'test-brand-new-frame'
+              instanceId: 'test-brand-new-frame',
+              privacy: { errorReporting: true }
             }
           }
         }
@@ -61,6 +62,14 @@ it('loads values from the current version of the state', async () => {
   const { default: state } = await import('../../../../main/store/state')
 
   expect(state().main.instanceId).toBe('test-brand-new-frame')
+})
+
+it('does not restore the removed upstream error-reporting preference', async () => {
+  mockLatestVersion = 2
+
+  const { default: state } = await import('../../../../main/store/state')
+
+  expect(state().main).not.toHaveProperty('privacy')
 })
 
 it('preserves an older version of the state after creating a newer state entry', async () => {

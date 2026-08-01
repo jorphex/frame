@@ -189,27 +189,6 @@ class Settings extends Component {
             </div>
           ) : null}
 
-          <div className='signerPermission localSetting' style={{ zIndex: 209 }}>
-            <div className='signerPermissionControls'>
-              <div className='signerPermissionSetting'>Error Reporting</div>
-              <div
-                className={
-                  this.store('main.privacy.errorReporting')
-                    ? 'signerPermissionToggle signerPermissionToggleOn'
-                    : 'signerPermissionToggle'
-                }
-                onClick={() =>
-                  link.send('tray:action', 'setErrorReporting', !this.store('main.privacy.errorReporting'))
-                }
-              >
-                <div className='signerPermissionToggleSwitch' />
-              </div>
-            </div>
-            <div className='signerPermissionDetails'>
-              <span>Help improve Frame by anonymously reporting errors</span>
-            </div>
-          </div>
-
           <div className='signerPermission localSetting' style={{ zIndex: 207 }}>
             <div className='signerPermissionControls'>
               <div className='signerPermissionSetting'>Show Account Name with ENS</div>

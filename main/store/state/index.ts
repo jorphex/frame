@@ -83,7 +83,6 @@ type M = Main & {
   latticeSettings: any
   ledger: any
   trezor: any
-  privacy: any
   addresses: any
   tokens: any
   rates: any
@@ -154,9 +153,6 @@ const mainState: M = {
   },
   origins: main('origins', {}),
   knownExtensions: main('knownExtensions', {}),
-  privacy: {
-    errorReporting: main('privacy.errorReporting', true)
-  },
   accounts: main('accounts', {}),
   accountsMeta: main('accountsMeta', {}),
   addresses: main('addresses', {}), // Should be removed after 0.5 release

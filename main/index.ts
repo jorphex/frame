@@ -6,7 +6,6 @@ import url from 'url'
 // DO NOT MOVE - env var below is required for app init and must be set before all local imports
 process.env.BUNDLE_LOCATION = process.env.BUNDLE_LOCATION || path.resolve(__dirname, './../..', 'bundle')
 
-import * as errors from './errors'
 import windows from './windows'
 import menu from './menu'
 import store from './store'
@@ -54,7 +53,6 @@ if (!hasInstanceLock) {
 }
 
 require('./rpc')
-errors.init()
 
 log.info(`Chrome: v${process.versions.chrome}`)
 log.info(`Electron: v${process.versions.electron}`)
