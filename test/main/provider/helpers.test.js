@@ -1,6 +1,8 @@
 import log from 'electron-log'
 import { fromUtf8 } from '@ethereumjs/util'
-import { getRawTx, getSignedAddress, resError } from '../../../main/provider/helpers'
+import store from '../../../main/store'
+import { checkExistingNonceGas, getRawTx, getSignedAddress, resError } from '../../../main/provider/helpers'
+import { MAX_UINT256, toRpcQuantity } from '../../../main/provider/quantity'
 
 jest.mock('../../../main/store')
 
@@ -10,6 +12,140 @@ beforeAll(async () => {
 
 afterAll(() => {
   log.transports.console.level = 'debug'
+})
+
+describe('#checkExistingNonceGas', () => {
+  const from = '0xc93452A74e596e81E4f73Ca1AcFF532089AD4c62'
+  const nonce = '0x7'
+  const monitoredRequest = (data, overrides = {}) => ({
+    mode: 'monitor',
+    status: 'sent',
+    data: { nonce, ...data },
+    ...overrides
+  })
+  const setRequests = (...requests) =>
+    store.set(
+      'main.accounts',
+      from.toLowerCase(),
+      'requests',
+      Object.fromEntries(requests.map((request, index) => [index, request]))
+    )
+
+  beforeEach(() => store.clear())
+
+  it('bumps a legacy replacement below the 10% threshold', () => {
+    setRequests(monitoredRequest({ gasPrice: '0x65' }))
+    const tx = { from, nonce, gasPrice: '0x6f' }
+
+    checkExistingNonceGas(tx)
+
+    expect(tx).toMatchObject({
+      gasPrice: '0x70',
+      gasFeesSource: 'Frame',
+      feesUpdated: true
+    })
+  })
+
+  it('preserves a sufficiently high legacy replacement', () => {
+    setRequests(monitoredRequest({ gasPrice: '0x64' }))
+    const tx = { from, nonce, gasPrice: '0x6f' }
+
+    checkExistingNonceGas(tx)
+
+    expect(tx).toEqual({ from, nonce, gasPrice: '0x6f' })
+  })
+
+  it('bumps large legacy quantities exactly', () => {
+    const existing = 9007199254740993n
+    setRequests(monitoredRequest({ gasPrice: toRpcQuantity(existing) }))
+    const tx = { from, nonce, gasPrice: toRpcQuantity(existing) }
+
+    checkExistingNonceGas(tx)
+
+    expect(tx.gasPrice).toBe(toRpcQuantity((existing * 11n + 9n) / 10n))
+  })
+
+  it('increases a zero legacy replacement by one wei', () => {
+    setRequests(monitoredRequest({ gasPrice: '0x0' }))
+    const tx = { from, nonce, gasPrice: '0x0' }
+
+    checkExistingNonceGas(tx)
+
+    expect(tx.gasPrice).toBe('0x1')
+  })
+
+  it('bumps EIP-1559 priority and max fees exactly', () => {
+    const existingPriority = 9007199254740993n
+    const existingBase = 12345678901234567n
+    const existingMax = existingPriority + existingBase
+    setRequests(
+      monitoredRequest({
+        maxPriorityFeePerGas: toRpcQuantity(existingPriority),
+        maxFeePerGas: toRpcQuantity(existingMax)
+      })
+    )
+    const tx = {
+      from,
+      nonce,
+      maxPriorityFeePerGas: toRpcQuantity(existingPriority),
+      maxFeePerGas: toRpcQuantity(existingMax)
+    }
+
+    checkExistingNonceGas(tx)
+
+    const bumpedPriority = (existingPriority * 11n + 9n) / 10n
+    const bumpedBase = (existingBase * 11n + 9n) / 10n
+    expect(tx).toMatchObject({
+      maxPriorityFeePerGas: toRpcQuantity(bumpedPriority),
+      maxFeePerGas: toRpcQuantity(bumpedPriority + bumpedBase),
+      gasFeesSource: 'Frame',
+      feesUpdated: true
+    })
+  })
+
+  it('ignores unrelated, errored, and malformed monitored requests', () => {
+    setRequests(
+      monitoredRequest({ gasPrice: '0xffff' }, { mode: 'normal' }),
+      monitoredRequest({ gasPrice: '0xffff' }, { status: 'error' }),
+      monitoredRequest({ gasPrice: '0xffff', nonce: '0x8' }),
+      monitoredRequest({ gasPrice: '0x01' })
+    )
+    const tx = { from, nonce, gasPrice: '0x64' }
+
+    expect(() => checkExistingNonceGas(tx)).not.toThrow()
+    expect(tx).toEqual({ from, nonce, gasPrice: '0x64' })
+  })
+
+  it('does not overflow a maximum uint256 stored fee', () => {
+    setRequests(monitoredRequest({ gasPrice: toRpcQuantity(MAX_UINT256) }))
+    const tx = { from, nonce, gasPrice: toRpcQuantity(MAX_UINT256) }
+
+    expect(() => checkExistingNonceGas(tx)).not.toThrow()
+    expect(tx).toEqual({ from, nonce, gasPrice: toRpcQuantity(MAX_UINT256) })
+  })
+
+  it('leaves both EIP-1559 fields unchanged when a bump would overflow', () => {
+    setRequests(
+      monitoredRequest({
+        maxPriorityFeePerGas: toRpcQuantity(MAX_UINT256),
+        maxFeePerGas: toRpcQuantity(MAX_UINT256)
+      })
+    )
+    const tx = {
+      from,
+      nonce,
+      maxPriorityFeePerGas: toRpcQuantity(MAX_UINT256),
+      maxFeePerGas: toRpcQuantity(MAX_UINT256)
+    }
+
+    expect(() => checkExistingNonceGas(tx)).not.toThrow()
+    expect(tx).toEqual({
+      from,
+      nonce,
+      maxPriorityFeePerGas: toRpcQuantity(MAX_UINT256),
+      maxFeePerGas: toRpcQuantity(MAX_UINT256)
+    })
+  })
 })
 
 describe('#getRawTx', () => {

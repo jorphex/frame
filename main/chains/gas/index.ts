@@ -1,4 +1,5 @@
 import { chainUsesOptimismFees } from '../../../resources/utils/chains'
+import { toRpcQuantity } from '../../provider/quantity'
 
 import type { GasFees } from '../../store/state'
 
@@ -24,20 +25,14 @@ export type Block = {
   gasUsedRatio?: number
 }
 
-const MAX_UINT256 = (1n << 256n) - 1n
 const POLYGON_MIN_PRIORITY_FEE = 25_000_000_000n
-
-function quantityToHex(value: bigint) {
-  if (value < 0n || value > MAX_UINT256) throw new Error('Calculated gas fee exceeds uint256')
-  return `0x${value.toString(16)}`
-}
 
 function feesToHex(fees: RawGasFees) {
   return {
-    nextBaseFee: quantityToHex(fees.nextBaseFee),
-    maxBaseFeePerGas: quantityToHex(fees.maxBaseFeePerGas),
-    maxPriorityFeePerGas: quantityToHex(fees.maxPriorityFeePerGas),
-    maxFeePerGas: quantityToHex(fees.maxFeePerGas)
+    nextBaseFee: toRpcQuantity(fees.nextBaseFee),
+    maxBaseFeePerGas: toRpcQuantity(fees.maxBaseFeePerGas),
+    maxPriorityFeePerGas: toRpcQuantity(fees.maxPriorityFeePerGas),
+    maxFeePerGas: toRpcQuantity(fees.maxFeePerGas)
   }
 }
 

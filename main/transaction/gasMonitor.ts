@@ -1,6 +1,7 @@
 import { intToHex } from '@ethereumjs/util'
 
 import type { Block } from '../chains/gas'
+import { parseRpcQuantity } from '../provider/quantity'
 
 interface FeeHistoryResponse {
   baseFeePerGas?: unknown
@@ -16,16 +17,9 @@ interface GasPrices {
   asap: string
 }
 
-const MAX_UINT256 = (1n << 256n) - 1n
-const quantityPattern = /^0x(?:0|[1-9a-f][0-9a-f]*)$/i
-
 function parseFeeQuantity(value: unknown, field: string) {
-  if (typeof value !== 'string' || value.length > 66 || !quantityPattern.test(value)) {
-    throw new Error(`Invalid eth_feeHistory ${field}`)
-  }
-
-  const quantity = BigInt(value)
-  if (quantity > MAX_UINT256) throw new Error(`Invalid eth_feeHistory ${field}`)
+  const quantity = parseRpcQuantity(value)
+  if (quantity === undefined) throw new Error(`Invalid eth_feeHistory ${field}`)
   return quantity
 }
 

@@ -10,6 +10,7 @@ import connection from '../../../main/chains'
 import store from '../../../main/store'
 import chainConfig from '../../../main/chains/config'
 import { hasSubscriptionPermission } from '../../../main/provider/subscriptions'
+import { toRpcQuantity } from '../../../main/provider/quantity'
 import { gweiToHex } from '../../../resources/utils'
 import { Type as SignerType } from '../../../resources/domain/signer'
 import Erc20Contract from '../../../main/contracts/erc20'
@@ -1361,6 +1362,8 @@ describe('#send', () => {
     })
 
     describe('replacing gas fees', () => {
+      const bumpedByTenPercent = (value) => (BigInt(value) * 11n + 9n) / 10n
+
       it('adds a 10% gas buffer when replacing a legacy transaction', (done) => {
         tx.type = '0x0'
         tx.chainId = addHexPrefix((137).toString(16))
@@ -1377,8 +1380,8 @@ describe('#send', () => {
 
             sendTransaction(() => {
               const replacementRequest = accountRequests[1]
-              const bumpedPrice = Math.ceil(initialPrice * 1.1)
-              expect(replacementRequest.data.gasPrice).toBe(intToHex(bumpedPrice))
+              const bumpedPrice = bumpedByTenPercent(initialPrice)
+              expect(replacementRequest.data.gasPrice).toBe(toRpcQuantity(bumpedPrice))
               expect(replacementRequest.feesUpdatedByUser).toBe(false)
               done()
             })
@@ -1443,12 +1446,12 @@ describe('#send', () => {
 
             sendTransaction(() => {
               const replacementRequest = accountRequests[1]
-              const bumpedFee = Math.ceil(initialTip * 1.1)
-              const bumpedBase = Math.ceil((initialMax - initialTip) * 1.1)
+              const bumpedFee = bumpedByTenPercent(initialTip)
+              const bumpedBase = bumpedByTenPercent(BigInt(initialMax) - BigInt(initialTip))
               const bumpedMax = bumpedFee + bumpedBase
 
-              expect(replacementRequest.data.maxPriorityFeePerGas).toBe(intToHex(bumpedFee))
-              expect(replacementRequest.data.maxFeePerGas).toBe(intToHex(bumpedMax))
+              expect(replacementRequest.data.maxPriorityFeePerGas).toBe(toRpcQuantity(bumpedFee))
+              expect(replacementRequest.data.maxFeePerGas).toBe(toRpcQuantity(bumpedMax))
               expect(replacementRequest.feesUpdatedByUser).toBe(false)
               done()
             })
@@ -1487,9 +1490,9 @@ describe('#send', () => {
 
             sendTransaction(() => {
               const replacementRequest = accountRequests[1]
-              const bumpedFee = Math.ceil(initialTip * 1.1)
-              expect(replacementRequest.data.maxPriorityFeePerGas).toBe(intToHex(bumpedFee))
-              expect(replacementRequest.data.maxFeePerGas).toBe(intToHex(20 * 1e9 + bumpedFee))
+              const bumpedFee = bumpedByTenPercent(initialTip)
+              expect(replacementRequest.data.maxPriorityFeePerGas).toBe(toRpcQuantity(bumpedFee))
+              expect(replacementRequest.data.maxFeePerGas).toBe(toRpcQuantity(20_000_000_000n + bumpedFee))
               expect(replacementRequest.feesUpdatedByUser).toBe(false)
               done()
             })

@@ -17,6 +17,7 @@ import { isHexString } from 'ethers/lib/utils'
 import store from '../store'
 import { usesBaseFee, TransactionData, GasFeesSource } from '../../resources/domain/transaction'
 import { getAddress } from '../../resources/utils'
+import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from './quantity'
 
 import type { Chain } from '../store/state'
 
@@ -40,28 +41,64 @@ export function checkExistingNonceGas(tx: TransactionData) {
     (r) => r.mode === 'monitor' && r.status !== 'error' && r.data.nonce === nonce
   )
 
+  const maxStoredQuantity = (field: 'gasPrice' | 'maxFeePerGas' | 'maxPriorityFeePerGas') =>
+    existing.reduce<bigint | undefined>((maximum, request) => {
+      const quantity = parseRpcQuantity(request.data[field])
+      if (quantity === undefined) return maximum
+      return maximum === undefined || quantity > maximum ? quantity : maximum
+    }, undefined)
+
+  const increasedByTenPercent = (value: bigint) => (value * 11n + 9n) / 10n
+  const replacementIncrease = (value: bigint) => {
+    const increased = increasedByTenPercent(value)
+    return increased > value ? increased : value + 1n
+  }
+  const isBelowReplacementThreshold = (current: bigint, requested: bigint) => current * 11n >= requested * 10n
+
   if (existing.length > 0) {
     if (tx.maxPriorityFeePerGas && tx.maxFeePerGas) {
-      const existingFee = Math.max(...existing.map((r) => r.data.maxPriorityFeePerGas))
-      const existingMax = Math.max(...existing.map((r) => r.data.maxFeePerGas))
-      const feeInt = parseInt(tx.maxPriorityFeePerGas)
-      const maxInt = parseInt(tx.maxFeePerGas)
-      if (existingFee * 1.1 >= feeInt || existingMax * 1.1 >= maxInt) {
+      const existingFee = maxStoredQuantity('maxPriorityFeePerGas')
+      const existingMax = maxStoredQuantity('maxFeePerGas')
+      const requestedFee = parseRpcQuantity(tx.maxPriorityFeePerGas)
+      const requestedMax = parseRpcQuantity(tx.maxFeePerGas)
+      if (
+        existingFee !== undefined &&
+        existingMax !== undefined &&
+        requestedFee !== undefined &&
+        requestedMax !== undefined &&
+        existingMax >= existingFee &&
+        requestedMax >= requestedFee &&
+        (isBelowReplacementThreshold(existingFee, requestedFee) ||
+          isBelowReplacementThreshold(existingMax, requestedMax))
+      ) {
         // Bump fees by 10%
-        const bumpedFee = Math.max(Math.ceil(existingFee * 1.1), feeInt)
-        const bumpedBase = Math.max(Math.ceil((existingMax - existingFee) * 1.1), Math.ceil(maxInt - feeInt))
-        tx.maxFeePerGas = '0x' + (bumpedBase + bumpedFee).toString(16)
-        tx.maxPriorityFeePerGas = '0x' + bumpedFee.toString(16)
+        const bumpedFee = [replacementIncrease(existingFee), requestedFee].reduce((a, b) => (a > b ? a : b))
+        const bumpedBase = [
+          increasedByTenPercent(existingMax - existingFee),
+          requestedMax - requestedFee
+        ].reduce((a, b) => (a > b ? a : b))
+        const bumpedMax = bumpedBase + bumpedFee
+        if (bumpedMax > MAX_UINT256) return tx
+
+        tx.maxFeePerGas = toRpcQuantity(bumpedMax)
+        tx.maxPriorityFeePerGas = toRpcQuantity(bumpedFee)
         tx.gasFeesSource = GasFeesSource.Frame
         tx.feesUpdated = true
       }
     } else if (tx.gasPrice) {
-      const existingPrice = Math.max(...existing.map((r) => r.data.gasPrice))
-      const priceInt = parseInt(tx.gasPrice)
-      if (existingPrice >= priceInt) {
+      const existingPrice = maxStoredQuantity('gasPrice')
+      const requestedPrice = parseRpcQuantity(tx.gasPrice)
+      if (
+        existingPrice !== undefined &&
+        requestedPrice !== undefined &&
+        isBelowReplacementThreshold(existingPrice, requestedPrice)
+      ) {
         // Bump price by 10%
-        const bumpedPrice = Math.ceil(existingPrice * 1.1)
-        tx.gasPrice = '0x' + bumpedPrice.toString(16)
+        const bumpedPrice = replacementIncrease(existingPrice)
+        const replacementPrice = bumpedPrice > requestedPrice ? bumpedPrice : requestedPrice
+        if (replacementPrice > MAX_UINT256) return tx
+
+        tx.gasPrice = toRpcQuantity(replacementPrice)
         tx.gasFeesSource = GasFeesSource.Frame
         tx.feesUpdated = true
       }
