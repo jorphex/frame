@@ -383,6 +383,7 @@ let launchStatus = store('main.launch')
 store.observer(() => {
   if (launchStatus !== store('main.launch')) {
     launchStatus = store('main.launch')
-    launchStatus ? launch.enable() : launch.disable()
+    if (launchStatus) launch.enable()
+    else launch.disable()
   }
 })

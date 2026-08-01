@@ -400,7 +400,7 @@ export default class Lattice extends Signer {
         hashType: Constants.SIGNING.HASHES.KECCAK256,
         encodingType: Constants.SIGNING.ENCODINGS.EVM,
         signerPath: unsignedTx.signerPath,
-        decoder: callDataDecoder?.def
+        decoder: callDataDecoder ? Buffer.from(callDataDecoder.def) : undefined
       }
 
       return { data, currency: unsignedTx.currency }
