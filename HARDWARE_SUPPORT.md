@@ -1,0 +1,65 @@
+# Signer And Platform Support
+
+## Status Definitions
+
+- **Physical**: exercised on a real device with this fork.
+- **Automated**: covered by unit or adapter tests, usually with mocks.
+- **Implemented**: a code path exists but has not been regression-qualified for
+  this fork.
+- **Unsupported**: no maintained implementation is present.
+
+These statuses describe available evidence, not a security certification.
+
+## Current Matrix
+
+| Signer or platform                 | Transport/package             | Evidence in this fork                                                                                        | Release status                                |
+| ---------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| Trezor Safe 7                      | USB through Trezor Connect    | Physical pairing, address access, transaction signing, and broadcast on Linux x64; automated bridge coverage | Workable, use at your own risk                |
+| Other Trezor models                | USB through Trezor Connect    | Shared implementation and automated bridge coverage                                                          | Implemented, not physically requalified       |
+| Trezor Safe 7 Bluetooth            | Bluetooth                     | No Frame transport                                                                                           | Unsupported                                   |
+| Ledger                             | USB HID                       | Automated adapter/device coverage                                                                            | Implemented, not physically requalified       |
+| GridPlus Lattice1                  | Vendor SDK/network            | Automated adapter/device coverage                                                                            | Implemented, not physically requalified       |
+| Software seed/private key/keystore | Local encrypted signer worker | Automated signer coverage                                                                                    | Implemented; legacy storage limitations apply |
+| Linux x64 AppImage and deb         | Electron package              | Local package build and native-module inspection; physical Safe 7 use                                        | Current release target                        |
+| macOS x64/arm64                    | Electron package              | Inherited build configuration only                                                                           | Unverified and unsigned by this fork          |
+| Windows x64                        | Electron package              | Inherited build configuration only                                                                           | Unverified and unsigned by this fork          |
+| Linux arm64, snap, tarball         | Electron package              | Legacy configuration only                                                                                    | Not produced by current CI                    |
+
+Trezor Suite is not required for the verified Safe 7 USB flow. Running another
+application that owns the device transport may cause contention. Bluetooth
+communication through Trezor Suite is not exposed to Frame as a supported signer
+transport.
+
+## Manual Safe 7 Regression
+
+Use a test-only account and a test network with no valuable assets.
+
+1. Start from a packaged Linux x64 artifact and ensure no second Frame process is
+   running.
+2. Connect a Safe 7 over USB with current stable firmware. Record the firmware,
+   Trezor Connect package version, OS, kernel, and artifact checksum.
+3. Confirm Frame detects the device and pairing-code entry completes. Reconnect
+   once and confirm the signer recovers without a reload loop.
+4. Derive an expected Ethereum address and use on-device address verification.
+   Compare the full device address with an independently recorded test address.
+5. Sign a personal message and EIP-712 test fixture when supported. Verify each
+   signature independently without using a production dapp.
+6. On a test network, review and sign a zero-value self-transfer. Confirm chain,
+   address, value, calldata, and fees on both Frame and the device before
+   broadcasting.
+7. Lock, disconnect, reconnect, and quit Frame. Confirm no request remains stuck
+   and no plaintext secret appears in logs.
+
+Any mismatch, blind-signing requirement, unexplained reload, or device-call loop
+is a failed regression. Do not publish a support claim from a partial run.
+
+## Other Signer Regression
+
+For Ledger or Lattice, use the same safety constraints and record exact model,
+firmware/app version, transport, derivation path, and test fixture. At minimum,
+verify discovery, address display, personal signing, typed-data behavior,
+EIP-1559 transaction signing, rejection/cancellation, disconnect/reconnect, and
+application shutdown.
+
+Automated tests must not broadcast, access a physical device by default, or share
+ports/profile data with an installed Frame instance.

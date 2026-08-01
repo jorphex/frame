@@ -1,0 +1,85 @@
+# Release Procedure
+
+## Current Release Boundary
+
+This fork currently produces Linux x64 AppImage and deb artifacts. The automated
+workflow is manual-only and creates or updates a GitHub **draft** release. It does
+not publish a release automatically. Linux artifacts are currently unsigned;
+macOS notarization and Windows signing are not configured for this fork.
+
+Dependency locking makes installation deterministic, but byte-for-byte
+reproducible artifacts have not yet been demonstrated.
+
+## Prepare
+
+1. Choose a clean, reviewed commit on the default branch. Never release from a
+   dirty worktree.
+2. Set a unique SemVer-compatible version in `package.json` and regenerate
+   `package-lock.json` using the pinned Node/npm toolchain. Do not reuse a tag from
+   a published release.
+3. Update user-facing release notes and support claims. Physical hardware claims
+   must have a current result recorded using
+   [`HARDWARE_SUPPORT.md`](HARDWARE_SUPPORT.md).
+4. Run the local quality and package gate:
+
+   ```bash
+   nvm install
+   nvm use
+   npm install --global npm@11.12.0
+   npm run setup:ci
+   npm run format:check
+   npm run lint
+   npm run compile
+   npm test
+   npm run test:usbAdapters
+   npm run bundle
+   npm run package:linux:x64
+   npm run package:verify:linux
+   npm run sbom:linux
+   ```
+
+5. Inspect the final diff, dependency graph, test output, package names,
+   `dist/SHA256SUMS`, and `dist/frame.cdx.json`. Do not waive unexplained signing,
+   migration, native-module, or packaging failures.
+
+## Build The Draft
+
+Run the **Build a draft Linux release** workflow from GitHub Actions against the
+reviewed commit. The optional tag defaults to `v<package version>` and accepts
+only letters, digits, `.`, `_`, and `-`.
+
+The workflow performs the full quality gate, verifies required hardware native
+modules, generates SHA-256 checksums and a CycloneDX SBOM, creates build and SBOM
+attestations, and uploads the files to a draft release. It refuses to replace
+assets on an already published release.
+
+Pull-request workflows have read-only repository access and cannot publish.
+
+## Review The Draft
+
+1. Confirm the workflow ran from the intended commit and all jobs passed.
+2. Download artifacts on a separate test system and run
+   `sha256sum --check SHA256SUMS` from the download directory.
+3. Inspect the GitHub artifact attestations and SBOM. Confirm artifact filenames
+   and embedded application version match the draft tag and release notes.
+4. Install the deb as an upgrade over the previous fork release and launch the
+   AppImage separately. Verify startup, single-instance behavior, tray/dash
+   placement, local provider startup, update behavior, and preservation of a
+   backed-up test profile.
+5. Run the applicable manual signer regression with test-only accounts. Do not
+   use valuable accounts merely to qualify a release.
+6. Record known limitations prominently in the release notes, including unsigned
+   artifacts and unverified platforms/signers.
+
+## Publish Or Reject
+
+Publish the GitHub draft only after review succeeds. A failed draft should remain
+unpublished or be deleted through the GitHub UI; fix the source and create a new
+version/tag rather than silently replacing a published artifact.
+
+After publishing, verify the public checksums, downloads, release notes, and
+updater behavior from a clean machine. Retain the source commit, lockfile, SBOM,
+checksums, and attestations for the lifetime of the release.
+
+If a release is unsafe, remove it from normal discovery, publish a security
+notice, and issue a fixed version. Do not rewrite the compromised tag.

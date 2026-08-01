@@ -15,6 +15,7 @@
   <a href="#features">Features</a> ⁃
   <a href="#installation">Installation</a> ⁃
   <a href="#usage">Usage</a> ⁃
+  <a href="#security-and-support">Security</a> ⁃
   <a href="#related">Related</a>
 </h5>
 <br>
@@ -72,7 +73,6 @@ If you use an arch-based distro, you can use an AUR Helper like [yay](https://gi
 # Use the pinned npm resolver
 › npm install --global npm@11.12.0
 
-
 # Install
 › npm run setup
 
@@ -96,6 +96,14 @@ Frame exposes system-wide JSON-RPC endpoints `ws://127.0.0.1:1248` and `http://1
 ### Frame's injected provider
 
 Frame also has a browser extension for injecting a Frame-connected [EIP-1193](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1193.md) provider into web apps as `window.ethereum`. This can be used to inject a connection when an app does not provide the option to connect to Frame natively.
+
+### Security and Support
+
+This community fork has not received an independent security audit. Before using
+it, review the [security policy](SECURITY.md), [current threat
+model](THREAT_MODEL.md), and [signer/platform support
+matrix](HARDWARE_SUPPORT.md). Maintainers should follow the documented [release
+procedure](RELEASE.md).
 
 ### Related
 
