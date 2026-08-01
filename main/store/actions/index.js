@@ -316,7 +316,7 @@ module.exports = {
           symbol: net.symbol,
           icon: net.nativeCurrencyIcon || '',
           name: net.nativeCurrencyName || '',
-          decimals: 18
+          decimals: net.nativeCurrencyDecimals ?? 18
         },
         gas: {
           price: {

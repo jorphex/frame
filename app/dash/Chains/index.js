@@ -162,7 +162,7 @@ class Settings extends React.Component {
     )
   }
 
-  renderNewChain(newChain) {
+  renderNewChain(newChain, requestReference) {
     return (
       <div className={'localSettings cardShow'}>
         <div className='localSettingsWrap'>
@@ -179,6 +179,8 @@ class Settings extends React.Component {
             nativeCurrencyName={newChain.nativeCurrencyName}
             nativeCurrencyIcon={newChain.nativeCurrencyIcon}
             icon={newChain.icon}
+            nativeCurrencyDecimals={newChain.nativeCurrencyDecimals}
+            requestReference={requestReference}
             view={'setup'}
           />
         </div>
@@ -187,11 +189,11 @@ class Settings extends React.Component {
   }
 
   render() {
-    const { selectedChain, newChain } = this.props.data
+    const { selectedChain, newChain, requestReference } = this.props.data
     if (selectedChain) {
       return this.renderChain(selectedChain)
     } else if (newChain) {
-      return this.renderNewChain(newChain)
+      return this.renderNewChain(newChain, requestReference)
     } else {
       return this.renderChains()
     }

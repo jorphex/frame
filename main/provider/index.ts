@@ -31,6 +31,7 @@ import { capitalize } from '../../resources/utils'
 import { ApprovalType } from '../../resources/constants'
 import { createObserver as AssetsObserver, loadAssets } from './assets'
 import { getVersionFromTypedData } from './typedData'
+import { parseAddChainRequest, parseChainRequestId } from './chainRequests'
 
 import { Subscription, SubscriptionType, hasSubscriptionPermission } from './subscriptions'
 import {
@@ -823,11 +824,7 @@ export class Provider extends EventEmitter {
 
   private switchEthereumChain(payload: RPCRequestPayload, res: RPCRequestCallback) {
     try {
-      const params = payload.params
-      if (!params || !params[0]) throw new Error('Params not supplied')
-
-      const chainId = parseInt(params[0].chainId)
-      if (!Number.isInteger(chainId)) throw new Error('Invalid chain id')
+      const chainId = parseChainRequestId(payload.params)
 
       // Check if chain exists
       const exists = Boolean(store('main.networks.ethereum', chainId))
@@ -849,47 +846,46 @@ export class Provider extends EventEmitter {
   }
 
   private addEthereumChain(payload: RPCRequestPayload, res: RPCRequestCallback) {
-    if (!payload.params[0]) return resError('addChain request missing params', payload, res)
+    try {
+      const id = parseChainRequestId(payload.params)
+      const type = 'ethereum'
 
-    const type = 'ethereum'
-    const { chainId, chainName, nativeCurrency, rpcUrls = [], blockExplorerUrls = [] } = payload.params[0]
+      if (store('main.networks', type, id)) return this.switchEthereumChain(payload, res)
 
-    if (!chainId) return resError('addChain request missing chainId', payload, res)
-    if (!chainName) return resError('addChain request missing chainName', payload, res)
-    if (!nativeCurrency) return resError('addChain request missing nativeCurrency', payload, res)
+      const request = parseAddChainRequest(payload.params)
+      const currentAccount = accounts.current()
+      if (!currentAccount) {
+        throw { code: 4100, message: 'No account selected to approve the add-chain request' }
+      }
+      const handlerId = uuid()
 
-    const handlerId = this.addRequestHandler(res)
-
-    // Check if chain exists
-    const id = parseInt(chainId, 16)
-    if (!Number.isInteger(id)) return resError('Invalid chain id', payload, res)
-
-    const exists = Boolean(store('main.networks', type, id))
-    if (exists) {
-      // Ask user if they want to switch chains
-      this.switchEthereumChain(payload, res)
-    } else {
-      // Ask user if they want to add this chain
       accounts.addRequest(
         {
           handlerId,
           type: 'addChain',
           chain: {
             type,
-            id,
-            name: chainName,
-            symbol: nativeCurrency.symbol,
-            primaryRpc: rpcUrls[0],
-            secondaryRpc: rpcUrls[1],
-            explorer: blockExplorerUrls[0],
-            nativeCurrencyName: nativeCurrency.name
+            id: request.id,
+            name: request.name,
+            symbol: request.symbol,
+            primaryRpc: request.rpcUrls[0],
+            secondaryRpc: request.rpcUrls[1],
+            explorer: request.blockExplorerUrls[0] || '',
+            nativeCurrencyName: request.nativeCurrencyName,
+            nativeCurrencyDecimals: request.nativeCurrencyDecimals,
+            icon: request.iconUrls[0] || '',
+            nativeCurrencyIcon: '',
+            isTestnet: false,
+            primaryColor: 'accent2'
           },
-          account: (accounts.getAccounts() || [])[0],
+          account: currentAccount.id,
           origin: payload._origin,
           payload
         } as AddChainRequest,
         res
       )
+    } catch (error) {
+      return resError(error as EVMError, payload, res)
     }
   }
 

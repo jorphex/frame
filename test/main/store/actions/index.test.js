@@ -198,6 +198,12 @@ describe('#addNetwork', () => {
     })
   })
 
+  it('preserves configured native currency decimals', () => {
+    addNetwork({ ...polygonNetwork, nativeCurrencyDecimals: 6 })
+
+    expect(networksMeta.ethereum['137'].nativeCurrency.decimals).toBe(6)
+  })
+
   it('does not add the network if id is not a parseable number', () => {
     addNetwork({ ...polygonNetwork, id: 'test' })
 

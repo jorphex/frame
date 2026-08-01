@@ -17,7 +17,9 @@ class ChainWrapper extends React.Component {
       secondaryRpc,
       icon,
       nativeCurrencyName,
-      nativeCurrencyIcon
+      nativeCurrencyIcon,
+      nativeCurrencyDecimals,
+      requestReference
     } = this.props
     const existingChains = Object.keys(this.store('main.networks.ethereum')).map((id) => parseInt(id))
     return (
@@ -33,6 +35,8 @@ class ChainWrapper extends React.Component {
         icon={icon}
         nativeCurrencyName={nativeCurrencyName}
         nativeCurrencyIcon={nativeCurrencyIcon}
+        nativeCurrencyDecimals={nativeCurrencyDecimals}
+        requestReference={requestReference}
         store={this.store}
       />
     )

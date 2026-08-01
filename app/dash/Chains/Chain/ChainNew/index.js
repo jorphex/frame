@@ -59,6 +59,8 @@ export const Chain = ({
   primaryColor = chainDefault.primaryColor,
   primaryRpc = '',
   secondaryRpc = '',
+  nativeCurrencyDecimals = 18,
+  requestReference,
   existingChains,
   store
 }) => {
@@ -74,7 +76,8 @@ export const Chain = ({
     isTestnet,
     primaryColor,
     primaryRpc,
-    secondaryRpc
+    secondaryRpc,
+    nativeCurrencyDecimals
   }
 
   // state
@@ -89,6 +92,8 @@ export const Chain = ({
   const [currentTestnet, setTestnet] = useState(newChain.isTestnet)
   const [currentPrimaryRPC, setPrimaryRPC] = useState(newChain.primaryRpc)
   const [currentSecondaryRPC, setSecondaryRPC] = useState(newChain.secondaryRpc)
+  const [submissionError, setSubmissionError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const currencyIcon = currentCurrencyIcon === chainDefault.nativeCurrencyIcon ? '' : currentCurrencyIcon
   const chainIcon = currentChainIcon === chainDefault.icon ? '' : currentChainIcon
@@ -104,7 +109,8 @@ export const Chain = ({
     isTestnet: currentTestnet,
     primaryColor: currentColor,
     primaryRpc: currentPrimaryRPC,
-    secondaryRpc: currentSecondaryRPC
+    secondaryRpc: currentSecondaryRPC,
+    nativeCurrencyDecimals
   }
 
   const validateChain = (chain) => {
@@ -128,8 +134,16 @@ export const Chain = ({
       return { valid: false, text: 'Invalid primary RPC' }
     }
 
+    if (requestReference && getUrl(chain.primaryRpc)?.protocol !== 'https:') {
+      return { valid: false, text: 'Dapp RPC Must Use HTTPS' }
+    }
+
     if (chain.secondaryRpc && !isValidRpc(chain.secondaryRpc)) {
       return { valid: false, text: 'Invalid secondary RPC' }
+    }
+
+    if (requestReference && chain.secondaryRpc && getUrl(chain.secondaryRpc)?.protocol !== 'https:') {
+      return { valid: false, text: 'Dapp RPC Must Use HTTPS' }
     }
 
     return { valid: true, text: 'Add Chain' }
@@ -157,13 +171,23 @@ export const Chain = ({
       <EditTestnet testnet={currentTestnet} onChange={setTestnet} />
       <div className='chainRow chainRowRemove'>
         <SubmitChainButton
-          text={chainValidation.text}
+          text={submitting ? 'Verifying RPC...' : submissionError || chainValidation.text}
           textColor={chainValidation.valid ? 'var(--good)' : ''}
-          enabled={chainValidation.valid}
-          onClick={() => {
-            if (chainValidation.valid) {
+          enabled={chainValidation.valid && !submitting}
+          onClick={async () => {
+            if (chainValidation.valid && !submitting) {
               const nav = store('windows.dash.nav')
-              link.send('tray:addChain', updatedChain)
+              const args = requestReference
+                ? ['tray:addChain', updatedChain, requestReference]
+                : ['tray:addChain', updatedChain]
+              setSubmitting(true)
+              setSubmissionError('')
+              const result = await link.invoke(...args).catch(() => ({ success: false }))
+              if (!result.success) {
+                setSubmitting(false)
+                setSubmissionError(result.error || 'Could Not Add Chain')
+                return
+              }
 
               // if previous navItem is the chains panel, go back
               if (nav[1]?.view === 'chains') {

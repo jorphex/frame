@@ -161,10 +161,17 @@ describe('#send', () => {
 
   describe('#wallet_addEthereumChain', () => {
     const sendRequest = (chain, cb) => send({ method: 'wallet_addEthereumChain', params: [chain] }, cb)
+    const validChain = {
+      chainId: '0x1234',
+      chainName: 'Bizarro Polygon',
+      nativeCurrency: { name: 'New', symbol: 'NEW', decimals: 18 },
+      rpcUrls: ['https://pylon.link'],
+      blockExplorerUrls: ['https://explorer.pylon.link']
+    }
 
     it('rejects a request with no chain id', (done) => {
       const cb = (response) => {
-        expect(response.error.message).toMatch(/missing chainid/i)
+        expect(response.error.message).toMatch(/invalid params/i)
         expect(response.result).toBeUndefined()
         done()
       }
@@ -174,7 +181,7 @@ describe('#send', () => {
 
     it('rejects a request with an invalid chain id', (done) => {
       const cb = (response) => {
-        expect(response.error.message).toMatch(/invalid chain id/i)
+        expect(response.error.message).toMatch(/invalid params/i)
         expect(response.result).toBeUndefined()
         done()
       }
@@ -184,22 +191,71 @@ describe('#send', () => {
 
     it('rejects a request with no chain name', (done) => {
       const cb = (response) => {
-        expect(response.error.message).toMatch(/missing chainname/i)
+        expect(response.error.message).toMatch(/invalid params/i)
         expect(response.result).toBeUndefined()
         done()
       }
 
-      sendRequest({ chainId: '0x5', nativeCurrency: { symbol: 'gETH' } }, cb)
+      sendRequest(
+        {
+          chainId: '0x1234',
+          nativeCurrency: { name: 'Ether', symbol: 'gETH', decimals: 18 },
+          rpcUrls: ['https://rpc.example']
+        },
+        cb
+      )
     })
 
     it('rejects a request with no native currency', (done) => {
       const cb = (response) => {
-        expect(response.error.message).toMatch(/missing nativecurrency/i)
+        expect(response.error.message).toMatch(/invalid params/i)
         expect(response.result).toBeUndefined()
         done()
       }
 
-      sendRequest({ chainId: '0xaa36a7', chainName: 'Sepolia' }, cb)
+      sendRequest({ chainId: '0xaa36a7', chainName: 'Sepolia', rpcUrls: ['https://rpc.example'] }, cb)
+    })
+
+    it.each([
+      ['a decimal chain ID', { ...validChain, chainId: '4660' }],
+      ['a zero chain ID', { ...validChain, chainId: '0x0' }],
+      ['a non-canonical chain ID', { ...validChain, chainId: '0x01234' }],
+      ['a partially parseable chain ID', { ...validChain, chainId: '0x1234junk' }],
+      ['an unsafe chain ID', { ...validChain, chainId: '0x20000000000000' }],
+      ['no RPC URL', { ...validChain, rpcUrls: [] }],
+      ['an HTTP RPC URL', { ...validChain, rpcUrls: ['http://rpc.example'] }],
+      [
+        'negative native currency decimals',
+        { ...validChain, nativeCurrency: { name: 'New', symbol: 'NEW', decimals: -1 } }
+      ]
+    ])('rejects %s without creating request state', (_description, chain, done) => {
+      sendRequest(chain, (response) => {
+        try {
+          expect(response.error.code).toBe(-32602)
+          expect(accountRequests).toHaveLength(0)
+          expect(provider.handlers).toEqual({})
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
+    it('rejects instead of hanging when no account can approve the request', (done) => {
+      accounts.current.mockReturnValueOnce(null)
+
+      sendRequest(validChain, (response) => {
+        try {
+          expect(response.error).toEqual({
+            code: 4100,
+            message: 'No account selected to approve the add-chain request'
+          })
+          expect(accountRequests).toHaveLength(0)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
     })
 
     it('should create a request to add the chain', (done) => {
@@ -217,7 +273,12 @@ describe('#send', () => {
               nativeCurrencyName: 'New',
               primaryRpc: 'https://pylon.link',
               secondaryRpc: undefined,
-              explorer: 'https://explorer.pylon.link'
+              explorer: 'https://explorer.pylon.link',
+              nativeCurrencyDecimals: 18,
+              icon: '',
+              nativeCurrencyIcon: '',
+              isTestnet: false,
+              primaryColor: 'accent2'
             }
           })
         )
@@ -225,20 +286,7 @@ describe('#send', () => {
         done()
       }
 
-      sendRequest(
-        {
-          chainId: '0x1234', // A 0x-prefixed hexadecimal string
-          chainName: 'Bizarro Polygon',
-          nativeCurrency: {
-            name: 'New',
-            symbol: 'NEW', // 2-6 characters long
-            decimals: 18
-          },
-          rpcUrls: ['https://pylon.link'],
-          blockExplorerUrls: ['https://explorer.pylon.link']
-        },
-        cb
-      )
+      sendRequest(validChain, cb)
     })
 
     it('should switch the chain for the requesting origin if the chain already exists', (done) => {
@@ -261,16 +309,7 @@ describe('#send', () => {
         done()
       }
 
-      sendRequest(
-        {
-          chainId: '0x1', // A 0x-prefixed hexadecimal string
-          chainName: 'Mainnet',
-          nativeCurrency: {
-            symbol: 'ETH'
-          }
-        },
-        cb
-      )
+      sendRequest({ chainId: '0x1' }, cb)
     })
   })
 
@@ -325,6 +364,21 @@ describe('#send', () => {
         }
       )
     })
+
+    it.each([undefined, [], [{}], [{ chainId: '1' }], [{ chainId: '0x01' }], [{ chainId: '0x1' }, {}]])(
+      'rejects malformed params %#',
+      (params, done) => {
+        send({ method: 'wallet_switchEthereumChain', params }, (response) => {
+          try {
+            expect(response.error.code).toBe(-32602)
+            expect(store.switchOriginChain).not.toHaveBeenCalled()
+            done()
+          } catch (error) {
+            done(error)
+          }
+        })
+      }
+    )
   })
 
   describe('#wallet_getPermissions', () => {

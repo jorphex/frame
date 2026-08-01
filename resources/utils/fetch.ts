@@ -4,8 +4,11 @@ import type { AbortSignal } from 'node-fetch/externals'
 
 export async function fetchWithTimeout(url: string, options: RequestInit, timeout: number) {
   const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
 
-  setTimeout(() => controller.abort(), timeout)
-
-  return fetch(url, { ...options, signal: controller.signal as AbortSignal })
+  try {
+    return await fetch(url, { ...options, signal: controller.signal as AbortSignal })
+  } finally {
+    clearTimeout(timer)
+  }
 }

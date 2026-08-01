@@ -136,8 +136,13 @@ class Footer extends React.Component {
                 style={{ pointerEvents: this.state.allowInput ? 'auto' : 'none' }}
                 onClick={() => {
                   if (this.state.allowInput) {
-                    link.send('tray:resolveRequest', req, null)
-                    link.send('tray:action', 'navDash', { view: 'chains', data: { newChain: req.chain } })
+                    link.send('tray:action', 'navDash', {
+                      view: 'chains',
+                      data: {
+                        newChain: req.chain,
+                        requestReference: { account: req.account, handlerId: req.handlerId }
+                      }
+                    })
                   }
                 }}
               >

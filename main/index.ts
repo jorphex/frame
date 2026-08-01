@@ -10,6 +10,7 @@ import * as errors from './errors'
 import windows from './windows'
 import menu from './menu'
 import store from './store'
+import { addRequestedChain } from './chains/addRequestedChain'
 import dapps from './dapps'
 import accounts from './accounts'
 import * as launch from './launch'
@@ -190,8 +191,19 @@ ipcMain.on('tray:giveAccess', (e, req, access) => {
   accounts.setAccess(req, access)
 })
 
-ipcMain.on('tray:addChain', (e, chain) => {
-  store.addNetwork(chain)
+ipcMain.handle('tray:addChain', async (e, chain, requestReference) => {
+  try {
+    if (requestReference) {
+      await addRequestedChain(chain, requestReference)
+    } else {
+      store.addNetwork(chain)
+    }
+
+    return { success: true }
+  } catch (error) {
+    log.warn('Could not add requested chain', error)
+    return { success: false, error: (error as Error).message }
+  }
 })
 
 ipcMain.on('tray:switchChain', (e, type, id, req) => {

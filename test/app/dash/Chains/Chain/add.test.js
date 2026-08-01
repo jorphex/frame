@@ -6,7 +6,10 @@ import { screen, render } from '../../../../componentSetup'
 import ChainComponent from '../../../../../app/dash/Chains/Chain'
 
 jest.mock('../../../../../main/store/persist')
-jest.mock('../../../../../resources/link', () => ({ send: jest.fn() }))
+jest.mock('../../../../../resources/link', () => ({
+  send: jest.fn(),
+  invoke: jest.fn().mockResolvedValue({ success: true })
+}))
 
 const Chain = Restore.connect(ChainComponent, store)
 
@@ -139,7 +142,7 @@ describe('submitting', () => {
     const { user } = render(<Chain view='setup' {...chainConfig} />)
 
     await user.click(screen.getByRole('button'))
-    expect(link.send).not.toHaveBeenCalled()
+    expect(link.invoke).not.toHaveBeenCalled()
   })
 
   it('adds a valid chain', async () => {
@@ -159,7 +162,7 @@ describe('submitting', () => {
 
     await user.click(screen.getByRole('button'))
 
-    expect(link.send).toHaveBeenNthCalledWith(1, 'tray:addChain', {
+    expect(link.invoke).toHaveBeenNthCalledWith(1, 'tray:addChain', {
       id: 42162,
       name: 'Arbitrum Rinkeby',
       symbol: 'ETH',
@@ -170,6 +173,7 @@ describe('submitting', () => {
       primaryRpc: 'https://arbitrum-rinkeby.infura.com',
       secondaryRpc: 'https://myrpc.arbrink.net',
       nativeCurrencyName: 'Ether',
+      nativeCurrencyDecimals: 18,
       nativeCurrencyIcon: '',
       icon: ''
     })
@@ -197,7 +201,7 @@ describe('submitting', () => {
 
     await user.click(screen.getByRole('button'))
 
-    expect(link.send).toHaveBeenNthCalledWith(
+    expect(link.invoke).toHaveBeenNthCalledWith(
       1,
       'tray:addChain',
       expect.objectContaining({
@@ -221,7 +225,7 @@ describe('submitting', () => {
 
     await user.click(screen.getByRole('button'))
 
-    expect(link.send).toHaveBeenNthCalledWith(1, 'tray:addChain', {
+    expect(link.invoke).toHaveBeenNthCalledWith(1, 'tray:addChain', {
       id: 42162,
       name: 'Arbitrum Rinkeby',
       symbol: 'ETH',
@@ -232,9 +236,74 @@ describe('submitting', () => {
       primaryRpc: '',
       secondaryRpc: '',
       nativeCurrencyName: 'Ether',
+      nativeCurrencyDecimals: 18,
       nativeCurrencyIcon: '',
       icon: ''
     })
+  })
+
+  it('carries a dapp request reference through final approval', async () => {
+    const requestReference = {
+      account: '0x22dd63c3619818fdbc262c78baee43cb61e9cccf',
+      handlerId: 'e194a121-a42a-4c2f-a8e4-d90b102b2440'
+    }
+    const chainConfig = {
+      id: 42162,
+      type: 'ethereum',
+      name: 'Arbitrum Rinkeby',
+      symbol: 'ETH',
+      primaryRpc: 'https://arbitrum-rinkeby.infura.com',
+      nativeCurrencyName: 'Ether',
+      requestReference
+    }
+
+    const { user } = render(<Chain view='setup' {...chainConfig} />)
+    await user.click(screen.getByRole('button'))
+
+    expect(link.invoke).toHaveBeenCalledWith(
+      'tray:addChain',
+      expect.objectContaining({ id: 42162 }),
+      requestReference
+    )
+  })
+
+  it('does not navigate away when main-process validation fails', async () => {
+    link.invoke.mockResolvedValueOnce({ success: false, error: 'RPC chain mismatch' })
+    const chainConfig = {
+      id: 42162,
+      type: 'ethereum',
+      name: 'Arbitrum Rinkeby',
+      symbol: 'ETH',
+      primaryRpc: 'https://arbitrum-rinkeby.infura.com',
+      nativeCurrencyName: 'Ether'
+    }
+
+    const { user } = render(<Chain view='setup' {...chainConfig} />)
+    await user.click(screen.getByRole('button'))
+
+    expect(link.send).not.toHaveBeenCalled()
+    expect(await screen.findByText('RPC chain mismatch')).toBeTruthy()
+  })
+
+  it('requires HTTPS for a dapp-requested RPC', async () => {
+    const chainConfig = {
+      id: 42162,
+      type: 'ethereum',
+      name: 'Arbitrum Rinkeby',
+      symbol: 'ETH',
+      primaryRpc: 'http://localhost:8545',
+      nativeCurrencyName: 'Ether',
+      requestReference: {
+        account: '0x22dd63c3619818fdbc262c78baee43cb61e9cccf',
+        handlerId: 'e194a121-a42a-4c2f-a8e4-d90b102b2440'
+      }
+    }
+
+    const { user } = render(<Chain view='setup' {...chainConfig} />)
+    expect(screen.getByRole('button').textContent).toBe('Dapp RPC Must Use HTTPS')
+
+    await user.click(screen.getByRole('button'))
+    expect(link.invoke).not.toHaveBeenCalled()
   })
 })
 
