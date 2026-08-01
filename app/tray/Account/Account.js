@@ -215,15 +215,17 @@ class _AccountBody extends React.Component {
   }
 
   getChainData(req) {
-    if (req.type !== 'signErc20Permit') return {}
-    const chainId = req.typedMessage.data.domain.chainId
-    const chainName = this.store('main.networks.ethereum', chainId, 'name')
-    const { primaryColor: chainColor, icon } = this.store('main.networksMeta.ethereum', chainId)
-    const requestChainId = req.context?.requestChainId
+    const requestChainId =
+      req.type === 'sign' ? req.data?.context?.requestChainId : req.context?.requestChainId
     const requestChainName =
       requestChainId !== undefined ? this.store('main.networks.ethereum', requestChainId, 'name') : undefined
 
-    return { chainId, chainName, chainColor, icon, requestChainName }
+    if (req.type !== 'signErc20Permit') return { requestChainId, requestChainName }
+    const chainId = req.typedMessage.data.domain.chainId
+    const chainName = this.store('main.networks.ethereum', chainId, 'name')
+    const { primaryColor: chainColor, icon } = this.store('main.networksMeta.ethereum', chainId)
+
+    return { chainId, chainName, chainColor, icon, requestChainId, requestChainName }
   }
 
   renderRequest(req, data = {}) {

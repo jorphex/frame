@@ -114,6 +114,7 @@
     "react-transition-group": "4.4.5",
     "rlp": "3.0.0",
     "semver": "7.6.3",
+    "siwe": "3.0.0",
     "styled-components": "5.3.8",
     "tar-fs": "2.1.5",
     "uuid": "9.0.0",

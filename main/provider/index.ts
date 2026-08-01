@@ -6,7 +6,7 @@ import { Web3Provider } from '@ethersproject/providers'
 import { BigNumber } from 'ethers'
 import { recoverTypedSignature, SignTypedDataVersion } from '@metamask/eth-sig-util'
 import { isAddress } from '@ethersproject/address'
-import { addHexPrefix, intToHex, isHexString, isHexPrefixed, fromUtf8 } from '@ethereumjs/util'
+import { addHexPrefix, intToHex } from '@ethereumjs/util'
 
 import store from '../store'
 import packageFile from '../../package.json'
@@ -50,8 +50,7 @@ import {
   gasFees,
   getRawTx,
   getSignedAddress,
-  resError,
-  decodeMessage
+  resError
 } from './helpers'
 
 import {
@@ -62,12 +61,14 @@ import {
 import {
   EIP2612TypedData,
   LegacyTypedData,
+  MessageSigningMethod,
   PermitSignatureRequest,
-  SignatureRequest,
+  SignRequest,
   TypedData,
   TypedMessage
 } from '../accounts/types'
 import * as sigParser from '../signatures'
+import { parseMessageRequest } from '../signatures/message'
 import { hasAddress } from '../../resources/domain/account'
 import { mapRequest } from '../requests'
 
@@ -263,24 +264,22 @@ export class Provider extends EventEmitter {
     })
   }
 
-  approveSign(req: AccountRequest, cb: Callback<string>) {
+  approveSign(req: SignRequest, cb: Callback<string>) {
     const res = (data: any) => {
       if (this.handlers[req.handlerId]) this.handlers[req.handlerId](data)
       delete this.handlers[req.handlerId]
     }
 
-    const payload = req.payload
-    let [address, rawMessage] = payload.params
-
-    let message = rawMessage
-
-    if (isHexString(rawMessage)) {
-      if (!isHexPrefixed(rawMessage)) {
-        message = addHexPrefix(rawMessage)
-      }
-    } else {
-      message = fromUtf8(rawMessage)
+    const storedRequest = accounts.current()?.getRequest(req.handlerId)
+    if (!storedRequest || storedRequest.type !== 'sign') {
+      const error = new Error('Message signing request is no longer available')
+      resError(error.message, req.payload, res)
+      return cb(error)
     }
+
+    const { payload, data } = storedRequest as SignRequest
+    const address = storedRequest.account
+    const message = data.rawMessage
 
     accounts.signMessage(address, message, (err, signed) => {
       if (err) {
@@ -638,44 +637,48 @@ export class Provider extends EventEmitter {
     this.connection.send(payload, res, targetChain)
   }
 
-  _personalSign(payload: RPCRequestPayload, res: RPCRequestCallback) {
-    const params = payload.params || []
-
-    if (isAddress(params[0]) && !isAddress(params[1])) {
-      // personal_sign requests expect the first parameter to be the message and the second
-      // parameter to be an address. however some clients send these in the opposite order
-      // so try to detect that
-      return this.sign(payload, res)
-    }
-
-    // switch the order of params to be consistent with eth_sign
-    return this.sign({ ...payload, params: [params[1], params[0], ...params.slice(2)] }, res)
+  _personalSign(payload: RPCRequestPayload, targetChain: Chain, res: RPCRequestCallback) {
+    return this.sign(payload, 'personal_sign', targetChain, res)
   }
 
-  sign(payload: RPCRequestPayload, res: RPCRequestCallback) {
-    const [from, message] = payload.params || []
+  sign(
+    payload: RPCRequestPayload,
+    method: MessageSigningMethod,
+    targetChain: Chain,
+    res: RPCRequestCallback
+  ) {
     const currentAccount = accounts.current()
 
-    if (!message) {
-      return resError('Sign request requires a message param', payload, res)
+    if (!currentAccount) {
+      return resError({ code: 4100, message: 'No account selected for message signing' }, payload, res)
     }
 
-    if (!currentAccount || !hasAddress(currentAccount, from)) {
-      return resError('Sign request is not from currently selected account', payload, res)
+    let parsedRequest
+    try {
+      parsedRequest = parseMessageRequest(method, payload.params, {
+        account: currentAccount.getSelectedAddress(),
+        origin: getPayloadOrigin(payload)?.name || 'Unknown',
+        requestChainId: targetChain.id
+      })
+    } catch (error) {
+      return resError(error as EVMError, payload, res)
     }
 
+    const normalizedPayload = { ...payload, params: parsedRequest.params }
     const handlerId = this.addRequestHandler(res)
 
-    const req = {
+    const req: SignRequest = {
       handlerId,
       type: 'sign',
-      payload,
-      account: (currentAccount as FrameAccount).getAccounts()[0],
+      payload: normalizedPayload,
+      account: currentAccount.getSelectedAddress(),
       origin: payload._origin,
       data: {
-        decodedMessage: decodeMessage(message)
+        rawMessage: parsedRequest.rawMessage,
+        decodedMessage: parsedRequest.decodedMessage,
+        context: parsedRequest.context
       }
-    } as SignatureRequest
+    }
 
     const _res = (data: any) => {
       if (this.handlers[req.handlerId]) this.handlers[req.handlerId](data)
@@ -1158,8 +1161,8 @@ export class Provider extends EventEmitter {
       return this.subscribe(payload as RPC.Subscribe.Request, res)
     }
 
-    if (method === 'personal_sign') return this._personalSign(payload, res)
-    if (method === 'eth_sign') return this.sign(payload, res)
+    if (method === 'personal_sign') return this._personalSign(payload, targetChain, res)
+    if (method === 'eth_sign') return this.sign(payload, 'eth_sign', targetChain, res)
 
     if (
       ['eth_signTypedData', 'eth_signTypedData_v1', 'eth_signTypedData_v3', 'eth_signTypedData_v4'].includes(

@@ -70,7 +70,12 @@ beforeEach(() => {
     }
   }
 
-  accounts.current = jest.fn(() => ({ id: address, getAccounts: () => [address] }))
+  accounts.current = jest.fn(() => ({
+    id: address,
+    getAccounts: () => [address],
+    getSelectedAddress: () => address,
+    getRequest: (handlerId) => accountRequests.find((request) => request.handlerId === handlerId)
+  }))
   accounts.get = jest.fn((addr) =>
     addr === address ? { id: address, address, lastSignerType: 'ring' } : undefined
   )
@@ -81,7 +86,8 @@ beforeEach(() => {
 describe('#send', () => {
   beforeEach(() => {
     store.set('main.origins', '8073729a-5e59-53b7-9e69-5d9bcff94087', {
-      chain: { id: 1, type: 'ethereum', on: true }
+      chain: { id: 1, type: 'ethereum', on: true },
+      name: 'example.test'
     })
   })
 
@@ -1420,6 +1426,47 @@ describe('#send', () => {
       expect(accountRequests[0].handlerId).toBeTruthy()
       expect(accountRequests[0].payload.params[0]).toBe(address)
       expect(accountRequests[0].payload.params[1]).toEqual(hexMessage)
+      expect(accountRequests[0].account).toBe(address)
+      expect(accountRequests[0].data).toEqual({
+        rawMessage: hexMessage,
+        decodedMessage: message,
+        context: {
+          method: 'eth_sign',
+          requestChainId: 1,
+          origin: 'example.test',
+          encoding: 'utf8',
+          byteLength: 16,
+          risks: ['legacy-eth-sign']
+        }
+      })
+    })
+
+    it('signs the normalized request bytes instead of re-reading payload display data', (done) => {
+      send({ method: 'eth_sign', params: [address, hexMessage] })
+      const storedRequest = accountRequests[0]
+      const rendererRequest = {
+        ...storedRequest,
+        payload: { ...storedRequest.payload, params: [address, 'tampered payload'] },
+        data: { ...storedRequest.data, rawMessage: '0xdeadbeef' }
+      }
+      accounts.signMessage = jest.fn((_address, _message, cb) => cb(null, '0xsignature'))
+      const verify = jest
+        .spyOn(provider, 'verifySignature')
+        .mockImplementation((_sig, _msg, _address, cb) => cb(null, true))
+
+      provider.approveSign(rendererRequest, (error, signature) => {
+        try {
+          expect(error).toBeNull()
+          expect(signature).toBe('0xsignature')
+          expect(accounts.signMessage).toHaveBeenCalledWith(address, hexMessage, expect.any(Function))
+          expect(verify).toHaveBeenCalledWith('0xsignature', hexMessage, address, expect.any(Function))
+          done()
+        } catch (testError) {
+          done(testError)
+        } finally {
+          verify.mockRestore()
+        }
+      })
     })
 
     it('does not submit a request from an account other than the current one', (done) => {
@@ -1445,6 +1492,14 @@ describe('#send', () => {
       expect(accountRequests[0].payload.params[0]).toBe(address)
       expect(accountRequests[0].payload.params[1]).toEqual(hexMessage)
       expect(accountRequests[0].payload.params[2]).toEqual(password)
+      expect(accountRequests[0].data.context).toEqual({
+        method: 'personal_sign',
+        requestChainId: 1,
+        origin: 'example.test',
+        encoding: 'utf8',
+        byteLength: 16,
+        risks: []
+      })
     })
 
     it('submits a request to sign a personal message with the message first', () => {
@@ -1476,6 +1531,22 @@ describe('#send', () => {
         expect(err.error).toBeTruthy()
         done()
       })
+    })
+
+    it.each([
+      ['missing message', [address]],
+      ['non-string message', [1, address]],
+      ['partial hex byte', ['0x0', address]]
+    ])('rejects %s before creating request state', (_label, params) => {
+      const callback = jest.fn()
+
+      send({ method: 'personal_sign', params }, callback)
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.objectContaining({ code: -32602 }) })
+      )
+      expect(accountRequests).toHaveLength(0)
+      expect(provider.handlers).toEqual({})
     })
   })
 

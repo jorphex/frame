@@ -128,8 +128,50 @@ export interface TransactionRequest extends AccountRequest<'transaction'> {
 
 export interface SignRequest extends AccountRequest<'sign'> {
   data: {
+    rawMessage: string
     decodedMessage: string
+    context: MessageSigningContext
   }
+}
+
+export type MessageSigningMethod = 'personal_sign' | 'eth_sign'
+
+export type MessageSigningRisk =
+  | 'legacy-eth-sign'
+  | 'opaque-message'
+  | 'siwe-malformed'
+  | 'siwe-origin-unverified'
+  | 'siwe-origin-mismatch'
+  | 'siwe-address-mismatch'
+  | 'siwe-chain-mismatch'
+  | 'siwe-expired'
+  | 'siwe-not-yet-valid'
+  | 'siwe-issued-in-future'
+
+export interface SiweMessageData {
+  scheme?: string
+  domain: string
+  address: string
+  statement?: string
+  uri: string
+  version: string
+  chainId: string
+  nonce: string
+  issuedAt?: string
+  expirationTime?: string
+  notBefore?: string
+  requestId?: string
+  resources?: string[]
+}
+
+export interface MessageSigningContext {
+  method: MessageSigningMethod
+  requestChainId: number
+  origin: string
+  encoding: 'utf8' | 'hex'
+  byteLength: number
+  risks: MessageSigningRisk[]
+  siwe?: SiweMessageData
 }
 
 export type TypedData<T extends MessageTypes = MessageTypes> = BaseTypedMessage<T>

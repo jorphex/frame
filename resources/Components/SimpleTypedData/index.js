@@ -18,7 +18,7 @@ const displayValue = (value, quoteStrings) => {
   return JSON.stringify(value)
 }
 
-const SimpleJSON = ({ humanizeKeys = false, json, quoteStrings = true }) => {
+export const SimpleJSON = ({ humanizeKeys = false, json, quoteStrings = true }) => {
   if (json === null || typeof json !== 'object') {
     return <span>{displayValue(json, quoteStrings)}</span>
   }
@@ -46,7 +46,7 @@ const SimpleJSON = ({ humanizeKeys = false, json, quoteStrings = true }) => {
   )
 }
 
-const Section = ({ children, first = false, title }) => (
+export const Section = ({ children, first = false, title }) => (
   <section>
     <div className={`simpleJsonHeader${first ? ' simpleJsonHeaderFirst' : ''}`}>{title}</div>
     {children}
