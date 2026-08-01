@@ -18,7 +18,16 @@ const artifacts = [findArtifact('.AppImage'), findArtifact('_amd64.deb')]
 const unpackedModules = path.join(dist, 'linux-unpacked', 'resources', 'app.asar.unpacked', 'node_modules')
 const nativeModules = [
   path.join(unpackedModules, 'node-hid', 'build', 'Release', 'HID_hidraw.node'),
-  path.join(unpackedModules, '@trezor', 'transport', 'node_modules', 'usb', 'prebuilds', 'linux-x64', 'node.napi.glibc.node')
+  path.join(
+    unpackedModules,
+    '@trezor',
+    'transport',
+    'node_modules',
+    'usb',
+    'prebuilds',
+    'linux-x64',
+    'node.napi.glibc.node'
+  )
 ]
 
 await Promise.all(nativeModules.map((modulePath) => access(modulePath)))
@@ -27,25 +36,36 @@ const packagedExecutable = path.join(dist, 'linux-unpacked', 'frame')
 const packagedModuleProbe = `
 const path = require('node:path')
 const modules = ['node-hid', 'usb', '@trezor/transport/node_modules/usb']
-const appModules = path.resolve('dist/linux-unpacked/resources/app.asar/node_modules')
+const appRoot = path.resolve('dist/linux-unpacked/resources/app.asar')
+const appModules = path.join(appRoot, 'node_modules')
 for (const module of modules) require(path.join(appModules, module))
-process.stdout.write(JSON.stringify({
-  electron: process.versions.electron,
-  abi: process.versions.modules,
-  modules
-}))
+const modernModules = require(path.join(appRoot, 'compiled/main/nebula/modules.js'))
+Promise.all([modernModules.loadKuboModule(), modernModules.loadUnixFsModule()])
+  .then((loaded) => process.stdout.write(JSON.stringify({
+    electron: process.versions.electron,
+    abi: process.versions.modules,
+    modules,
+    esmModules: loaded.map((module) => Object.keys(module).length)
+  })))
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
 `
 const probe = spawnSync(packagedExecutable, ['-e', packagedModuleProbe], {
   cwd: process.cwd(),
   encoding: 'utf8',
-  env: { ...process.env, ELECTRON_RUN_AS_NODE: 'true' }
+  env: { ...process.env, ELECTRON_RUN_AS_NODE: 'true' },
+  timeout: 30_000
 })
 
-assert.equal(probe.status, 0, `Packaged native-module probe failed:\n${probe.stderr}`)
+assert.equal(probe.status, 0, `Packaged module probe failed:\n${probe.error || probe.stderr}`)
 const probeResult = JSON.parse(probe.stdout)
 const packageJson = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
 assert.equal(probeResult.electron, packageJson.devDependencies.electron)
 assert.deepEqual(probeResult.modules, ['node-hid', 'usb', '@trezor/transport/node_modules/usb'])
+assert.equal(probeResult.esmModules.length, 2)
+assert.ok(probeResult.esmModules.every((exports) => exports > 0))
 assert.match(probeResult.abi, /^\d+$/)
 
 const sha256 = (file) =>
@@ -63,5 +83,7 @@ const checksums = await Promise.all(
 
 await writeFile(path.join(dist, 'SHA256SUMS'), `${checksums.join('\n')}\n`)
 console.log(
-  `Verified ${artifacts.join(' and ')} with Electron ${probeResult.electron} ABI ${probeResult.abi} hardware-wallet native modules`
+  `Verified ${artifacts.join(' and ')} with Electron ${probeResult.electron} ABI ${
+    probeResult.abi
+  } hardware-wallet native and IPFS ESM modules`
 )

@@ -1,41 +1,46 @@
-// A modified version of ipfs-only-hash, https://github.com/alanshaw/ipfs-only-hash/issues/18
-
 import path from 'path'
 import fs from 'fs/promises'
 import { app } from 'electron'
-import { globSource } from 'ipfs-http-client'
-import { importer } from 'ipfs-unixfs-importer'
 
-import type { UserImporterOptions } from 'ipfs-unixfs-importer/types'
+import { loadKuboModule, loadUnixFsModule } from '../../nebula/modules'
 
-const blockstore = {
-  get: async (cid: string) => {
-    throw new Error(`unexpected block API get for ${cid}`)
-  },
-  put: async () => {
-    throw new Error('unexpected block API put')
+async function assertRegularTree(directory: string) {
+  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name)
+
+    if (entry.isSymbolicLink()) throw new Error(`Dapp cache contains a symbolic link: ${entryPath}`)
+    if (entry.isDirectory()) await assertRegularTree(entryPath)
+    else if (!entry.isFile()) throw new Error(`Dapp cache contains a non-file entry: ${entryPath}`)
   }
 }
 
-const hash = async (content: any, opts: UserImporterOptions = {}) => {
-  const options = {
-    ...opts,
-    onlyHash: true,
-    cidVersion: 0,
-    hidden: true
-  } as const
+export async function hashDirectory(directory: string) {
+  await assertRegularTree(directory)
+  const [{ globSource }, { importer }] = await Promise.all([loadKuboModule(), loadUnixFsModule()])
 
-  let lastCID
-
-  for await (const c of importer(content, blockstore as any, options)) {
-    lastCID = c.cid
+  async function* normalizedSource() {
+    for await (const entry of globSource(directory, '**', {
+      hidden: true,
+      followSymlinks: false
+    })) {
+      const relativePath = entry.path.replace(/^[/\\]+/, '')
+      if (relativePath) yield { ...entry, path: relativePath }
+    }
   }
 
-  return lastCID
-}
+  let rootCID
+  const blockstore = { put: async () => {} }
 
-const hashFiles = async (path: string, options: UserImporterOptions) => hash(globSource(path, '**'), options)
-const getCID = async (path: string, isDirectory = true) => hashFiles(path, { wrapWithDirectory: isDirectory })
+  for await (const entry of importer(normalizedSource(), blockstore, {
+    profile: 'unixfs-v0-2015',
+    wrapWithDirectory: true
+  })) {
+    rootCID = entry.cid
+  }
+
+  if (!rootCID) throw new Error(`Could not hash empty dapp directory: ${directory}`)
+  return rootCID
+}
 
 export function getDappCacheDir() {
   return path.join(app.getPath('userData'), 'DappCache')
@@ -54,7 +59,7 @@ export async function dappPathExists(dappId: string) {
 
 export async function isDappVerified(dappId: string, contentCID: string) {
   const path = `${getDappCacheDir()}/${dappId}`
-  const cid = await getCID(path)
+  const cid = await hashDirectory(path)
 
   return cid?.toV1().toString() === contentCID
 }

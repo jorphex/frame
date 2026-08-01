@@ -80,6 +80,21 @@ If you use an arch-based distro, you can use an AUR Helper like [yay](https://gi
 › npm run prod
 ```
 
+#### IPFS Connection
+
+Frame reads decentralized dapp and token content through a Kubo RPC endpoint.
+Set `FRAME_IPFS_API_URL` to use your own endpoint (for example,
+`http://127.0.0.1:5001`) and set `NEBULA_AUTH_TOKEN` when it requires HTTP Basic
+authentication. The existing hosted endpoint remains the default.
+
+Archived dapp downloads are limited to 256 MiB before extraction and are only
+activated after their complete UnixFS directory CID matches the ENS manifest.
+
+Kubo RPC is an administrative interface. Keep a local endpoint bound to
+localhost or place a remote endpoint behind TLS, authentication, and a restricted
+proxy; do not expose it directly to the public internet. See the [Kubo RPC
+security guidance](https://docs.ipfs.tech/reference/kubo/rpc/).
+
 #### Build
 
 ```bash

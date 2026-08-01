@@ -1,35 +1,17 @@
-import path from 'path'
-import { Readable } from 'stream'
 import { hash } from 'eth-ens-namehash'
 import log from 'electron-log'
 import crypto from 'crypto'
-import tar from 'tar-fs'
 
 import store from '../store'
 import nebulaApi from '../nebula'
 import server from './server'
 import extractColors from '../windows/extractColors'
+import { installDappArchive } from './cache'
 import { dappPathExists, getDappCacheDir, isDappVerified } from './verify'
 
 import type { Dapp } from '../store/state'
 
 const nebula = nebulaApi()
-
-class DappStream extends Readable {
-  constructor(hash: string) {
-    super()
-    this.start(hash)
-  }
-  async start(hash: string) {
-    for await (const buf of nebula.ipfs.get(hash, { archive: true })) {
-      this.push(buf)
-    }
-    this.push(null)
-  }
-  _read() {
-    // empty
-  }
-}
 
 function getDapp(dappId: string): Dapp {
   return store('main.dapps', dappId)
@@ -44,50 +26,31 @@ async function getDappColors(dappId: string) {
   try {
     const colors = await extractColors(url, dapp.ens)
     store.updateDapp(dappId, { colors })
-    server.sessions.remove(dapp.ens, session)
   } catch (e) {
     log.error(e)
+  } finally {
+    server.sessions.remove(dapp.ens, session)
   }
 }
 
-const createTarStream = (dappId: string) => {
-  return tar.extract(getDappCacheDir(), {
-    map: (header) => ({ ...header, name: path.join(dappId, ...header.name.split('/').slice(1)) })
-  })
-}
-
-const writeDapp = async (dappId: string, hash: string) => {
-  return new Promise<void>((resolve, reject) => {
-    try {
-      const dapp = new DappStream(hash)
-      const tarStream = createTarStream(dappId)
-
-      tarStream.on('error', reject)
-      tarStream.on('finish', resolve)
-
-      dapp.pipe(tarStream)
-    } catch (e) {
-      reject(e)
-    }
-  })
-}
-
 const cacheDapp = async (dappId: string, hash: string) => {
-  await writeDapp(dappId, hash)
+  await installDappArchive({
+    archive: nebula.ipfs.get(hash, { archive: true }),
+    cacheRoot: getDappCacheDir(),
+    contentCID: hash,
+    dappId,
+    onCleanupError: (error) => log.warn('Could not remove previous dapp cache', error)
+  })
+
   await getDappColors(dappId)
 
   return dappId
 }
 
-// TODO: change to correct manifest type one Nebula version with types are published
-async function updateDappContent(dappId: string, manifest: any) {
-  try {
-    // Create a local cache of the content
-    await cacheDapp(dappId, manifest.content)
-    store.updateDapp(dappId, { content: manifest.content, manifest })
-  } catch (e) {
-    log.error('error updating dapp cache', e)
-  }
+async function updateDappContent(dappId: string, content: string, manifest: Record<string, unknown>) {
+  // Only publish a downloaded cache after its full directory CID is verified.
+  await cacheDapp(dappId, content)
+  store.updateDapp(dappId, { content, manifest })
 }
 
 let retryTimer: NodeJS.Timeout
@@ -126,7 +89,7 @@ async function checkStatus(dappId: string) {
       // Sets status to 'updating' when updating the bundle
       store.updateDapp(dappId, { status: 'updating' })
       // Update dapp assets
-      await updateDappContent(dappId, manifest)
+      await updateDappContent(dappId, content, manifest)
     } else {
       log.info(`Dapp ${dapp.ens} already up to date: ${content}`)
     }
