@@ -775,6 +775,129 @@ describe('#resolveRequest', () => {
   })
 })
 
+describe('#updateRequest', () => {
+  it('reruns simulation only after an accepted transaction action update', () => {
+    const activeAccount = Accounts.current()
+    const update = jest.fn().mockReturnValue(true)
+    const simulation = jest.spyOn(activeAccount, 'refreshTransactionSimulation')
+    request.recognizedActions = [{ id: 'erc20:approve', update }]
+    activeAccount.requests[request.handlerId] = request
+
+    Accounts.updateRequest(request.handlerId, { amount: '42' }, 'erc20:approve')
+
+    expect(update).toHaveBeenCalledWith(request, { amount: '42' })
+    expect(simulation).toHaveBeenCalledWith(request)
+  })
+
+  it('does not simulate a rejected, locked, or submitted transaction update', () => {
+    const activeAccount = Accounts.current()
+    const update = jest.fn().mockReturnValue(false)
+    const simulation = jest.spyOn(activeAccount, 'refreshTransactionSimulation')
+    request.recognizedActions = [{ id: 'erc20:approve', update }]
+    activeAccount.requests[request.handlerId] = request
+
+    Accounts.updateRequest(request.handlerId, { amount: '-1' }, 'erc20:approve')
+    request.locked = true
+    Accounts.updateRequest(request.handlerId, { amount: '1' }, 'erc20:approve')
+    request.locked = false
+    request.status = 'pending'
+    Accounts.updateRequest(request.handlerId, { amount: '1' }, 'erc20:approve')
+
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(simulation).not.toHaveBeenCalled()
+  })
+
+  it('contains transaction action update failures without mutation or simulation', () => {
+    const activeAccount = Accounts.current()
+    const update = jest.fn(() => {
+      throw new Error('invalid action state')
+    })
+    const simulation = jest.spyOn(activeAccount, 'refreshTransactionSimulation')
+    request.recognizedActions = [{ id: 'erc20:approve', update }]
+    activeAccount.requests[request.handlerId] = request
+
+    expect(() => Accounts.updateRequest(request.handlerId, { amount: '42' }, 'erc20:approve')).not.toThrow()
+    expect(simulation).not.toHaveBeenCalled()
+  })
+
+  it('updates only the amount fields of an active permit request', () => {
+    const activeAccount = Accounts.current()
+    const update = jest.spyOn(activeAccount, 'update')
+    const permitRequest = {
+      handlerId: 'permit-update',
+      type: 'signErc20Permit',
+      account: activeAccount.address,
+      typedMessage: {
+        data: {
+          domain: { chainId: 1, verifyingContract: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          message: { owner: activeAccount.address, spender: account2.address, value: '1' }
+        }
+      },
+      permit: { owner: activeAccount.address, spender: { address: account2.address }, value: '1' },
+      tokenData: { symbol: 'TKN' }
+    }
+    activeAccount.requests[permitRequest.handlerId] = permitRequest
+
+    Accounts.updateRequest(
+      permitRequest.handlerId,
+      {
+        amount: '42',
+        account: account2.address,
+        permit: { owner: account2.address },
+        typedMessage: { data: { domain: { chainId: 999 } } },
+        tokenData: { symbol: 'EVIL' }
+      },
+      null
+    )
+
+    expect(permitRequest.typedMessage.data.message.value).toBe('42')
+    expect(permitRequest.typedMessage.data.domain.chainId).toBe(1)
+    expect(permitRequest.permit.value).toBe('42')
+    expect(permitRequest.permit.owner).toBe(activeAccount.address)
+    expect(permitRequest.account).toBe(activeAccount.address)
+    expect(permitRequest.tokenData.symbol).toBe('TKN')
+    expect(update).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores invalid and submitted permit amount updates without mutation', () => {
+    const activeAccount = Accounts.current()
+    const update = jest.spyOn(activeAccount, 'update')
+    const permitRequest = {
+      handlerId: 'invalid-permit-update',
+      type: 'signErc20Permit',
+      typedMessage: { data: { message: { value: '1' } } },
+      permit: { value: '1' }
+    }
+    activeAccount.requests[permitRequest.handlerId] = permitRequest
+    update.mockClear()
+
+    Accounts.updateRequest(permitRequest.handlerId, { amount: '1e2' }, null)
+    permitRequest.status = 'pending'
+    Accounts.updateRequest(permitRequest.handlerId, { amount: '42' }, null)
+
+    expect(permitRequest.typedMessage.data.message.value).toBe('1')
+    expect(permitRequest.permit.value).toBe('1')
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('does not partially mutate malformed permit request state', () => {
+    const activeAccount = Accounts.current()
+    const update = jest.spyOn(activeAccount, 'update')
+    const permitRequest = {
+      handlerId: 'malformed-permit-update',
+      type: 'signErc20Permit',
+      typedMessage: { data: { message: { value: '1' } } }
+    }
+    activeAccount.requests[permitRequest.handlerId] = permitRequest
+    update.mockClear()
+
+    Accounts.updateRequest(permitRequest.handlerId, { amount: '42' }, null)
+
+    expect(permitRequest.typedMessage.data.message.value).toBe('1')
+    expect(update).not.toHaveBeenCalled()
+  })
+})
+
 describe('#rejectRequest', () => {
   it('uses the main-process payload rather than renderer-returned request data', () => {
     const response = jest.fn()

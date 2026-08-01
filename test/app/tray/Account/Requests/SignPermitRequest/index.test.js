@@ -1,5 +1,8 @@
 import { screen, render } from '../../../../../componentSetup'
 import SignPermitRequest from '../../../../../../app/tray/Account/Requests/SignPermitRequest'
+import link from '../../../../../../resources/link'
+
+jest.mock('../../../../../../resources/link', () => ({ rpc: jest.fn(), send: jest.fn() }))
 
 jest.mock(
   '../../../../../../resources/Components/RingIcon',
@@ -66,4 +69,81 @@ it('labels the raw permit view with the resolved request chain', () => {
 
   expect(screen.getByText('Goerli (5)')).toBeTruthy()
   expect(screen.getByText('Type Definitions')).toBeTruthy()
+})
+
+it('sends only a normalized amount request from the permit editor', async () => {
+  const editableRequest = {
+    ...req,
+    status: undefined,
+    payload: { params: [typedData.message.owner, { message: { value: '1' } }] },
+    permit: {
+      ...req.permit,
+      verifyingContract: {
+        address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ens: '',
+        type: 'contract'
+      }
+    },
+    tokenData: { ...req.tokenData, name: 'Test Token' }
+  }
+  const { user } = render(
+    <SignPermitRequest
+      chainData={chainData}
+      originName='example.test'
+      req={editableRequest}
+      step='adjustPermit'
+    />
+  )
+
+  await user.click(screen.getByRole('button', { name: 'Unlimited' }))
+
+  expect(link.rpc).toHaveBeenCalledWith(
+    'updateRequest',
+    req.handlerId,
+    { amount: (2n ** 256n - 1n).toString(10) },
+    null,
+    expect.any(Function)
+  )
+})
+
+it('shows and allows editing a zero-decimal token permit', async () => {
+  const zeroDecimalRequest = {
+    ...req,
+    status: undefined,
+    payload: { params: [typedData.message.owner, { message: { value: '1' } }] },
+    permit: {
+      ...req.permit,
+      value: '1',
+      verifyingContract: {
+        address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ens: '',
+        type: 'contract'
+      }
+    },
+    tokenData: { ...req.tokenData, decimals: 0, name: 'Whole Token', symbol: 'WHOLE' }
+  }
+  const { user } = render(
+    <SignPermitRequest
+      chainData={chainData}
+      originName='example.test'
+      req={zeroDecimalRequest}
+      step='overview'
+    />
+  )
+
+  expect(screen.getByText('1 WHOLE')).toBeTruthy()
+  await user.click(screen.getByText('1 WHOLE'))
+  expect(link.send).toHaveBeenCalledWith('nav:update', 'panel', {
+    data: { step: 'adjustPermit', tokenData: zeroDecimalRequest.tokenData }
+  })
+
+  render(
+    <SignPermitRequest
+      chainData={chainData}
+      originName='example.test'
+      req={zeroDecimalRequest}
+      step='adjustPermit'
+    />
+  )
+  expect(screen.getByRole('button', { name: 'Custom' })).toBeTruthy()
 })

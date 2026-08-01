@@ -1,23 +1,24 @@
-import { useState, useEffect } from 'react'
-import BigNumber from 'bignumber.js'
+import { useState } from 'react'
 
-import { max } from '../../utils/numbers'
+import { MAX_UINT256 } from '../../domain/transaction/quantity'
+import {
+  formatTokenBaseUnitAmount,
+  MAX_TOKEN_AMOUNT_INPUT_LENGTH,
+  MAX_TOKEN_DECIMALS,
+  parseTokenBaseUnitAmount,
+  parseTokenDecimalAmount
+} from '../../domain/token/amount'
 import svg from '../../svg'
 import { ClusterBox, Cluster, ClusterRow, ClusterValue } from '../Cluster'
 import Countdown from '../Countdown'
 
 import useCopiedMessage from '../../Hooks/useCopiedMessage'
 
-const isMax = (value) => max.isEqualTo(value)
+const isMax = (value) => value === MAX_UINT256
 
 const getMode = (requestedAmount, amount) => {
-  if (requestedAmount.eq(amount)) return 'requested'
+  if (requestedAmount === amount) return 'requested'
   return isMax(amount) ? 'unlimited' : 'custom'
-}
-
-const isValidInput = (value, decimals) => {
-  const strValue = value.toString()
-  return !isNaN(value) && value > 0 && (!strValue.includes('.') || strValue.split('.')[1].length <= decimals)
 }
 
 const Details = ({ address, name }) => {
@@ -75,48 +76,63 @@ const EditTokenSpend = ({
   deadline,
   canRevoke = false
 }) => {
-  const { decimals = 0, symbol = '???', name = 'Unknown Token', spender, contract, amount } = data
+  const { decimals, symbol = '???', name = 'Unknown Token', spender, contract, amount } = data
+  const parsedAmount = parseTokenBaseUnitAmount(amount)
+  const parsedRequestedAmount = parseTokenBaseUnitAmount(requestedAmount?.toString(10))
+  const amountValue = parsedAmount ?? 0n
+  const requestedValue = parsedRequestedAmount ?? 0n
+  const hasInvalidAmount = parsedAmount === undefined || parsedRequestedAmount === undefined
+  const decimalAmount =
+    parsedAmount === undefined ? undefined : formatTokenBaseUnitAmount(amountValue.toString(10), decimals)
 
-  const toDecimal = (baseAmount) => new BigNumber(baseAmount).shiftedBy(-1 * decimals).toString(10)
-  const fromDecimal = (decimalAmount) => new BigNumber(decimalAmount).shiftedBy(decimals).toString(10)
+  const [mode, setMode] = useState(hasInvalidAmount ? 'invalid' : getMode(requestedValue, amountValue))
+  const [custom, setCustom] = useState(decimalAmount || amountValue.toString(10))
 
-  const [mode, setMode] = useState(getMode(requestedAmount, amount))
-  const [custom, setCustom] = useState('')
-
-  useEffect(() => {
-    setCustom(toDecimal(amount))
-  }, [])
-
-  const value = new BigNumber(amount)
-
-  const updateCustomAmount = (value, decimals) => {
-    if (!value) {
-      setCustom('0')
-      return setMode('custom')
-    }
-
-    if (!isValidInput(value, decimals)) return
+  const updateCustomAmount = (value) => {
     setMode('custom')
     setCustom(value)
   }
 
   const resetToRequestAmount = () => {
-    setCustom(toDecimal(requestedAmount))
+    setCustom(formatTokenBaseUnitAmount(requestedValue.toString(10), decimals) || requestedValue.toString(10))
     setMode('requested')
-    updateHandlerRequest(requestedAmount.toString(10))
+    updateHandlerRequest(requestedValue.toString(10))
   }
 
   const setToMax = () => {
     setMode('unlimited')
-    updateHandlerRequest(max.toString(10))
+    updateHandlerRequest(MAX_UINT256.toString(10))
   }
 
-  const isRevoke = canRevoke && value.eq(0)
+  const setToRevoke = () => {
+    setCustom('0')
+    setMode('revoke')
+    updateHandlerRequest('0')
+  }
+
+  const customAmount = parseTokenDecimalAmount(custom, decimals)
+  const submitCustomAmount = () => {
+    if (custom === '') return resetToRequestAmount()
+    if (customAmount !== undefined) updateHandlerRequest(customAmount.toString(10))
+  }
+
+  const isRevoke = canRevoke && parsedAmount === 0n
   const isCustom = mode === 'custom'
 
-  const displayAmount = isMax(amount) ? 'unlimited' : toDecimal(amount)
+  const displayAmount =
+    parsedAmount === undefined
+      ? 'unknown'
+      : isMax(amountValue)
+      ? 'unlimited'
+      : decimalAmount || amountValue.toString(10)
 
-  const inputLock = !data.symbol || !data.name || !data.decimals
+  const inputLock =
+    hasInvalidAmount ||
+    !data.symbol ||
+    !data.name ||
+    !Number.isInteger(decimals) ||
+    decimals < 0 ||
+    decimals > MAX_TOKEN_DECIMALS
 
   return (
     <div className='updateTokenApproval'>
@@ -164,14 +180,12 @@ const EditTokenSpend = ({
           <ClusterRow>
             <ClusterValue transparent={true} pointerEvents={'auto'}>
               <div className='approveTokenSpendAmount'>
-                {isCustom && amount !== fromDecimal(custom) ? (
-                  <div
-                    className='approveTokenSpendAmountSubmit'
-                    role='button'
-                    onClick={() =>
-                      custom === '' ? resetToRequestAmount() : updateHandlerRequest(fromDecimal(custom))
-                    }
-                  >
+                {isCustom && custom !== '' && customAmount === undefined ? (
+                  <div className='approveTokenSpendAmountSubmit' style={{ color: 'var(--bad)' }}>
+                    {'invalid'}
+                  </div>
+                ) : isCustom && customAmount !== undefined && amountValue !== customAmount ? (
+                  <div className='approveTokenSpendAmountSubmit' role='button' onClick={submitCustomAmount}>
                     {'update'}
                   </div>
                 ) : (
@@ -187,18 +201,18 @@ const EditTokenSpend = ({
                   <input
                     autoFocus
                     type='text'
+                    maxLength={MAX_TOKEN_AMOUNT_INPUT_LENGTH}
                     aria-label='Custom Amount'
                     value={custom}
                     onChange={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
-                      updateCustomAmount(e.target.value, decimals)
+                      updateCustomAmount(e.target.value)
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.target.blur()
-                        if (custom === '') return resetToRequestAmount()
-                        updateHandlerRequest(fromDecimal(custom))
+                        submitCustomAmount()
                       }
                     }}
                   />
@@ -227,45 +241,66 @@ const EditTokenSpend = ({
               <div className='approveTokenSpendAmountSubtitle'>Set Token Approval Spend Limit</div>
             </ClusterValue>
           </ClusterRow>
-          <ClusterRow>
-            <ClusterValue onClick={() => resetToRequestAmount()}>
-              <div
-                className='clusterTag'
-                style={mode === 'requested' ? { color: 'var(--good)' } : {}}
-                role='button'
-              >
-                {'Requested'}
-              </div>
-            </ClusterValue>
-          </ClusterRow>
-          <ClusterRow>
-            <ClusterValue
-              onClick={() => {
-                setToMax()
-              }}
-            >
-              <div
-                className='clusterTag'
-                style={mode === 'unlimited' ? { color: 'var(--good)' } : {}}
-                role='button'
-              >
-                {'Unlimited'}
-              </div>
-            </ClusterValue>
-          </ClusterRow>
-          {!inputLock && (
-            <ClusterRow>
-              <ClusterValue
-                onClick={() => {
-                  setMode('custom')
-                  setCustom('')
-                }}
-              >
-                <div className={'clusterTag'} style={isCustom ? { color: 'var(--good)' } : {}} role='button'>
-                  Custom
-                </div>
-              </ClusterValue>
-            </ClusterRow>
+          {!hasInvalidAmount && (
+            <>
+              {canRevoke && (
+                <ClusterRow>
+                  <ClusterValue onClick={setToRevoke}>
+                    <div
+                      className='clusterTag'
+                      style={mode === 'revoke' ? { color: 'var(--good)' } : {}}
+                      role='button'
+                    >
+                      {'Revoke'}
+                    </div>
+                  </ClusterValue>
+                </ClusterRow>
+              )}
+              <ClusterRow>
+                <ClusterValue onClick={() => resetToRequestAmount()}>
+                  <div
+                    className='clusterTag'
+                    style={mode === 'requested' ? { color: 'var(--good)' } : {}}
+                    role='button'
+                  >
+                    {'Requested'}
+                  </div>
+                </ClusterValue>
+              </ClusterRow>
+              <ClusterRow>
+                <ClusterValue
+                  onClick={() => {
+                    setToMax()
+                  }}
+                >
+                  <div
+                    className='clusterTag'
+                    style={mode === 'unlimited' ? { color: 'var(--good)' } : {}}
+                    role='button'
+                  >
+                    {'Unlimited'}
+                  </div>
+                </ClusterValue>
+              </ClusterRow>
+              {!inputLock && (
+                <ClusterRow>
+                  <ClusterValue
+                    onClick={() => {
+                      setMode('custom')
+                      setCustom('')
+                    }}
+                  >
+                    <div
+                      className={'clusterTag'}
+                      style={isCustom ? { color: 'var(--good)' } : {}}
+                      role='button'
+                    >
+                      Custom
+                    </div>
+                  </ClusterValue>
+                </ClusterRow>
+              )}
+            </>
           )}
         </Cluster>
       </ClusterBox>

@@ -35,6 +35,7 @@ import { ApprovalType } from '../../resources/constants'
 import { accountNS } from '../../resources/domain/account'
 import { chainUsesOptimismFees } from '../../resources/utils/chains'
 import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from '../../resources/domain/transaction/quantity'
+import { parseTokenBaseUnitAmount } from '../../resources/domain/token/amount'
 
 const MAX_FEE_PER_GAS = 9_999n * 1_000_000_000n
 const MAX_GAS_LIMIT = 12_500_000n
@@ -195,32 +196,47 @@ export class Accounts extends EventEmitter {
 
   // TODO: can we make this typed for the action type?
   updateRequest(reqId: string, data: any, actionId: ActionType) {
-    log.verbose('updateRequest', { reqId, actionId, data })
+    log.verbose('updateRequest', { reqId, actionId })
 
     const currentAccount = this.current()
     const request = currentAccount?.getRequest(reqId)
     if (!currentAccount || !request) return
+    if (request.status !== undefined) return
 
     if (request.type === 'transaction') {
-      if (!actionId) return
-
       const transactionReq = request as TransactionRequest
+      if (!actionId || transactionReq.locked) return
+
       const action = (transactionReq.recognizedActions || []).find((a) => a.id === actionId)
       if (!action?.update) return
 
-      action?.update(transactionReq, data)
+      let updated = false
+      try {
+        updated = action.update(transactionReq, data)
+      } catch {
+        log.warn('Transaction action update failed', { reqId, actionId })
+      }
+      if (!updated) {
+        log.warn('Ignored invalid transaction action update', { reqId, actionId })
+        return
+      }
       currentAccount.refreshTransactionSimulation(transactionReq)
       return
     }
 
     if (request.type === 'signErc20Permit') {
       const permitReq = request as PermitSignatureRequest
-      const reqData = data as PermitSignatureRequest
+      const amount = parseTokenBaseUnitAmount(data?.amount)
+      if (amount === undefined || !permitReq.typedMessage?.data?.message || !permitReq.permit) {
+        log.warn('Ignored invalid token permit amount update', { reqId })
+        return
+      }
 
-      Object.assign(permitReq, reqData)
+      const normalizedAmount = amount.toString(10)
+      permitReq.typedMessage.data.message.value = normalizedAmount
+      permitReq.permit.value = normalizedAmount
+      currentAccount.update()
     }
-
-    currentAccount.update()
   }
 
   async replaceTx(id: string, type: ReplacementType) {

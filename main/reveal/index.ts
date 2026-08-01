@@ -3,7 +3,6 @@
 import log from 'electron-log'
 import EthereumProvider from 'ethereum-provider'
 import { addHexPrefix } from '@ethereumjs/util'
-import BigNumber from 'bignumber.js'
 
 import proxyConnection from '../provider/proxy'
 import nebulaApi from '../nebula'
@@ -12,12 +11,12 @@ import Erc20Contract from '../contracts/erc20'
 import { decodeCallData, fetchContract, ContractSource } from '../contracts'
 import ensContracts from '../contracts/deployments/ens'
 import erc20 from '../externalData/balances/erc-20-abi'
-import { MAX_HEX } from '../../resources/constants'
 
 import type {
   ApproveAction as Erc20Approval,
   TransferAction as Erc20Transfer
 } from '../transaction/actions/erc20'
+import { updateErc20ApprovalAmount } from '../transaction/actions/erc20'
 import type { Action, DecodableContract, EntityType } from '../transaction/actions'
 import type { TransactionRequest } from '../accounts'
 
@@ -106,23 +105,8 @@ async function recogErc20(
         return {
           id: 'erc20:approve',
           data,
-          update: (request, { amount }) => {
-            // amount is a hex string
-            const approvedAmount = new BigNumber(amount || '').toString()
-
-            log.verbose(
-              `Updating Erc20 approve amount to ${approvedAmount} for contract ${contractAddress} and spender ${spenderAddress}`
-            )
-
-            const txRequest = request as TransactionRequest
-
-            data.amount = amount
-            txRequest.data.data = Erc20Contract.encodeCallData('approve', [spenderAddress, amount])
-
-            if (txRequest.decodedData) {
-              txRequest.decodedData.args[1].value = amount === MAX_HEX ? 'unlimited' : approvedAmount
-            }
-          }
+          update: (request, { amount }) =>
+            updateErc20ApprovalAmount(request as TransactionRequest, data, amount)
         } as Erc20Approval
       } else if (Erc20Contract.isTransfer(decoded)) {
         const recipient = decoded.args[0].toLowerCase()

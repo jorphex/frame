@@ -1,6 +1,9 @@
-import BigNumber from 'bignumber.js'
-
-import { isUnlimited } from '../../../../../resources/utils/numbers'
+import { MAX_UINT256 } from '../../../../../resources/domain/transaction/quantity'
+import {
+  formatTokenBaseUnitAmount,
+  MAX_TOKEN_DECIMALS,
+  parseTokenBaseUnitAmount
+} from '../../../../../resources/domain/token/amount'
 import svg from '../../../../../resources/svg'
 import link from '../../../../../resources/link'
 import { ClusterBox, Cluster, ClusterRow, ClusterValue } from '../../../../../resources/Components/Cluster'
@@ -25,11 +28,20 @@ const PermitOverview = ({ req, chainData, originName }) => {
 
   const [showCopiedMessage, copySpender] = useCopiedMessage(spender.address)
 
-  const amountDisplay = isUnlimited(value)
-    ? '~UNLIMITED'
-    : tokenData.decimals
-    ? new BigNumber(value).shiftedBy(-tokenData.decimals)
-    : 'UNKNOWN AMOUNT'
+  const amount = parseTokenBaseUnitAmount(value)
+  const hasTokenDecimals =
+    Number.isInteger(tokenData.decimals) &&
+    tokenData.decimals >= 0 &&
+    tokenData.decimals <= MAX_TOKEN_DECIMALS
+  const canEditAmount = amount !== undefined && hasTokenDecimals
+  const amountDisplay =
+    amount === undefined
+      ? 'UNKNOWN AMOUNT'
+      : amount === MAX_UINT256
+      ? '~UNLIMITED'
+      : hasTokenDecimals
+      ? formatTokenBaseUnitAmount(value, tokenData.decimals)
+      : 'UNKNOWN AMOUNT'
 
   const amountSuffix = tokenData.symbol || 'UNKNOWN TOKEN'
 
@@ -110,7 +122,7 @@ const PermitOverview = ({ req, chainData, originName }) => {
                   <ClusterRow>
                     <ClusterValue
                       onClick={
-                        tokenData.decimals &&
+                        canEditAmount &&
                         (() => {
                           link.send('nav:update', 'panel', {
                             data: {
@@ -153,40 +165,16 @@ const PermitOverview = ({ req, chainData, originName }) => {
 }
 
 const EditPermit = ({ req }) => {
-  const { typedMessage, permit, tokenData } = req
+  const { permit, tokenData } = req
 
   const { verifyingContract: contract, spender, value: amount, deadline: deadlineInSeconds } = permit
 
   const updateRequest = (newAmt) => {
-    const updated = {
-      ...typedMessage,
-      data: {
-        ...typedMessage.data,
-        message: {
-          ...typedMessage.data.message,
-          value: newAmt
-        }
-      }
-    }
-
-    link.rpc(
-      'updateRequest',
-      req.handlerId,
-      {
-        typedMessage: updated,
-        permit: {
-          ...permit,
-          value: newAmt
-        },
-        tokenData
-      },
-      null,
-      () => {}
-    )
+    link.rpc('updateRequest', req.handlerId, { amount: newAmt }, null, () => {})
   }
   const deadline = deadlineInSeconds * 1000
 
-  const requestedAmount = BigNumber(req.payload.params[1].message.value)
+  const requestedAmount = req.payload.params[1].message.value
 
   const data = {
     ...tokenData,

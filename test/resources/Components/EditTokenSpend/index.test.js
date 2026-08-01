@@ -117,10 +117,9 @@ describe('changing approval amounts', () => {
     const enterAmount = screen.queryByRole('textbox', { label: 'Custom Amount' })
     await user.type(enterAmount, '50.00001')
 
-    const updateCustom = screen.getByText('update')
-    await user.click(updateCustom)
-
-    expect(onUpdate).toHaveBeenCalledWith('500000')
+    expect(screen.getByText('invalid')).toBeTruthy()
+    expect(screen.queryByText('update')).toBeNull()
+    expect(onUpdate).not.toHaveBeenCalled()
   })
 
   it('does not allows the user to set the token approval to a custom amount for an unknown token', () => {
@@ -177,6 +176,135 @@ describe('changing approval amounts', () => {
     await user.click(setUnlimited)
 
     expect(onUpdate).toHaveBeenCalledWith(maxIntStr)
+  })
+
+  it('allows the user to revoke a transaction approval explicitly', async () => {
+    const onUpdate = jest.fn()
+    const requestedAmount = BigNumber('100')
+    const approval = {
+      data: {
+        spender: { address: '0x9bc5baf874d2da8d216ae9f137804184ee5afef4', ens: '', type: 'external' },
+        amount: '100',
+        decimals: 0,
+        name: 'TST',
+        symbol: 'TST',
+        contract: { address: '0x1eba19f260421142AD9Bf5ba193f6d4A0825e698', ens: '', type: 'contract' }
+      }
+    }
+
+    const { user } = render(
+      <EditTokenSpend
+        canRevoke
+        data={approval.data}
+        requestedAmount={requestedAmount}
+        updateRequest={onUpdate}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Revoke' }))
+
+    expect(onUpdate).toHaveBeenCalledWith('0')
+  })
+
+  it('supports exact custom amounts for zero-decimal tokens', async () => {
+    const onUpdate = jest.fn()
+    const approval = {
+      data: {
+        spender: { address: '0x9bc5baf874d2da8d216ae9f137804184ee5afef4', ens: '', type: 'external' },
+        amount: '1',
+        decimals: 0,
+        name: 'Whole Token',
+        symbol: 'WHOLE',
+        contract: { address: '0x1eba19f260421142AD9Bf5ba193f6d4A0825e698', ens: '', type: 'contract' }
+      }
+    }
+
+    const { user } = render(
+      <EditTokenSpend data={approval.data} requestedAmount={BigNumber(1)} updateRequest={onUpdate} />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Custom' }))
+    await user.type(screen.getByRole('textbox', { name: 'Custom Amount' }), '42')
+    await user.click(screen.getByText('update'))
+
+    expect(onUpdate).toHaveBeenCalledWith('42')
+  })
+
+  it('supports zero-padded ABI hex amounts', async () => {
+    const onUpdate = jest.fn()
+    const approval = {
+      data: {
+        spender: { address: '0x9bc5baf874d2da8d216ae9f137804184ee5afef4', ens: '', type: 'external' },
+        amount: '0x01',
+        decimals: 0,
+        name: 'Whole Token',
+        symbol: 'WHOLE',
+        contract: { address: '0x1eba19f260421142AD9Bf5ba193f6d4A0825e698', ens: '', type: 'contract' }
+      }
+    }
+
+    const { user } = render(
+      <EditTokenSpend data={approval.data} requestedAmount={BigNumber(1)} updateRequest={onUpdate} />
+    )
+
+    expect(screen.getByText('1')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Custom' }))
+    expect(screen.getByRole('textbox', { name: 'Custom Amount' })).toBeTruthy()
+  })
+
+  it('shows malformed stored amounts as unknown and keeps editing locked', () => {
+    const approval = {
+      data: {
+        spender: { address: '0x9bc5baf874d2da8d216ae9f137804184ee5afef4', ens: '', type: 'external' },
+        amount: '-1',
+        decimals: 0,
+        name: 'Whole Token',
+        symbol: 'WHOLE',
+        contract: { address: '0x1eba19f260421142AD9Bf5ba193f6d4A0825e698', ens: '', type: 'contract' }
+      }
+    }
+
+    render(
+      <EditTokenSpend
+        canRevoke
+        data={approval.data}
+        requestedAmount={BigNumber(1)}
+        updateRequest={() => {}}
+      />
+    )
+
+    expect(screen.getByText('unknown')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Custom' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Requested' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Unlimited' })).toBeNull()
+    expect(screen.queryByText('Approval Revoked')).toBeNull()
+  })
+
+  it('shows exponent input as invalid instead of coercing it', async () => {
+    const onUpdate = jest.fn()
+    const approval = {
+      data: {
+        spender: { address: '0x9bc5baf874d2da8d216ae9f137804184ee5afef4', ens: '', type: 'external' },
+        amount: '1',
+        decimals: 18,
+        name: 'TST',
+        symbol: 'TST',
+        contract: { address: '0x1eba19f260421142AD9Bf5ba193f6d4A0825e698', ens: '', type: 'contract' }
+      }
+    }
+
+    const { user } = render(
+      <EditTokenSpend data={approval.data} requestedAmount={BigNumber(1)} updateRequest={onUpdate} />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Custom' }))
+    const input = screen.getByRole('textbox', { name: 'Custom Amount' })
+    await user.type(input, '1e2{Enter}')
+
+    expect(input.value).toBe('1e2')
+    expect(screen.getByText('invalid')).toBeTruthy()
+    expect(onUpdate).not.toHaveBeenCalled()
   })
 
   it('allows the user to revert the token approval back to the original request', async () => {
