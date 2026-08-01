@@ -157,6 +157,73 @@ it('derives pending then successful status from ordered hashes and receipts', ()
   expect(status.receipts.map((entry) => entry.transactionHash)).toEqual([firstHash, secondHash])
 })
 
+it('distinguishes signed reservations from submitted transactions', () => {
+  const { ledger } = createLedger()
+  const transactionHash = hash('1')
+  ledger.create(batch({ callCount: 2 }), 1000)
+
+  ledger.reserveTransaction(origin, account, 'app-id', transactionHash, 1001)
+  expect(ledger.get(origin, account, 'app-id', 1002).transactions).toEqual([
+    { hash: transactionHash, state: 'signed' }
+  ])
+  expect(() => ledger.reserveTransaction(origin, account, 'app-id', transactionHash, 1002)).toThrow(
+    /already recorded/
+  )
+  expect(() => ledger.reserveTransaction(origin, account, 'app-id', hash('2'), 1002)).toThrow(/not submitted/)
+  expect(() => ledger.complete(origin, account, 'app-id', 1002)).toThrow(/unsubmitted reservations/)
+
+  ledger.fail(origin, account, 'app-id', 1003)
+  expect(ledger.getStatus(origin, account, 'app-id', 1004).status).toBe(400)
+})
+
+it('recovers a signed reservation when broadcast acceptance is confirmed after failure', () => {
+  const { ledger } = createLedger()
+  const transactionHash = hash('1')
+  ledger.create(batch(), 1000)
+  ledger.reserveTransaction(origin, account, 'app-id', transactionHash, 1001)
+  ledger.fail(origin, account, 'app-id', 1002)
+
+  ledger.markTransactionSubmitted(origin, account, 'app-id', transactionHash, 1003)
+  expect(ledger.get(origin, account, 'app-id', 1004).transactions[0].state).toBe('submitted')
+  expect(() =>
+    ledger.markTransactionSubmitted(origin, account, 'app-id', transactionHash, 1004)
+  ).not.toThrow()
+  expect(ledger.getStatus(origin, account, 'app-id', 1004).status).toBe(100)
+
+  ledger.recordReceipt(origin, account, 'app-id', receipt(transactionHash), 1005)
+  expect(ledger.getStatus(origin, account, 'app-id', 1006).status).toBe(200)
+})
+
+it('uses a receipt as definitive submission evidence for a signed reservation', () => {
+  const { ledger } = createLedger()
+  const transactionHash = hash('1')
+  ledger.create(batch(), 1000)
+  ledger.reserveTransaction(origin, account, 'app-id', transactionHash, 1001)
+  ledger.fail(origin, account, 'app-id', 1002)
+
+  ledger.recordReceipt(origin, account, 'app-id', receipt(transactionHash), 1003)
+
+  expect(ledger.get(origin, account, 'app-id', 1004).transactions[0]).toMatchObject({
+    hash: transactionHash,
+    state: 'submitted',
+    receipt: { transactionHash }
+  })
+  expect(ledger.getStatus(origin, account, 'app-id', 1004).status).toBe(200)
+})
+
+it('rejects submission or receipt evidence for an unreserved hash', () => {
+  const { ledger } = createLedger()
+  const transactionHash = hash('1')
+  ledger.create(batch(), 1000)
+
+  expect(() => ledger.markTransactionSubmitted(origin, account, 'app-id', transactionHash, 1001)).toThrow(
+    /not reserved/
+  )
+  expect(() => ledger.recordReceipt(origin, account, 'app-id', receipt(transactionHash), 1001)).toThrow(
+    /not part/
+  )
+})
+
 it.each([
   [['0x0'], 500],
   [['0x1', '0x0'], 600]

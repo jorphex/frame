@@ -49,10 +49,14 @@ export const WalletCallReceiptSchema = z
 const WalletCallTransactionSchema = z
   .object({
     hash: HashSchema,
+    state: z.enum(['signed', 'submitted']),
     receipt: WalletCallReceiptSchema.optional()
   })
   .strict()
   .superRefine((transaction, ctx) => {
+    if (transaction.receipt && transaction.state !== 'submitted') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'unsubmitted transaction has a receipt' })
+    }
     if (transaction.receipt && transaction.receipt.transactionHash !== transaction.hash) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'receipt transaction hash does not match' })
     }
@@ -86,7 +90,15 @@ export const WalletCallBatchSchema = z
     if (batch.transactions.length > batch.callCount) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'too many batch transactions' })
     }
-    if (batch.execution === 'complete' && batch.transactions.length !== batch.callCount) {
+    const signedIndex = batch.transactions.findIndex((transaction) => transaction.state === 'signed')
+    if (signedIndex >= 0 && signedIndex !== batch.transactions.length - 1) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'signed reservation is out of order' })
+    }
+    if (
+      batch.execution === 'complete' &&
+      (batch.transactions.length !== batch.callCount ||
+        batch.transactions.some((transaction) => transaction.state !== 'submitted'))
+    ) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'completed batch is missing transactions' })
     }
   })

@@ -97,7 +97,7 @@ type M = Main & {
 }
 
 const mainState: M = {
-  _version: main('_version', 42),
+  _version: main('_version', 43),
   instanceId: main('instanceId', generateUuid()),
   colorway: main('colorway', 'dark'),
   colorwayPrimary: {

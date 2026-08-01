@@ -89,15 +89,14 @@ function normalizeLoadedBatches(value: unknown): WalletCallBatches {
 }
 
 function deriveStatus(batch: WalletCallBatch): WalletCallsStatus {
-  const receipts = batch.transactions.flatMap((transaction) =>
-    transaction.receipt ? [transaction.receipt] : []
-  )
+  const submitted = batch.transactions.filter((transaction) => transaction.state === 'submitted')
+  const receipts = submitted.flatMap((transaction) => (transaction.receipt ? [transaction.receipt] : []))
   let status: WalletCallsStatus['status'] = 100
 
-  if (batch.execution === 'failed' && batch.transactions.length === 0) {
+  if (batch.execution === 'failed' && submitted.length === 0) {
     status = 400
-  } else if (batch.execution !== 'pending' && receipts.length === batch.transactions.length) {
-    if (batch.transactions.length < batch.callCount) {
+  } else if (batch.execution !== 'pending' && receipts.length === submitted.length) {
+    if (submitted.length < batch.callCount) {
       status = 600
     } else if (receipts.every((receipt) => receipt.status === '0x1')) {
       status = 200
@@ -141,6 +140,20 @@ export class WalletCallBatchLedger {
 
   private write(batches: WalletCallBatches) {
     this.storage.save(clone(batches))
+  }
+
+  private writeBatch(batches: WalletCallBatches, key: string, candidate: WalletCallBatch) {
+    const parsed = WalletCallBatchSchema.safeParse(candidate)
+    if (!parsed.success) throw new Error('Invalid wallet call batch update')
+    if (persistedBytes(parsed.data) > MAX_PERSISTED_WALLET_CALL_BATCH_BYTES) {
+      throw new Error('Wallet call batch exceeds persistence limit')
+    }
+
+    const updated = { ...batches, [key]: parsed.data }
+    if (persistedBytes(updated) > MAX_PERSISTED_WALLET_CALL_LEDGER_BYTES) {
+      throw new Error('Wallet call ledger exceeds persistence limit')
+    }
+    this.write(updated)
   }
 
   private find(batches: WalletCallBatches, origin: string, account: string, id: string) {
@@ -212,7 +225,7 @@ export class WalletCallBatchLedger {
     return deriveStatus(this.get(origin, account, id, now))
   }
 
-  recordTransaction(origin: string, account: string, id: string, hash: string, now = Date.now()) {
+  reserveTransaction(origin: string, account: string, id: string, hash: string, now = Date.now()) {
     const batches = this.read(now)
     const [key, batch] = this.require(batches, origin, account, id)
     const normalizedHash = hash.toLowerCase()
@@ -222,14 +235,36 @@ export class WalletCallBatchLedger {
     if (batch.transactions.some((transaction) => transaction.hash === normalizedHash)) {
       throw new Error('Transaction hash is already recorded')
     }
+    if (batch.transactions.some((transaction) => transaction.state === 'signed')) {
+      throw new Error('Previous signed transaction is not submitted')
+    }
     if (batch.transactions.length >= batch.callCount) throw new Error('Batch transaction limit reached')
 
-    batches[key] = {
+    this.writeBatch(batches, key, {
       ...batch,
-      transactions: [...batch.transactions, { hash: normalizedHash }],
+      transactions: [...batch.transactions, { hash: normalizedHash, state: 'signed' }],
       updatedAt: Math.max(now, batch.updatedAt)
-    }
-    this.write(batches)
+    })
+  }
+
+  markTransactionSubmitted(origin: string, account: string, id: string, hash: string, now = Date.now()) {
+    const batches = this.read(now)
+    const [key, batch] = this.require(batches, origin, account, id)
+    const normalizedHash = hash.toLowerCase()
+    if (!INTERNAL_KEY.test(normalizedHash)) throw new Error('Invalid transaction hash')
+
+    const index = batch.transactions.findIndex((transaction) => transaction.hash === normalizedHash)
+    if (index < 0) throw new Error('Transaction hash is not reserved')
+    if (batch.transactions[index].state === 'submitted') return
+
+    const transactions = [...batch.transactions]
+    transactions[index] = { ...transactions[index], state: 'submitted' }
+    this.writeBatch(batches, key, { ...batch, transactions, updatedAt: Math.max(now, batch.updatedAt) })
+  }
+
+  recordTransaction(origin: string, account: string, id: string, hash: string, now = Date.now()) {
+    this.reserveTransaction(origin, account, id, hash, now)
+    this.markTransactionSubmitted(origin, account, id, hash, now)
   }
 
   recordReceipt(origin: string, account: string, id: string, receipt: WalletCallReceipt, now = Date.now()) {
@@ -245,7 +280,8 @@ export class WalletCallBatchLedger {
       (transaction) => transaction.hash === parsed.data.transactionHash
     )
     if (index < 0) throw new Error('Receipt transaction is not part of this batch')
-    const existingReceipt = batch.transactions[index].receipt
+    const existingTransaction = batch.transactions[index]
+    const existingReceipt = existingTransaction.receipt
     if (existingReceipt) {
       if (JSON.stringify(existingReceipt) !== JSON.stringify(parsed.data)) {
         throw new Error('Transaction receipt is already recorded')
@@ -254,28 +290,26 @@ export class WalletCallBatchLedger {
     }
 
     const transactions = [...batch.transactions]
-    transactions[index] = { ...transactions[index], receipt: parsed.data }
-    const updatedBatch = { ...batch, transactions, updatedAt: Math.max(now, batch.updatedAt) }
-    if (persistedBytes(updatedBatch) > MAX_PERSISTED_WALLET_CALL_BATCH_BYTES) {
-      throw new Error('Wallet call batch exceeds persistence limit')
-    }
-    const updatedBatches = { ...batches, [key]: updatedBatch }
-    if (persistedBytes(updatedBatches) > MAX_PERSISTED_WALLET_CALL_LEDGER_BYTES) {
-      throw new Error('Wallet call ledger exceeds persistence limit')
-    }
-
-    batches[key] = updatedBatch
-    this.write(batches)
+    transactions[index] = { ...existingTransaction, state: 'submitted', receipt: parsed.data }
+    this.writeBatch(batches, key, { ...batch, transactions, updatedAt: Math.max(now, batch.updatedAt) })
   }
 
   complete(origin: string, account: string, id: string, now = Date.now()) {
     const batches = this.read(now)
     const [key, batch] = this.require(batches, origin, account, id)
     if (batch.execution !== 'pending') throw new Error('Batch execution is already closed')
-    if (batch.transactions.length !== batch.callCount) throw new Error('Batch is missing transactions')
+    if (
+      batch.transactions.length !== batch.callCount ||
+      batch.transactions.some((transaction) => transaction.state !== 'submitted')
+    ) {
+      throw new Error('Batch is missing transactions or contains unsubmitted reservations')
+    }
 
-    batches[key] = { ...batch, execution: 'complete', updatedAt: Math.max(now, batch.updatedAt) }
-    this.write(batches)
+    this.writeBatch(batches, key, {
+      ...batch,
+      execution: 'complete',
+      updatedAt: Math.max(now, batch.updatedAt)
+    })
   }
 
   fail(origin: string, account: string, id: string, now = Date.now()) {
@@ -283,7 +317,10 @@ export class WalletCallBatchLedger {
     const [key, batch] = this.require(batches, origin, account, id)
     if (batch.execution !== 'pending') throw new Error('Batch execution is already closed')
 
-    batches[key] = { ...batch, execution: 'failed', updatedAt: Math.max(now, batch.updatedAt) }
-    this.write(batches)
+    this.writeBatch(batches, key, {
+      ...batch,
+      execution: 'failed',
+      updatedAt: Math.max(now, batch.updatedAt)
+    })
   }
 }
