@@ -41,7 +41,7 @@ export interface WalletCallsStatus {
   receipts?: WalletCallReceipt[]
 }
 
-export interface WalletCallReconciliationCandidate {
+export interface WalletCallTransactionCandidate {
   origin: string
   account: string
   id: string
@@ -233,7 +233,7 @@ export class WalletCallBatchLedger {
     return deriveStatus(this.get(origin, account, id, now))
   }
 
-  listReconciliationCandidates(now = Date.now()): readonly Readonly<WalletCallReconciliationCandidate>[] {
+  listReconciliationCandidates(now = Date.now()): readonly Readonly<WalletCallTransactionCandidate>[] {
     const candidates = Object.entries(this.read(now))
       .sort((left, right) => left[1].createdAt - right[1].createdAt || left[0].localeCompare(right[0]))
       .flatMap(([_key, batch]) => {
@@ -250,6 +250,28 @@ export class WalletCallBatchLedger {
           })
         ]
       })
+
+    return Object.freeze(candidates)
+  }
+
+  listReceiptCandidates(now = Date.now()): readonly Readonly<WalletCallTransactionCandidate>[] {
+    const candidates = Object.entries(this.read(now))
+      .sort((left, right) => left[1].createdAt - right[1].createdAt || left[0].localeCompare(right[0]))
+      .flatMap(([_key, batch]) =>
+        batch.transactions.flatMap((transaction) => {
+          if (transaction.state !== 'submitted' || transaction.receipt) return []
+
+          return [
+            Object.freeze({
+              origin: batch.origin,
+              account: batch.account,
+              id: batch.id,
+              chainId: batch.chainId,
+              hash: transaction.hash
+            })
+          ]
+        })
+      )
 
     return Object.freeze(candidates)
   }

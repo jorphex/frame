@@ -204,6 +204,33 @@ it('lists only live final signed reservations as immutable reconciliation candid
   expect(ledger.listReconciliationCandidates(1003 + WALLET_CALL_BATCH_TTL_MS)).toEqual([])
 })
 
+it('lists submitted transactions without receipts in immutable batch and call order', () => {
+  const { ledger } = createLedger()
+  const firstHash = hash('1')
+  const secondHash = hash('2')
+  const thirdHash = hash('3')
+  ledger.create(batch({ id: 'first', callCount: 3 }), 1000)
+  ledger.recordTransaction(origin, account, 'first', firstHash, 1001)
+  ledger.recordTransaction(origin, account, 'first', secondHash, 1002)
+  ledger.recordReceipt(origin, account, 'first', receipt(secondHash), 1003)
+  ledger.reserveTransaction(origin, account, 'first', thirdHash, 1004)
+  ledger.create(batch({ id: 'second', account: otherAccount }), 1005)
+  ledger.recordTransaction(origin, otherAccount, 'second', hash('4'), 1006)
+  ledger.fail(origin, otherAccount, 'second', 1007)
+
+  const candidates = ledger.listReceiptCandidates(1008)
+  expect(candidates).toEqual([
+    { origin, account, id: 'first', chainId: '0x1', hash: firstHash },
+    { origin, account: otherAccount, id: 'second', chainId: '0x1', hash: hash('4') }
+  ])
+  expect(Object.isFrozen(candidates)).toBe(true)
+  expect(candidates.every(Object.isFrozen)).toBe(true)
+  expect(() => {
+    candidates[0].id = 'redirected'
+  }).toThrow()
+  expect(ledger.listReceiptCandidates(1005 + WALLET_CALL_BATCH_TTL_MS)).toEqual([])
+})
+
 it('recovers a signed reservation when broadcast acceptance is confirmed after failure', () => {
   const { ledger } = createLedger()
   const transactionHash = hash('1')

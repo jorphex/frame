@@ -196,7 +196,7 @@ it.each([
   const deps = dependencies()
 
   const outcome = await reconcileWalletCallReservation(candidate(overrides), deps)
-  expect(outcome).toMatchObject({ status: 'error', reason: 'Invalid wallet call reconciliation candidate' })
+  expect(outcome).toMatchObject({ status: 'error', reason: 'Invalid wallet call evidence candidate' })
   expect(deps.getTransactionReceipt).not.toHaveBeenCalled()
   expect(deps.getTransaction).not.toHaveBeenCalled()
 })
@@ -225,4 +225,13 @@ it('processes candidates sequentially and isolates one provider failure from the
     `receipt:${hash('2')}`,
     'record:batch-two'
   ])
+})
+
+it('rejects an oversized candidate queue before any RPC lookup', async () => {
+  const deps = dependencies()
+  const candidates = Array.from({ length: 257 }, (_, index) => candidate({ id: `batch-${index}` }))
+
+  await expect(reconcileWalletCallReservations(candidates, deps)).rejects.toThrow(/limit exceeded/)
+  expect(deps.getTransactionReceipt).not.toHaveBeenCalled()
+  expect(deps.getTransaction).not.toHaveBeenCalled()
 })
