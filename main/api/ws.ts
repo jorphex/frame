@@ -2,7 +2,6 @@ import { IncomingMessage, Server } from 'http'
 import WebSocket from 'ws'
 import { v4 as uuid } from 'uuid'
 import log from 'electron-log'
-import { isHexString } from '@ethereumjs/util'
 
 import store from '../store'
 import provider from '../provider'
@@ -17,8 +16,9 @@ import {
   FrameExtension,
   parseFrameExtension
 } from './origins'
-import validPayload from './validPayload'
+import parsePayload, { MAX_REQUEST_BYTES } from './validPayload'
 import protectedMethods from './protectedMethods'
+import { parseChainId } from '../provider/chainRequests'
 
 const logTraffic = (origin: string) =>
   process.env.LOG_TRAFFIC === 'true' || process.env.LOG_TRAFFIC === origin
@@ -42,13 +42,23 @@ interface ExtensionPayload extends JSONRPCRequestPayload {
   __extensionConnecting?: boolean
 }
 
+type TransportResponse =
+  | RPCResponsePayload
+  | {
+      id: string | number | null
+      jsonrpc: '2.0'
+      error: { code: number; message: string }
+    }
+
 function extendSession(originId: string) {
   if (originId) {
     clearTimeout(connectionMonitors[originId])
 
-    connectionMonitors[originId] = setTimeout(() => {
+    const timer = setTimeout(() => {
       store.endOriginSession(originId)
     }, 60 * 1000)
+    timer.unref()
+    connectionMonitors[originId] = timer
   }
 }
 
@@ -57,7 +67,7 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
   socket.origin = req.headers.origin
   socket.frameExtension = parseFrameExtension(req)
 
-  const res = (payload: RPCResponsePayload) => {
+  const res = (payload: TransportResponse) => {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(payload), (err) => {
         if (err) log.info(err)
@@ -66,8 +76,11 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
   }
 
   socket.on('message', async (data) => {
-    const rawPayload = validPayload<ExtensionPayload>(data.toString())
-    if (!rawPayload) return console.warn('Invalid Payload', data)
+    const parsedPayload = parsePayload<ExtensionPayload>(data.toString())
+    if (!parsedPayload.success) {
+      return res({ id: parsedPayload.id, jsonrpc: '2.0', error: parsedPayload.error })
+    }
+    const rawPayload = parsedPayload.payload
 
     let requestOrigin = socket.origin
     if (socket.frameExtension) {
@@ -98,12 +111,26 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
         }`
       )
 
+    if (rawPayload.chainId !== undefined) {
+      try {
+        parseChainId(rawPayload.chainId)
+      } catch {
+        const error = {
+          message: `Invalid chain id (${rawPayload.chainId}), chain id must be a canonical hex quantity`,
+          code: -32602
+        }
+        return res({ id: rawPayload.id, jsonrpc: rawPayload.jsonrpc, error })
+      }
+    }
+
     const { payload, chainId } = updateOrigin(rawPayload, origin, rawPayload.__extensionConnecting)
 
-    if (!isHexString(chainId)) {
+    try {
+      parseChainId(chainId)
+    } catch {
       const error = {
-        message: `Invalid chain id (${rawPayload.chainId}), chain id must be hex-prefixed string`,
-        code: -1
+        message: `Invalid chain id (${rawPayload.chainId}), chain id must be a canonical hex quantity`,
+        code: -32602
       }
       return res({ id: rawPayload.id, jsonrpc: rawPayload.jsonrpc, error })
     }
@@ -122,9 +149,8 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
     }
 
     if (protectedMethods.indexOf(payload.method) > -1 && !(await isTrusted(payload))) {
-      let error = { message: 'Permission denied, approve ' + origin + ' in Frame to continue', code: 4001 }
-      // review
-      if (!accounts.getSelectedAddresses()[0]) error = { message: 'No Frame account selected', code: 4001 }
+      let error = { message: 'Permission denied, approve ' + origin + ' in Frame to continue', code: 4100 }
+      if (!accounts.getSelectedAddresses()[0]) error = { message: 'No Frame account selected', code: 4100 }
       res({ id: payload.id, jsonrpc: payload.jsonrpc, error })
     } else {
       provider.send(payload, (response) => {
@@ -167,7 +193,7 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
 }
 
 export default function (server: Server) {
-  const ws = new WebSocket.Server({ server })
+  const ws = new WebSocket.Server({ server, maxPayload: MAX_REQUEST_BYTES })
   ws.on('connection', handler)
 
   provider.on('data:subscription', (payload: RPC.Susbcription.Response) => {

@@ -1,19 +1,8 @@
-import validatePayload from '../../../main/api/validPayload'
-
-import log from 'electron-log'
-
-beforeAll(() => {
-  log.transports.console.level = false
-})
-
-afterAll(() => {
-  log.transports.console.level = 'debug'
-})
+import parsePayload from '../../../main/api/validPayload'
 
 let payload
 
 beforeEach(() => {
-  // this payload is valid
   payload = {
     id: 7,
     jsonrpc: '2.0',
@@ -22,98 +11,82 @@ beforeEach(() => {
   }
 })
 
+const parse = () => parsePayload(JSON.stringify(payload))
+const expectInvalidRequest = (result, id = null) => {
+  expect(result).toEqual({
+    success: false,
+    id,
+    error: { code: -32600, message: 'Invalid Request' }
+  })
+}
+
 it('returns a valid payload with a string id', () => {
   payload.id = '12'
-  const result = validatePayload(JSON.stringify(payload))
 
-  expect(result).toStrictEqual(payload)
+  expect(parse()).toStrictEqual({ success: true, payload })
 })
 
 it('returns a valid payload with array params', () => {
-  const result = validatePayload(JSON.stringify(payload))
-
-  expect(result).toStrictEqual(payload)
+  expect(parse()).toStrictEqual({ success: true, payload })
 })
 
 it('returns a valid payload with object params', () => {
   payload.params = { asset: { address: '0x912a' } }
-  const result = validatePayload(JSON.stringify(payload))
 
-  expect(result).toStrictEqual(payload)
+  expect(parse()).toStrictEqual({ success: true, payload })
 })
 
 it('changes missing params to an empty array', () => {
   delete payload.params
-  const result = validatePayload(JSON.stringify(payload))
 
-  expect(result).toStrictEqual({
-    ...payload,
-    params: []
+  expect(parse()).toStrictEqual({
+    success: true,
+    payload: { ...payload, params: [] }
   })
 })
 
-it('is not valid if not a string', () => {
-  const result = validatePayload({ test: 'bad-data' })
-
-  expect(result).toBe(false)
+it('distinguishes malformed JSON from an invalid request', () => {
+  expect(parsePayload('{')).toEqual({
+    success: false,
+    id: null,
+    error: { code: -32700, message: 'Parse error' }
+  })
 })
 
-it('is not valid if payload is null', () => {
-  const result = validatePayload(null)
-
-  expect(result).toBe(false)
+it.each([undefined, null, { test: 'bad-data' }])('rejects non-string input %#', (input) => {
+  expectInvalidRequest(parsePayload(input))
 })
 
-it('is not valid if payload is a null string', () => {
-  const result = validatePayload('null')
-
-  expect(result).toBe(false)
+it.each(['null', '[]', '["eth_chainId"]'])('rejects non-object JSON %s', (input) => {
+  expectInvalidRequest(parsePayload(input))
 })
 
-it('is not valid if payload is not an object', () => {
-  const result = validatePayload('["eth_chainId"]')
-
-  expect(result).toBe(false)
-})
-
-it('is not valid if payload does not include an id', () => {
+it('requires an id so wallet operations remain correlatable', () => {
   delete payload.id
-  const result = validatePayload(JSON.stringify(payload))
 
-  expect(result).toBe(false)
+  expectInvalidRequest(parse())
 })
 
-it('is not valid if payload id is not a string or number', () => {
-  payload.id = { id: 1 }
-  const result = validatePayload(JSON.stringify(payload))
+it.each([null, { id: 1 }, Number.NaN, Number.POSITIVE_INFINITY])('rejects invalid id %#', (id) => {
+  payload.id = id
 
-  expect(result).toBe(false)
+  expectInvalidRequest(parse())
 })
 
-it('is not valid if payload does not include a method', () => {
-  delete payload.method
-  const result = validatePayload(JSON.stringify(payload))
+it('requires the exact JSON-RPC 2.0 version', () => {
+  payload.jsonrpc = '1.0'
 
-  expect(result).toBe(false)
+  expectInvalidRequest(parse(), payload.id)
 })
 
-it('is not valid if payload method is not a string', () => {
-  payload.method = { eth: 'get_balance' }
-  const result = validatePayload(JSON.stringify(payload))
+it.each([undefined, '', { eth: 'get_balance' }])('rejects invalid method %#', (method) => {
+  payload.method = method
 
-  expect(result).toBe(false)
+  expectInvalidRequest(parse(), payload.id)
 })
 
-it('is not valid if jsonrpc field is not a string', () => {
-  payload.jsonrpc = 2.0
-  const result = validatePayload(JSON.stringify(payload))
+it.each([null, 'params', 1, true])('rejects invalid params %#', (params) => {
+  payload.params = params
 
-  expect(result).toBe(false)
-})
-
-it('is not valid if params are not an array or objecvt', () => {
-  payload.params = 'params'
-  const result = validatePayload(JSON.stringify(payload))
-
-  expect(result).toBe(false)
+  expectInvalidRequest(parse(), payload.id)
 })
