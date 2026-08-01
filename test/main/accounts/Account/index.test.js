@@ -2,6 +2,7 @@ import Account from '../../../../main/accounts/Account'
 import reveal from '../../../../main/reveal'
 import { fetchContract } from '../../../../main/contracts'
 import { simulateTransaction } from '../../../../main/transaction/simulation'
+import { ApprovalType } from '../../../../resources/constants'
 
 jest.mock('../../../../main/reveal')
 jest.mock('../../../../main/transaction/simulation', () => ({ simulateTransaction: jest.fn() }))
@@ -133,6 +134,75 @@ describe('#addRequest', () => {
     expect(simulateTransaction).toHaveBeenCalledTimes(1)
     expect(simulateTransaction.mock.calls[0][0].gasLimit).toBe('0x6000')
     expect(request.simulation.status).toBe('succeeded')
+  })
+
+  it('requires explicit approval for a reported revert and invalidates it on edits', async () => {
+    simulateTransaction.mockResolvedValueOnce({
+      status: 'reverted',
+      source: 'eth_call',
+      reason: 'execution reverted: denied'
+    })
+    const gasApproval = { type: ApprovalType.GasLimitApproval, approved: false, data: {} }
+    const request = {
+      handlerId: 'simulation-approval',
+      type: 'transaction',
+      data: { chainId: '0x1', gasLimit: '0x5208' },
+      approvals: [gasApproval],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    const approval = request.approvals[1]
+    expect(request.approvals[0]).toBe(gasApproval)
+    expect(approval).toMatchObject({
+      type: ApprovalType.SimulationApproval,
+      approved: false,
+      data: {
+        title: 'RPC Reports Revert',
+        confirmLabel: 'Sign Anyway'
+      }
+    })
+    expect(approval.data.message).toMatch(/execution reverted: denied/)
+
+    approval.approve()
+    expect(approval.approved).toBe(true)
+
+    request.data.gasLimit = '0x6000'
+    account.refreshTransactionSimulation(request)
+    expect(request.approvals).toEqual([gasApproval])
+  })
+
+  it('preserves an acknowledged override across automatic fee rechecks and removes it on success', async () => {
+    simulateTransaction
+      .mockResolvedValueOnce({ status: 'failed', source: 'eth_simulateV1', reason: 'RPC timeout' })
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call' })
+    const request = {
+      handlerId: 'preserved-simulation-approval',
+      type: 'transaction',
+      data: { chainId: '0x1', maxFeePerGas: '0x10' },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    const existingApproval = request.approvals[0]
+    existingApproval.approve()
+
+    expect(existingApproval.approved).toBe(true)
+    expect(existingApproval.data.title).toBe('Execution Check Failed')
+
+    account.refreshTransactionSimulation(request, true, true)
+    expect(request.approvals[0]).toBe(existingApproval)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.simulation.status).toBe('succeeded')
+    expect(request.approvals).toEqual([])
   })
 
   it('does not apply an execution check after its request is removed', async () => {

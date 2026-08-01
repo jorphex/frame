@@ -1049,7 +1049,7 @@ export class Accounts extends EventEmitter {
       }
     }
 
-    currentAccount.refreshTransactionSimulation(txRequest)
+    currentAccount.refreshTransactionSimulation(txRequest, true, !userUpdate)
   }
 
   setBaseFee(baseFee: string, handlerId: string, userUpdate: boolean) {

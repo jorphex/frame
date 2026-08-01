@@ -6,6 +6,8 @@ import TxRequestComponent from '../../../../../../app/tray/Account/Requests/Tran
 import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew'
 import { getSimulationPresentation } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
 import { canApproveTransaction } from '../../../../../../app/tray/Footer/RequestCommand'
+import TxApproval from '../../../../../../app/tray/Footer/RequestCommand/TxApproval'
+import link from '../../../../../../resources/link'
 import { TxClassification } from '../../../../../../main/accounts/types'
 
 jest.mock('../../../../../../main/store/persist')
@@ -100,6 +102,31 @@ describe('simulation review', () => {
     expect(canApproveTransaction(true, { status: 'failed' })).toBe(true)
     expect(canApproveTransaction(true)).toBe(true)
     expect(canApproveTransaction(false, { status: 'succeeded' })).toBe(false)
+  })
+
+  it('renders and confirms an outcome-specific simulation override', async () => {
+    const req = { handlerId: 'simulation-override' }
+    const approval = {
+      type: 'approveSimulationOverride',
+      data: {
+        title: 'RPC Reports Revert',
+        message: 'The configured RPC reports a revert.',
+        confirmLabel: 'Sign Anyway'
+      }
+    }
+
+    const { user } = render(<TxApproval req={req} approval={approval} />)
+
+    expect(screen.getByText('RPC Reports Revert')).toBeTruthy()
+    expect(screen.getByText('The configured RPC reports a revert.')).toBeTruthy()
+    await user.click(screen.getByText('Sign Anyway'))
+    expect(link.rpc).toHaveBeenCalledWith(
+      'confirmRequestApproval',
+      req,
+      approval.type,
+      {},
+      expect.any(Function)
+    )
   })
 })
 

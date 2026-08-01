@@ -430,6 +430,10 @@ export class Provider extends EventEmitter {
       return cb(new Error('Transaction execution check is still pending'))
     }
 
+    if ((req.approvals || []).some((approval) => !approval.approved)) {
+      return cb(new Error('Transaction has an unconfirmed required approval'))
+    }
+
     const signAndSend = (requestToSign: TransactionRequest) => {
       // remove callback from logging
       const { res, ...txToLog } = requestToSign

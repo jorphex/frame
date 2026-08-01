@@ -29,6 +29,7 @@ import { simulateTransaction } from '../../transaction/simulation'
 
 import type { PermitSignatureRequest, SignRequest, TypedMessage } from '../types'
 import type { Permission } from '../../store/state'
+import type { TransactionSimulation } from '../../transaction/simulation'
 
 const nebula = nebulaApi()
 
@@ -387,12 +388,85 @@ class FrameAccount {
     }
   }
 
-  refreshTransactionSimulation(req: TransactionRequest, publishPending = true) {
+  private removeSimulationApproval(req: TransactionRequest) {
+    req.approvals = (req.approvals || []).filter(
+      (approval) => approval.type !== ApprovalType.SimulationApproval
+    )
+  }
+
+  private syncSimulationApproval(req: TransactionRequest, simulation: TransactionSimulation) {
+    if (simulation.status === 'succeeded') {
+      this.removeSimulationApproval(req)
+      return
+    }
+
+    let copy: { title: string; message: string }
+    switch (simulation.status) {
+      case 'reverted':
+        copy = {
+          title: 'RPC Reports Revert',
+          message: 'Your configured RPC reports that this transaction will revert.'
+        }
+        break
+      case 'failed':
+        copy = {
+          title: 'Execution Check Failed',
+          message: 'Frame could not determine whether this transaction will execute successfully.'
+        }
+        break
+      case 'unavailable':
+        copy = {
+          title: 'Execution Check Unavailable',
+          message: 'Your configured RPC does not provide a usable transaction execution check.'
+        }
+        break
+      default:
+        return
+    }
+    const detail = simulation.reason ? ` RPC detail: ${simulation.reason}` : ''
+    const data = { ...copy, message: `${copy.message}${detail}`, confirmLabel: 'Sign Anyway' }
+    const existingApproval = (req.approvals || []).find(
+      (approval) => approval.type === ApprovalType.SimulationApproval
+    )
+
+    if (existingApproval) {
+      existingApproval.data = data
+      return
+    }
+
+    const approval = {
+      type: ApprovalType.SimulationApproval,
+      data,
+      approved: false,
+      approve: () => {
+        const knownRequest = this.requests[req.handlerId] as TransactionRequest | undefined
+        const knownApproval = knownRequest?.approvals.find(
+          (candidate) => candidate.type === ApprovalType.SimulationApproval
+        )
+
+        if (knownRequest === req && knownApproval === approval) {
+          approval.approved = true
+          this.update()
+        }
+      }
+    }
+
+    req.approvals = [...(req.approvals || []), approval]
+  }
+
+  private applySimulationResult(req: TransactionRequest, simulation: TransactionSimulation) {
+    req.simulation = simulation
+    this.syncSimulationApproval(req, simulation)
+    this.update()
+  }
+
+  refreshTransactionSimulation(req: TransactionRequest, publishPending = true, preserveApproval = false) {
     if (this.requests[req.handlerId] !== req) return
 
     const version = (this.simulationVersions[req.handlerId] || 0) + 1
     this.simulationVersions[req.handlerId] = version
     req.simulation = { status: 'pending' }
+    if (!preserveApproval) this.removeSimulationApproval(req)
 
     if (publishPending) this.update()
 
@@ -408,18 +482,16 @@ class FrameAccount {
           const knownRequest = this.requests[req.handlerId]
           if (knownRequest !== req || this.simulationVersions[req.handlerId] !== version) return
 
-          req.simulation = simulation
-          this.update()
+          this.applySimulationResult(req, simulation)
         })
         .catch((error) => {
           const knownRequest = this.requests[req.handlerId]
           if (knownRequest !== req || this.simulationVersions[req.handlerId] !== version) return
 
-          req.simulation = {
+          this.applySimulationResult(req, {
             status: 'failed',
             reason: error instanceof Error ? error.message.slice(0, 240) : 'RPC execution check failed'
-          }
-          this.update()
+          })
         })
     }, 0)
   }

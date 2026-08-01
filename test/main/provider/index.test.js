@@ -107,6 +107,23 @@ describe('#approveTransactionRequest', () => {
       }
     )
   })
+
+  it('refuses to lock or sign while a required approval is unconfirmed', (done) => {
+    provider.approveTransactionRequest(
+      {
+        handlerId: 'unconfirmed-approval',
+        data: { nonce: '0x1' },
+        simulation: { status: 'succeeded' },
+        approvals: [{ type: 'testApproval', approved: false }]
+      },
+      (error) => {
+        expect(error.message).toMatch(/unconfirmed required approval/i)
+        expect(accounts.lockRequest).not.toHaveBeenCalled()
+        expect(accounts.signTransaction).not.toHaveBeenCalled()
+        done()
+      }
+    )
+  })
 })
 
 describe('#send', () => {
