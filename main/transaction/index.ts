@@ -8,6 +8,7 @@ import { GasFeesSource, TransactionData, typeSupportsBaseFee } from '../../resou
 import { isNonZeroHex } from '../../resources/utils'
 import chainConfig from '../chains/config'
 import { TransactionRequest, TxClassification } from '../accounts/types'
+import { parseRpcQuantity } from '../provider/quantity'
 
 import type { Gas } from '../store/state'
 
@@ -75,20 +76,29 @@ function londonToLegacy(txData: TransactionData): TransactionData {
 }
 
 function maxFee(rawTx: TransactionData) {
-  const chainId = parseInt(rawTx.chainId)
+  const chainId =
+    parseRpcQuantity(rawTx.chainId) ??
+    (typeof rawTx.chainId === 'string' && /^(?:0|[1-9][0-9]*)$/.test(rawTx.chainId)
+      ? BigInt(rawTx.chainId)
+      : undefined)
+  const nativeUnit = 10n ** 18n
 
   // for ETH-based chains, the max fee should be 2 ETH
-  if ([1, 3, 4, 5, 6, 10, 42, 61, 62, 63, 69, 8453, 42161, 421611, 7777777].includes(chainId)) {
-    return 2 * 1e18
+  if (
+    [1n, 3n, 4n, 5n, 6n, 10n, 42n, 61n, 62n, 63n, 69n, 8453n, 42161n, 421611n, 7777777n].includes(
+      chainId || 0n
+    )
+  ) {
+    return 2n * nativeUnit
   }
 
   // for Fantom, the max fee should be 250 FTM
-  if ([250, 4002].includes(chainId)) {
-    return 250 * 1e18
+  if ([250n, 4002n].includes(chainId || 0n)) {
+    return 250n * nativeUnit
   }
 
   // for all other chains, default to 50 of the chain's currency
-  return 50 * 1e18
+  return 50n * nativeUnit
 }
 
 function calculateMaxFeePerGas(maxBaseFee: string, maxPriorityFee: string) {

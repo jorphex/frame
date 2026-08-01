@@ -1,7 +1,13 @@
 import log from 'electron-log'
 import { fromUtf8 } from '@ethereumjs/util'
 import store from '../../../main/store'
-import { checkExistingNonceGas, getRawTx, getSignedAddress, resError } from '../../../main/provider/helpers'
+import {
+  checkExistingNonceGas,
+  feeTotalOverMax,
+  getRawTx,
+  getSignedAddress,
+  resError
+} from '../../../main/provider/helpers'
 import { MAX_UINT256, toRpcQuantity } from '../../../main/provider/quantity'
 
 jest.mock('../../../main/store')
@@ -145,6 +151,43 @@ describe('#checkExistingNonceGas', () => {
       maxPriorityFeePerGas: toRpcQuantity(MAX_UINT256),
       maxFeePerGas: toRpcQuantity(MAX_UINT256)
     })
+  })
+})
+
+describe('#feeTotalOverMax', () => {
+  const feePerGas = 9007199254740993n
+  const gasLimit = 3n
+  const tx = {
+    type: '0x0',
+    gasPrice: toRpcQuantity(feePerGas),
+    gasLimit: toRpcQuantity(gasLimit)
+  }
+
+  it('compares an exact total above the safe-integer range at the cap boundary', () => {
+    const exactTotal = feePerGas * gasLimit
+
+    expect(feeTotalOverMax(tx, exactTotal)).toBe(false)
+    expect(feeTotalOverMax(tx, exactTotal - 1n)).toBe(true)
+  })
+
+  it.each([
+    { ...tx, gasPrice: '0x01' },
+    { ...tx, gasLimit: '0x' },
+    { ...tx, type: '0x2', maxFeePerGas: undefined, maxPriorityFeePerGas: '0x1' },
+    {
+      ...tx,
+      type: '0x2',
+      maxFeePerGas: toRpcQuantity(feePerGas),
+      maxPriorityFeePerGas: '0x01'
+    },
+    {
+      ...tx,
+      type: '0x2',
+      maxFeePerGas: toRpcQuantity(feePerGas),
+      maxPriorityFeePerGas: toRpcQuantity(feePerGas + 1n)
+    }
+  ])('fails closed for malformed signing quantities', (invalidTx) => {
+    expect(feeTotalOverMax(invalidTx, 50n * 10n ** 18n)).toBe(true)
   })
 })
 

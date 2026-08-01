@@ -34,6 +34,10 @@ import { openBlockExplorer } from '../windows/window'
 import { ApprovalType } from '../../resources/constants'
 import { accountNS } from '../../resources/domain/account'
 import { chainUsesOptimismFees } from '../../resources/utils/chains'
+import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from '../provider/quantity'
+
+const MAX_FEE_PER_GAS = 9_999n * 1_000_000_000n
+const MAX_GAS_LIMIT = 12_500_000n
 
 function notify(title: string, body: string, action: (event: Electron.Event) => void) {
   const notification = new Notification({ title, body })
@@ -959,20 +963,22 @@ export class Accounts extends EventEmitter {
     delete this.accounts[address]
   }
 
-  private invalidValue(fee: string) {
-    return !fee || isNaN(parseInt(fee, 16)) || parseInt(fee, 16) < 0
+  private requiredQuantity(value: unknown, field: string) {
+    const quantity = parseRpcQuantity(value)
+    if (quantity === undefined) throw new Error(`Invalid ${field}`)
+    return quantity
   }
 
-  private limitedHexValue(hexValue: string, min: number, max: number) {
-    const value = parseInt(hexValue, 16)
-    if (value < min) return intToHex(min)
-    if (value > max) return intToHex(max)
-    return hexValue
+  private limitedQuantity(value: bigint, maximum: bigint) {
+    return value > maximum ? maximum : value
+  }
+
+  private maxFeePerGasFor(gasLimit: bigint, tx: TransactionData) {
+    return gasLimit === 0n ? MAX_UINT256 : maxFee(tx) / gasLimit
   }
 
   private txFeeUpdate(inputValue: string, handlerId: string, userUpdate: boolean) {
-    // Check value
-    if (this.invalidValue(inputValue)) throw new Error('txFeeUpdate, invalid input value')
+    const input = this.requiredQuantity(inputValue, 'fee update value')
 
     // Get current account
     const currentAccount = this.current()
@@ -985,34 +991,41 @@ export class Accounts extends EventEmitter {
     if (request.feesUpdatedByUser && !userUpdate) throw new Error('Fee has been updated by user')
 
     const tx = request.data
-    const gasLimit = parseInt(tx.gasLimit || '0x0', 16)
+    const gasLimit = this.requiredQuantity(tx.gasLimit, 'transaction gas limit')
     const txType = tx.type
+    const baseFeeTransaction = usesBaseFee(tx)
 
-    if (usesBaseFee(tx)) {
-      const maxFeePerGas = parseInt(tx.maxFeePerGas || '0x0', 16)
-      const maxPriorityFeePerGas = parseInt(tx.maxPriorityFeePerGas || '0x0', 16)
+    if (baseFeeTransaction) {
+      const maxFeePerGas = this.requiredQuantity(tx.maxFeePerGas, 'transaction max fee per gas')
+      const maxPriorityFeePerGas = this.requiredQuantity(
+        tx.maxPriorityFeePerGas,
+        'transaction max priority fee per gas'
+      )
+      if (maxPriorityFeePerGas > maxFeePerGas) throw new Error('Priority fee exceeds max fee per gas')
       const currentBaseFee = maxFeePerGas - maxPriorityFeePerGas
       return {
         currentAccount,
-        inputValue,
+        input,
         maxFeePerGas,
         maxPriorityFeePerGas,
         gasLimit,
         currentBaseFee,
+        baseFeeTransaction,
         txType,
-        gasPrice: 0
+        gasPrice: 0n
       }
     } else {
-      const gasPrice = parseInt(tx.gasPrice || '0x0', 16)
+      const gasPrice = this.requiredQuantity(tx.gasPrice, 'transaction gas price')
       return {
         currentAccount,
-        inputValue,
+        input,
         gasPrice,
         gasLimit,
+        baseFeeTransaction,
         txType,
-        currentBaseFee: 0,
-        maxPriorityFeePerGas: 0,
-        maxFeePerGas: 0
+        currentBaseFee: 0n,
+        maxPriorityFeePerGas: 0n,
+        maxFeePerGas: 0n
       }
     }
   }
@@ -1038,14 +1051,19 @@ export class Accounts extends EventEmitter {
   }
 
   setBaseFee(baseFee: string, handlerId: string, userUpdate: boolean) {
-    const { currentAccount, maxPriorityFeePerGas, gasLimit, currentBaseFee, txType } = this.txFeeUpdate(
-      baseFee,
-      handlerId,
-      userUpdate
-    )
+    const {
+      currentAccount,
+      input,
+      maxPriorityFeePerGas,
+      gasLimit,
+      currentBaseFee,
+      baseFeeTransaction,
+      txType
+    } = this.txFeeUpdate(baseFee, handlerId, userUpdate)
+    if (!baseFeeTransaction) throw new Error('Cannot set a base fee on a legacy transaction')
 
     // New value
-    const newBaseFee = parseInt(this.limitedHexValue(baseFee, 0, 9999 * 1e9), 16)
+    const newBaseFee = this.limitedQuantity(input, MAX_FEE_PER_GAS)
 
     // No change
     if (newBaseFee === currentBaseFee) return
@@ -1054,35 +1072,36 @@ export class Accounts extends EventEmitter {
     const tx = txRequest.data
 
     // New max fee per gas
-    const newMaxFeePerGas = newBaseFee + maxPriorityFeePerGas
-    const maxTotalFee = maxFee(tx)
-
-    // Limit max fee
-    if (newMaxFeePerGas * gasLimit > maxTotalFee) {
-      tx.maxFeePerGas = intToHex(Math.floor(maxTotalFee / gasLimit))
-    } else {
-      tx.maxFeePerGas = intToHex(newMaxFeePerGas)
-    }
+    const perGasCap = this.maxFeePerGasFor(gasLimit, tx)
+    const limitedPriorityFee = this.limitedQuantity(maxPriorityFeePerGas, perGasCap)
+    const limitedBaseFee = this.limitedQuantity(newBaseFee, perGasCap - limitedPriorityFee)
+    tx.maxPriorityFeePerGas = toRpcQuantity(limitedPriorityFee)
+    tx.maxFeePerGas = toRpcQuantity(limitedBaseFee + limitedPriorityFee)
 
     // Complete update
     const previousFee = {
       type: txType,
-      baseFee: intToHex(currentBaseFee),
-      priorityFee: intToHex(maxPriorityFeePerGas)
+      baseFee: toRpcQuantity(currentBaseFee),
+      priorityFee: toRpcQuantity(maxPriorityFeePerGas)
     }
 
     this.completeTxFeeUpdate(currentAccount, handlerId, userUpdate, previousFee)
   }
 
   setPriorityFee(priorityFee: string, handlerId: string, userUpdate: boolean) {
-    const { currentAccount, maxPriorityFeePerGas, gasLimit, currentBaseFee, txType } = this.txFeeUpdate(
-      priorityFee,
-      handlerId,
-      userUpdate
-    )
+    const {
+      currentAccount,
+      input,
+      maxPriorityFeePerGas,
+      gasLimit,
+      currentBaseFee,
+      baseFeeTransaction,
+      txType
+    } = this.txFeeUpdate(priorityFee, handlerId, userUpdate)
+    if (!baseFeeTransaction) throw new Error('Cannot set a priority fee on a legacy transaction')
 
     // New values
-    const newMaxPriorityFeePerGas = parseInt(this.limitedHexValue(priorityFee, 0, 9999 * 1e9), 16)
+    const newMaxPriorityFeePerGas = this.limitedQuantity(input, MAX_FEE_PER_GAS)
 
     // No change
     if (newMaxPriorityFeePerGas === maxPriorityFeePerGas) return
@@ -1090,24 +1109,16 @@ export class Accounts extends EventEmitter {
     const tx = this.getTransactionRequest(currentAccount, handlerId).data
 
     // New max fee per gas
-    const newMaxFeePerGas = currentBaseFee + newMaxPriorityFeePerGas
-    const maxTotalFee = maxFee(tx)
-
-    // Limit max fee
-    if (newMaxFeePerGas * gasLimit > maxTotalFee) {
-      const limitedMaxFeePerGas = Math.floor(maxTotalFee / gasLimit)
-      const limitedMaxPriorityFeePerGas = limitedMaxFeePerGas - currentBaseFee
-      tx.maxPriorityFeePerGas = intToHex(limitedMaxPriorityFeePerGas)
-      tx.maxFeePerGas = intToHex(limitedMaxFeePerGas)
-    } else {
-      tx.maxFeePerGas = intToHex(newMaxFeePerGas)
-      tx.maxPriorityFeePerGas = intToHex(newMaxPriorityFeePerGas)
-    }
+    const perGasCap = this.maxFeePerGasFor(gasLimit, tx)
+    const limitedBaseFee = this.limitedQuantity(currentBaseFee, perGasCap)
+    const limitedPriorityFee = this.limitedQuantity(newMaxPriorityFeePerGas, perGasCap - limitedBaseFee)
+    tx.maxPriorityFeePerGas = toRpcQuantity(limitedPriorityFee)
+    tx.maxFeePerGas = toRpcQuantity(limitedBaseFee + limitedPriorityFee)
 
     const previousFee = {
       type: txType,
-      baseFee: intToHex(currentBaseFee),
-      priorityFee: intToHex(maxPriorityFeePerGas)
+      baseFee: toRpcQuantity(currentBaseFee),
+      priorityFee: toRpcQuantity(maxPriorityFeePerGas)
     }
 
     // Complete update
@@ -1115,28 +1126,26 @@ export class Accounts extends EventEmitter {
   }
 
   setGasPrice(price: string, handlerId: string, userUpdate: boolean) {
-    const { currentAccount, gasLimit, gasPrice, txType } = this.txFeeUpdate(price, handlerId, userUpdate)
+    const { currentAccount, input, gasLimit, gasPrice, baseFeeTransaction, txType } = this.txFeeUpdate(
+      price,
+      handlerId,
+      userUpdate
+    )
+    if (baseFeeTransaction) throw new Error('Cannot set a gas price on an EIP-1559 transaction')
 
     // New values
-    const newGasPrice = parseInt(this.limitedHexValue(price, 0, 9999 * 1e9), 16)
+    const newGasPrice = this.limitedQuantity(input, MAX_FEE_PER_GAS)
 
     // No change
     if (newGasPrice === gasPrice) return
 
     const txRequest = this.getTransactionRequest(currentAccount, handlerId)
     const tx = txRequest.data
-    const maxTotalFee = maxFee(tx)
-
-    // Limit max fee
-    if (newGasPrice * gasLimit > maxTotalFee) {
-      tx.gasPrice = intToHex(Math.floor(maxTotalFee / gasLimit))
-    } else {
-      tx.gasPrice = intToHex(newGasPrice)
-    }
+    tx.gasPrice = toRpcQuantity(this.limitedQuantity(newGasPrice, this.maxFeePerGasFor(gasLimit, tx)))
 
     const previousFee = {
       type: txType,
-      gasPrice: intToHex(gasPrice)
+      gasPrice: toRpcQuantity(gasPrice)
     }
 
     // Complete update
@@ -1144,21 +1153,20 @@ export class Accounts extends EventEmitter {
   }
 
   setGasLimit(limit: string, handlerId: string, userUpdate: boolean) {
-    const { currentAccount, maxFeePerGas, gasPrice, txType } = this.txFeeUpdate(limit, handlerId, userUpdate)
+    const { currentAccount, input, maxFeePerGas, gasPrice, baseFeeTransaction } = this.txFeeUpdate(
+      limit,
+      handlerId,
+      userUpdate
+    )
 
     // New values
-    const newGasLimit = parseInt(this.limitedHexValue(limit, 0, 12.5e6), 16)
+    const newGasLimit = this.limitedQuantity(input, MAX_GAS_LIMIT)
 
     const txRequest = this.getTransactionRequest(currentAccount, handlerId)
     const tx = txRequest.data
-    const maxTotalFee = maxFee(tx)
-
-    const fee = txType === '0x2' ? maxFeePerGas : gasPrice
-    if (newGasLimit * fee > maxTotalFee) {
-      tx.gasLimit = intToHex(Math.floor(maxTotalFee / fee))
-    } else {
-      tx.gasLimit = intToHex(newGasLimit)
-    }
+    const fee = baseFeeTransaction ? maxFeePerGas : gasPrice
+    const feeLimitedGas = fee === 0n ? MAX_GAS_LIMIT : maxFee(tx) / fee
+    tx.gasLimit = toRpcQuantity(this.limitedQuantity(newGasLimit, feeLimitedGas))
 
     // Complete update
     this.completeTxFeeUpdate(currentAccount, handlerId, userUpdate, false)

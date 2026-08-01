@@ -2195,6 +2195,12 @@ describe('#signAndSend', () => {
     const txHash = '0x6e8b1de115105ceab599b4d99604797b961cfd1f46b85e10f23a81974baae3d5'
 
     beforeEach(() => {
+      Object.assign(tx, {
+        chainId: '0x1',
+        type: '0x0',
+        gasPrice: '0x1',
+        gasLimit: '0x5208'
+      })
       accounts.signTransaction.mockImplementation((_, cb) => cb(null, signedTx))
       accounts.setTxSigned.mockImplementation((reqId, cb) => {
         expect(reqId).toBe(request.handlerId)

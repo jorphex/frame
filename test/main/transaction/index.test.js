@@ -246,7 +246,11 @@ describe('#maxFee', () => {
       chainId: addHexPrefix((1).toString(16))
     }
 
-    expect(maxFee(tx)).toBe(2e18)
+    expect(maxFee(tx)).toBe(2n * 10n ** 18n)
+  })
+
+  it('supports an internal decimal chain ID without number coercion', () => {
+    expect(maxFee({ chainId: '1' })).toBe(2n * 10n ** 18n)
   })
 
   it('sets the max fee as 250 FTM on Fantom', () => {
@@ -254,7 +258,7 @@ describe('#maxFee', () => {
       chainId: addHexPrefix((250).toString(16))
     }
 
-    expect(maxFee(tx)).toBe(250e18)
+    expect(maxFee(tx)).toBe(250n * 10n ** 18n)
   })
 
   it('sets the max fee as 50 on other chains', () => {
@@ -262,7 +266,7 @@ describe('#maxFee', () => {
       chainId: addHexPrefix((255).toString(16))
     }
 
-    expect(maxFee(tx)).toBe(5e19)
+    expect(maxFee(tx)).toBe(50n * 10n ** 18n)
   })
 })
 

@@ -7,6 +7,7 @@ import provider from '../../../main/provider'
 import Accounts from '../../../main/accounts'
 import signers from '../../../main/signers'
 import { signerCompatibility, maxFee } from '../../../main/transaction'
+import { toRpcQuantity } from '../../../main/provider/quantity'
 import { GasFeesSource } from '../../../resources/domain/transaction'
 import { gweiToHex } from '../../util'
 
@@ -60,6 +61,8 @@ afterAll(() => {
 })
 
 beforeEach((done) => {
+  maxFee.mockReturnValue(2n * 10n ** 18n)
+
   const from = '0x22dd63c3619818fdbc262c78baee43cb61e9cccf'
   const nonce = '0xa'
   request = {
@@ -177,6 +180,12 @@ describe('#setBaseFee', () => {
     expect(() => setBaseFee('0x1dcd65000')).toThrowError()
   })
 
+  it('does not set a base fee on a legacy transaction', () => {
+    request.data.type = '0x0'
+
+    expect(() => setBaseFee('0x1dcd65000')).toThrow(/legacy transaction/)
+  })
+
   it('does not set a base fee on a locked request', () => {
     request.locked = true
 
@@ -237,11 +246,30 @@ describe('#setBaseFee', () => {
     const highBaseFee = intToHex(maxTotalFee + 10e9) // add 10 gwei to exceed the maximum limit
 
     request.data.gasLimit = intToHex(gasLimit)
-    maxFee.mockReturnValue(maxTotal)
+    maxFee.mockReturnValue(BigInt(maxTotal))
 
     setBaseFee(highBaseFee)
 
     expect(Accounts.current().requests[1].data.maxFeePerGas).toBe(intToHex(maxTotalFee))
+  })
+
+  it('reduces an existing priority fee that already consumes the cap', () => {
+    request.data.gasLimit = '0xa'
+    request.data.maxPriorityFeePerGas = '0xf'
+    request.data.maxFeePerGas = '0x14'
+    maxFee.mockReturnValue(100n)
+
+    setBaseFee('0x1')
+
+    expect(Accounts.current().requests[1].data.maxPriorityFeePerGas).toBe('0xa')
+    expect(Accounts.current().requests[1].data.maxFeePerGas).toBe('0xa')
+  })
+
+  it('supports fee updates when the gas limit is zero', () => {
+    request.data.gasLimit = '0x0'
+
+    expect(() => setBaseFee(gweiToHex(9999))).not.toThrow()
+    expect(Accounts.current().requests[1].data.maxFeePerGas).toBe(gweiToHex(10000))
   })
 
   it('updates the feesUpdatedByUser flag', () => {
@@ -288,6 +316,12 @@ describe('#setPriorityFee', () => {
     request.type = 'message'
 
     expect(() => setPriorityFee('0x12a05f200')).toThrowError()
+  })
+
+  it('does not set a priority fee on a legacy transaction', () => {
+    request.data.type = '0x0'
+
+    expect(() => setPriorityFee('0x12a05f200')).toThrow(/legacy transaction/)
   })
 
   it('does not set a priority fee on a locked request', () => {
@@ -345,9 +379,9 @@ describe('#setPriorityFee', () => {
     request.data.gasLimit = intToHex(gasLimit)
     request.data.maxFeePerGas = gweiToHex(190)
     request.data.maxPriorityFeePerGas = gweiToHex(40)
-    maxFee.mockReturnValue(maxTotal)
+    maxFee.mockReturnValue(BigInt(maxTotal))
 
-    const highPriorityFee = 60e9 // add 20 gwei to the above to exceed the maximum limit
+    const highPriorityFee = intToHex(60e9) // add 20 gwei to the above to exceed the maximum limit
     const expectedPriorityFee =
       maxTotalFee - (parseInt(request.data.maxFeePerGas) - parseInt(request.data.maxPriorityFeePerGas))
 
@@ -355,6 +389,18 @@ describe('#setPriorityFee', () => {
 
     expect(Accounts.current().requests[1].data.maxPriorityFeePerGas).toBe(intToHex(expectedPriorityFee))
     expect(Accounts.current().requests[1].data.maxFeePerGas).toBe(intToHex(maxTotalFee))
+  })
+
+  it('reduces an existing base fee that already consumes the cap', () => {
+    request.data.gasLimit = '0xa'
+    request.data.maxPriorityFeePerGas = '0x5'
+    request.data.maxFeePerGas = '0x14'
+    maxFee.mockReturnValue(100n)
+
+    setPriorityFee('0x1')
+
+    expect(Accounts.current().requests[1].data.maxPriorityFeePerGas).toBe('0x0')
+    expect(Accounts.current().requests[1].data.maxFeePerGas).toBe('0xa')
   })
 
   it('updates the feesUpdatedByUser flag', () => {
@@ -401,6 +447,12 @@ describe('#setGasPrice', () => {
     expect(() => setGasPrice('0x23')).toThrowError()
   })
 
+  it('does not set a gas price on an EIP-1559 transaction', () => {
+    request.data.type = '0x2'
+
+    expect(() => setGasPrice('0x23')).toThrow(/EIP-1559 transaction/)
+  })
+
   it('does not set a gas price on a locked request', () => {
     request.locked = true
 
@@ -436,7 +488,7 @@ describe('#setGasPrice', () => {
     const highPrice = intToHex(maxTotalFee + 10e9) // 250 gwei
 
     request.data.gasLimit = intToHex(gasLimit)
-    maxFee.mockReturnValue(maxTotal)
+    maxFee.mockReturnValue(BigInt(maxTotal))
 
     setGasPrice(highPrice)
 
@@ -450,6 +502,18 @@ describe('#setGasPrice', () => {
     setGasPrice(highPrice)
 
     expect(Accounts.current().requests[1].data.gasPrice).toBe(maxPrice)
+  })
+
+  it('limits an exact total above the safe-integer range', () => {
+    const gasLimit = 12_500_000n
+    const requestedPrice = 9_999n * 1_000_000_000n
+    request.data.gasLimit = toRpcQuantity(gasLimit)
+    request.data.gasPrice = toRpcQuantity(requestedPrice - 2n)
+    maxFee.mockReturnValue(requestedPrice * gasLimit - 1n)
+
+    setGasPrice(toRpcQuantity(requestedPrice))
+
+    expect(Accounts.current().requests[1].data.gasPrice).toBe(toRpcQuantity(requestedPrice - 1n))
   })
 
   it('updates the feesUpdatedByUser flag', () => {
@@ -525,7 +589,7 @@ describe('#setGasLimit', () => {
 
     request.data.type = '0x0'
     request.data.gasPrice = intToHex(gasPrice)
-    maxFee.mockReturnValue(maxTotalFee)
+    maxFee.mockReturnValue(BigInt(maxTotalFee))
 
     setGasLimit(gasLimit)
 
@@ -540,7 +604,7 @@ describe('#setGasLimit', () => {
 
     request.data.type = '0x2'
     request.data.maxFeePerGas = intToHex(maxFeePerGas)
-    maxFee.mockReturnValue(maxTotalFee)
+    maxFee.mockReturnValue(BigInt(maxTotalFee))
 
     setGasLimit(gasLimit)
 
@@ -554,6 +618,14 @@ describe('#setGasLimit', () => {
     setGasLimit(highLimit)
 
     expect(Accounts.current().requests[1].data.gasLimit).toBe(maxLimit)
+  })
+
+  it('supports gas-limit updates with a zero fee', () => {
+    request.data.type = '0x0'
+    request.data.gasPrice = '0x0'
+
+    expect(() => setGasLimit('0x61a8')).not.toThrow()
+    expect(Accounts.current().requests[1].data.gasLimit).toBe('0x61a8')
   })
 
   it('updates the feesUpdatedByUser flag', () => {

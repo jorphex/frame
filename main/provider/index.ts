@@ -375,7 +375,7 @@ export class Provider extends EventEmitter {
     if (feeTotalOverMax(rawTx, maxTotalFee)) {
       const chainId = parseInt(rawTx.chainId)
       const symbol = store(`main.networks.ethereum.${chainId}.symbol`)
-      const displayAmount = symbol ? ` (${Math.floor(maxTotalFee / 1e18)} ${symbol})` : ''
+      const displayAmount = symbol ? ` (${maxTotalFee / 10n ** 18n} ${symbol})` : ''
 
       const err = `Max fee is over hard limit${displayAmount}`
 

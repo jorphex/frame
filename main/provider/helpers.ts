@@ -108,13 +108,20 @@ export function checkExistingNonceGas(tx: TransactionData) {
   return tx
 }
 
-export function feeTotalOverMax(rawTx: TransactionData, maxTotalFee: number) {
-  const maxFeePerGas = usesBaseFee(rawTx)
-    ? parseInt(rawTx.maxFeePerGas || '', 16)
-    : parseInt(rawTx.gasPrice || '', 16)
-  const gasLimit = parseInt(rawTx.gasLimit || '', 16)
-  const totalFee = maxFeePerGas * gasLimit
-  return totalFee > maxTotalFee
+export function feeTotalOverMax(rawTx: TransactionData, maxTotalFee: bigint) {
+  const baseFeeTransaction = usesBaseFee(rawTx)
+  const feePerGas = parseRpcQuantity(baseFeeTransaction ? rawTx.maxFeePerGas : rawTx.gasPrice)
+  const gasLimit = parseRpcQuantity(rawTx.gasLimit)
+  const priorityFee = baseFeeTransaction ? parseRpcQuantity(rawTx.maxPriorityFeePerGas) : 0n
+
+  // Invalid signing quantities fail closed at the final main-process boundary.
+  return (
+    feePerGas === undefined ||
+    gasLimit === undefined ||
+    priorityFee === undefined ||
+    priorityFee > feePerGas ||
+    feePerGas * gasLimit > maxTotalFee
+  )
 }
 
 function parseValue(value = '') {
