@@ -8,7 +8,10 @@ import Countdown from '../../../../../resources/Components/Countdown'
 import RequestHeader from '../../../../../resources/Components/RequestHeader'
 import RequestItem from '../../../../../resources/Components/RequestItem'
 import EditTokenSpend from '../../../../../resources/Components/EditTokenSpend'
-import { SimpleTypedData as TypedSignatureOverview } from '../../../../../resources/Components/SimpleTypedData'
+import {
+  SimpleTypedData as TypedSignatureOverview,
+  TypedDataWarnings
+} from '../../../../../resources/Components/SimpleTypedData'
 import { getSignatureRequestClass } from '../../../../../resources/domain/request'
 import useCopiedMessage from '../../../../../resources/Hooks/useCopiedMessage'
 
@@ -69,6 +72,7 @@ const PermitOverview = ({ req, chainData, originName }) => {
               </Cluster>
             </RequestItem>
           </ClusterBox>
+          <TypedDataWarnings context={req.context} />
           <ClusterBox title={'Token Permit'} animationSlot={2}>
             <Cluster>
               {tokenData && (
@@ -211,7 +215,9 @@ const PermitRequest = ({ req, originName, step, chainData }) => {
       case 'adjustPermit':
         return <EditPermit req={req} />
       case 'viewRaw':
-        return <TypedSignatureOverview originName={originName} req={req} />
+        return (
+          <TypedSignatureOverview chainName={chainData.requestChainName} originName={originName} req={req} />
+        )
       default:
         return <PermitOverview originName={originName} req={req} chainData={chainData} />
     }

@@ -1606,6 +1606,11 @@ describe('#send', () => {
       expect(accountRequests[0].payload.params[1]).toStrictEqual(expectedPayload)
       expect(accountRequests[0].typedMessage.version).toBe(version)
       expect(accountRequests[0].typedMessage.data).toStrictEqual(expectedPayload)
+      expect(accountRequests[0].context).toEqual(
+        version === SignTypedDataVersion.V1
+          ? { requestChainId: 1, risks: ['legacy-v1'] }
+          : { requestChainId: 1, domainChainId: '1', risks: [] }
+      )
     }
 
     validRequests.forEach(({ method, params, version, dataFirst, dataDescription }) => {
@@ -1644,6 +1649,36 @@ describe('#send', () => {
       send({ method: 'eth_signTypedData', params: [address, arrayData] })
 
       verifyRequest(SignTypedDataVersion.V4, arrayData)
+    })
+
+    it('records a domain chain mismatch against the resolved request chain', () => {
+      send({ method: 'eth_signTypedData_v4', params: [address, typedData], chainId: '0x5' })
+
+      expect(accountRequests).toHaveLength(1)
+      expect(accountRequests[0].context).toEqual({
+        requestChainId: 5,
+        domainChainId: '1',
+        risks: ['domain-chain-mismatch']
+      })
+    })
+
+    it('records a typed signature without domain chain binding', () => {
+      const chainlessData = {
+        ...typedData,
+        types: {
+          ...typedData.types,
+          EIP712Domain: typedData.types.EIP712Domain.filter(({ name }) => name !== 'chainId')
+        },
+        domain: Object.fromEntries(Object.entries(typedData.domain).filter(([name]) => name !== 'chainId'))
+      }
+
+      send({ method: 'eth_signTypedData_v4', params: [address, chainlessData] })
+
+      expect(accountRequests).toHaveLength(1)
+      expect(accountRequests[0].context).toEqual({
+        requestChainId: 1,
+        risks: ['domain-chain-missing']
+      })
     })
 
     const invalidRequests = [

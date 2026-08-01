@@ -1,5 +1,9 @@
 import { SignTypedDataVersion } from '@metamask/eth-sig-util'
-import { getVersionFromTypedData, parseTypedMessage } from '../../../main/provider/typedData'
+import {
+  getTypedDataContext,
+  getVersionFromTypedData,
+  parseTypedMessage
+} from '../../../main/provider/typedData'
 
 const typedData = {
   types: {
@@ -209,5 +213,60 @@ describe('#parseTypedMessage', () => {
   it('rejects EIP-712 data that cannot be encoded', () => {
     const invalidValue = withField({ name: 'count', type: 'uint256' }, undefined)
     expectInvalid(() => parseTypedMessage(invalidValue, SignTypedDataVersion.V4), /Invalid params:/)
+  })
+})
+
+describe('#getTypedDataContext', () => {
+  const message = (data, version = SignTypedDataVersion.V4) => ({ data, version })
+
+  it.each([
+    [1, '1'],
+    ['1', '1'],
+    ['0x01', '1'],
+    ['0X01', '1']
+  ])('normalizes matching domain chain ID %s', (chainId, normalized) => {
+    const data = { ...typedData, domain: { ...typedData.domain, chainId } }
+
+    expect(getTypedDataContext(message(data), 1)).toEqual({
+      requestChainId: 1,
+      domainChainId: normalized,
+      risks: []
+    })
+  })
+
+  it('reports a request and domain chain mismatch', () => {
+    expect(getTypedDataContext(message(typedData), 5)).toEqual({
+      requestChainId: 5,
+      domainChainId: '1',
+      risks: ['domain-chain-mismatch']
+    })
+  })
+
+  it('reports an absent domain chain', () => {
+    const { chainId, ...domain } = typedData.domain
+
+    expect(getTypedDataContext(message({ ...typedData, domain }), 1)).toEqual({
+      requestChainId: 1,
+      risks: ['domain-chain-missing']
+    })
+  })
+
+  it.each(['invalid', -1, Number.MAX_SAFE_INTEGER + 1, 1.5, `0x${'f'.repeat(65)}`])(
+    'reports invalid domain chain ID %s',
+    (chainId) => {
+      const data = { ...typedData, domain: { ...typedData.domain, chainId } }
+
+      expect(getTypedDataContext(message(data), 1)).toEqual({
+        requestChainId: 1,
+        risks: ['domain-chain-invalid']
+      })
+    }
+  )
+
+  it('reports legacy V1 data without adding EIP-712 domain risks', () => {
+    expect(getTypedDataContext(message(legacyTypedData, SignTypedDataVersion.V1), 1)).toEqual({
+      requestChainId: 1,
+      risks: ['legacy-v1']
+    })
   })
 })

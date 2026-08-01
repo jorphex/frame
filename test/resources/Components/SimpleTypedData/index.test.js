@@ -1,0 +1,108 @@
+import { screen, render } from '../../../componentSetup'
+import { SimpleTypedData } from '../../../../resources/Components/SimpleTypedData'
+
+const typedData = {
+  types: {
+    EIP712Domain: [{ name: 'chainId', type: 'uint256' }],
+    Message: [
+      { name: 'enabled', type: 'bool' },
+      { name: 'count', type: 'uint256' },
+      { name: 'note', type: 'string' }
+    ]
+  },
+  primaryType: 'Message',
+  domain: { chainId: 1 },
+  message: {
+    enabled: false,
+    count: 0,
+    note: '',
+    label: 'false',
+    optional: null,
+    values: [false, 0, null]
+  }
+}
+
+const request = (overrides = {}) => ({
+  type: 'signTypedData',
+  origin: 'origin-id',
+  typedMessage: { data: typedData, version: 'V4' },
+  context: { requestChainId: 1, domainChainId: '1', risks: [] },
+  ...overrides
+})
+
+it('shows complete EIP-712 signing context and declarations', () => {
+  render(<SimpleTypedData chainName='Ethereum' originName='example.test' req={request()} />)
+
+  expect(screen.getByText('Typed Data Review')).toBeTruthy()
+  expect(screen.getByText('example.test')).toBeTruthy()
+  expect(screen.getByText('Ethereum (1)')).toBeTruthy()
+  expect(screen.getByText('V4')).toBeTruthy()
+  expect(screen.getAllByText('Message').length).toBeGreaterThan(0)
+  expect(screen.getByText('Domain')).toBeTruthy()
+  expect(screen.getByText('Message: Message')).toBeTruthy()
+  expect(screen.getByText('Type Definitions')).toBeTruthy()
+  expect(screen.getByText('EIP712Domain')).toBeTruthy()
+})
+
+it('renders false, zero, null, empty strings, and array positions explicitly', () => {
+  render(<SimpleTypedData req={request()} />)
+
+  expect(screen.getAllByText('false').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('0').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('null').length).toBeGreaterThan(0)
+  expect(screen.getByText('""')).toBeTruthy()
+  expect(screen.getByText('"false"')).toBeTruthy()
+  expect(screen.getAllByText('[0]').length).toBeGreaterThan(0)
+})
+
+it('shows the exact request and domain chains in a mismatch warning', () => {
+  const req = request({
+    context: { requestChainId: 5, domainChainId: '1', risks: ['domain-chain-mismatch'] }
+  })
+
+  render(<SimpleTypedData chainName='Goerli' originName='example.test' req={req} />)
+
+  expect(screen.getByRole('alert').textContent).toBe('Domain chain 1 does not match request chain 5.')
+})
+
+it('shows missing domain binding warnings', () => {
+  render(
+    <SimpleTypedData req={request({ context: { requestChainId: 1, risks: ['domain-chain-missing'] } })} />
+  )
+
+  expect(screen.getByRole('alert').textContent).toMatch(/does not declare a domain chain ID/)
+})
+
+it('falls back to the persisted origin identity and shows invalid domain chain warnings', () => {
+  render(
+    <SimpleTypedData req={request({ context: { requestChainId: 1, risks: ['domain-chain-invalid'] } })} />
+  )
+
+  expect(screen.getByText('origin-id')).toBeTruthy()
+  expect(screen.getByRole('alert').textContent).toMatch(/cannot be compared/)
+})
+
+it('shows legacy V1 fields and warnings', () => {
+  render(
+    <SimpleTypedData
+      req={request({
+        typedMessage: {
+          version: 'V1',
+          data: [{ name: 'enabled', type: 'bool', value: false }]
+        },
+        context: { requestChainId: 1, risks: ['legacy-v1'] }
+      })}
+    />
+  )
+
+  expect(screen.getByRole('alert').textContent).toMatch(/Legacy V1 typed data/)
+  expect(screen.getByText('Signed Fields')).toBeTruthy()
+  expect(screen.getByText('false')).toBeTruthy()
+})
+
+it('uses the same complete view for specialized permit requests', () => {
+  render(<SimpleTypedData req={request({ type: 'signErc20Permit' })} />)
+
+  expect(screen.getByText('Typed Data Review')).toBeTruthy()
+  expect(screen.getByText('Type Definitions')).toBeTruthy()
+})

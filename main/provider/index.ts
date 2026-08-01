@@ -30,7 +30,7 @@ import { populate as populateTransaction, maxFee, classifyTransaction } from '..
 import { capitalize } from '../../resources/utils'
 import { ApprovalType } from '../../resources/constants'
 import { createObserver as AssetsObserver, loadAssets } from './assets'
-import { parseTypedMessage } from './typedData'
+import { getTypedDataContext, parseTypedMessage } from './typedData'
 import { parseAddChainRequest, parseChainRequestId } from './chainRequests'
 import { parseWatchAssetRequest } from './watchAsset'
 import {
@@ -688,6 +688,7 @@ export class Provider extends EventEmitter {
   signTypedData(
     rawPayload: RPC.SignTypedData.Request,
     version: SignTypedDataVersion | undefined,
+    targetChain: Chain,
     res: RPCCallback<RPC.SignTypedData.Response>
   ) {
     // ensure param order is [address, data, ...] regardless of version
@@ -760,6 +761,7 @@ export class Provider extends EventEmitter {
 
     const type = sigParser.identify(typedMessage)
     const handlerId = this.addRequestHandler(res)
+    const context = getTypedDataContext(typedMessage, targetChain.id)
 
     const req: SignTypedDataRequest = {
       handlerId,
@@ -767,7 +769,8 @@ export class Provider extends EventEmitter {
       typedMessage,
       payload,
       account: targetAccount.address,
-      origin: payload._origin
+      origin: payload._origin,
+      context
     }
 
     // TODO: all of this below code to construct the original request can be added to
@@ -1170,6 +1173,7 @@ export class Provider extends EventEmitter {
       return this.signTypedData(
         payload as RPC.SignTypedData.Request,
         version,
+        targetChain,
         res as RPCCallback<RPC.SignTypedData.Response>
       )
     }

@@ -1,5 +1,11 @@
 import { SignTypedDataVersion, TypedDataUtils, typedSignatureHash } from '@metamask/eth-sig-util'
-import type { LegacyTypedData, TypedData, TypedMessage } from '../accounts/types'
+import type {
+  LegacyTypedData,
+  TypedData,
+  TypedDataContext,
+  TypedDataRisk,
+  TypedMessage
+} from '../accounts/types'
 
 type UnknownRecord = Record<string, unknown>
 type TypeDefinitions = Record<string, Array<{ name: string; type: string }>>
@@ -9,6 +15,7 @@ const ARRAY_TYPE = /\[(?:[1-9][0-9]*)?\]$/
 const ARRAY_SUFFIXES = /(\[(?:[1-9][0-9]*)?\])+$/
 const INTEGER_TYPE = /^(u?int)([0-9]+)$/
 const BYTES_TYPE = /^bytes([0-9]+)$/
+const MAX_UINT256 = (1n << 256n) - 1n
 const hasOwn = (value: object, property: PropertyKey) => Object.prototype.hasOwnProperty.call(value, property)
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -231,4 +238,47 @@ export function parseTypedMessage(typedData: unknown, requestedVersion?: SignTyp
   }
 
   throw invalidParams(`unsupported typed data version ${String(version)}`)
+}
+
+function normalizeDomainChainId(value: unknown) {
+  if (typeof value === 'number' && (!Number.isSafeInteger(value) || value < 0)) return
+  if (typeof value === 'bigint' && value < 0n) return
+  if (
+    typeof value !== 'number' &&
+    typeof value !== 'bigint' &&
+    (typeof value !== 'string' || !/^(?:0x[0-9a-f]+|[0-9]+)$/i.test(value))
+  ) {
+    return
+  }
+
+  try {
+    const chainId = BigInt(value)
+    if (chainId > MAX_UINT256) return
+    return chainId.toString(10)
+  } catch {
+    return
+  }
+}
+
+export function getTypedDataContext(typedMessage: TypedMessage, requestChainId: number): TypedDataContext {
+  if (typedMessage.version === SignTypedDataVersion.V1 || Array.isArray(typedMessage.data)) {
+    return { requestChainId, risks: ['legacy-v1'] }
+  }
+
+  const risks: TypedDataRisk[] = []
+  const { domain } = typedMessage.data
+
+  if (!hasOwn(domain, 'chainId')) {
+    risks.push('domain-chain-missing')
+    return { requestChainId, risks }
+  }
+
+  const domainChainId = normalizeDomainChainId(domain.chainId)
+  if (domainChainId === undefined) {
+    risks.push('domain-chain-invalid')
+    return { requestChainId, risks }
+  }
+
+  if (domainChainId !== String(requestChainId)) risks.push('domain-chain-mismatch')
+  return { requestChainId, domainChainId, risks }
 }

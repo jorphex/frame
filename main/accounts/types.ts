@@ -140,12 +140,25 @@ export interface TypedMessage<V extends SignTypedDataVersion = SignTypedDataVers
   version: V
 }
 
+export type TypedDataRisk =
+  | 'legacy-v1'
+  | 'domain-chain-missing'
+  | 'domain-chain-invalid'
+  | 'domain-chain-mismatch'
+
+export interface TypedDataContext {
+  requestChainId: number
+  domainChainId?: string
+  risks: TypedDataRisk[]
+}
+
 export type SignTypedDataRequest = DefaultSignTypedDataRequest | PermitSignatureRequest
 
 export type SignatureRequest = SignTypedDataRequest | SignRequest
 
 export interface DefaultSignTypedDataRequest extends AccountRequest<'signTypedData'> {
   typedMessage: TypedMessage
+  context: TypedDataContext
 }
 
 interface EIP2612PermitDomain {
@@ -172,6 +185,7 @@ export interface PermitSignatureRequest extends AccountRequest<'signErc20Permit'
   }
   permit: PermitData
   tokenData: TokenData
+  context: TypedDataContext
 }
 
 export type AccessRequest = AccountRequest<'access'>

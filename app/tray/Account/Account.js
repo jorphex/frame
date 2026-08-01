@@ -219,8 +219,11 @@ class _AccountBody extends React.Component {
     const chainId = req.typedMessage.data.domain.chainId
     const chainName = this.store('main.networks.ethereum', chainId, 'name')
     const { primaryColor: chainColor, icon } = this.store('main.networksMeta.ethereum', chainId)
+    const requestChainId = req.context?.requestChainId
+    const requestChainName =
+      requestChainId !== undefined ? this.store('main.networks.ethereum', requestChainId, 'name') : undefined
 
-    return { chainId, chainName, chainColor, icon }
+    return { chainId, chainName, chainColor, icon, requestChainName }
   }
 
   renderRequest(req, data = {}) {

@@ -19,11 +19,14 @@ class TransactionRequest extends React.Component {
   render() {
     const { req } = this.props
     const originName = this.store('main.origins', req.origin, 'name')
+    const requestChainId = req.context?.requestChainId
+    const chainName =
+      requestChainId !== undefined ? this.store('main.networks.ethereum', requestChainId, 'name') : undefined
     const requestClass = getSignatureRequestClass(req)
 
     return (
       <div key={req.id || req.handlerId} className={requestClass}>
-        <TypedSignatureOverview {...{ originName, req }} />
+        <TypedSignatureOverview {...{ chainName, originName, req }} />
       </div>
     )
   }
