@@ -1263,6 +1263,21 @@ describe('#claimWalletCallsRequest', () => {
     expect(() => account.claimWalletCallsRequest(request.handlerId)).toThrow(/already been claimed/i)
   })
 
+  it('restores an unclaimed request when publishing the claim fails', () => {
+    const request = readyWalletCallsRequest('claim-store-failure')
+    account.requests[request.handlerId] = request
+    const expected = JSON.parse(JSON.stringify(request))
+    accounts.update.mockImplementationOnce(() => {
+      throw new Error('account store unavailable')
+    })
+
+    expect(() => account.claimWalletCallsRequest(request.handlerId)).toThrow(/store unavailable/)
+    expect(request).toEqual(expected)
+
+    expect(() => account.claimWalletCallsRequest(request.handlerId)).not.toThrow()
+    expect(request).toMatchObject({ locked: true, status: 'pending' })
+  })
+
   it.each([
     ['pending simulation', (request) => (request.simulation = { status: 'pending', calls: [] })],
     ['missing simulation', (request) => (request.simulation = undefined)],

@@ -26,7 +26,8 @@ import {
   RequestMode,
   TypedMessage,
   PermitSignatureRequest,
-  WalletCallsRequest
+  WalletCallsRequest,
+  WalletCallsResponder
 } from './types'
 
 import type { Chain } from '../chains'
@@ -737,6 +738,93 @@ export class Accounts extends EventEmitter {
     if (!account) throw new Error('Could not locate wallet-call account')
 
     return account.claimWalletCallsRequest(handlerId)
+  }
+
+  claimWalletCallsRequestWithResponse(accountId: string, handlerId: string) {
+    if (typeof accountId !== 'string' || typeof handlerId !== 'string' || !handlerId) {
+      throw new Error('Invalid wallet-call request identity')
+    }
+
+    const account = this.accounts[accountId.toLowerCase()]
+    if (!account) throw new Error('Could not locate wallet-call account')
+
+    const request = account.getRequest<WalletCallsRequest>(handlerId)
+    const responder = request?.res as WalletCallsResponder | undefined
+    if (
+      !request ||
+      request.type !== 'walletCalls' ||
+      typeof request.account !== 'string' ||
+      request.account.toLowerCase() !== account.id ||
+      typeof responder !== 'function' ||
+      responder.walletCallsLifecycle !== true ||
+      typeof responder.accept !== 'function'
+    ) {
+      throw new Error('Wallet-call response is no longer available')
+    }
+
+    const snapshot = account.claimWalletCallsRequest(handlerId)
+    if (account.getRequest(handlerId) !== request) {
+      throw new Error('Wallet-call request changed during approval')
+    }
+    delete request.res
+
+    return Object.freeze({ snapshot, responder })
+  }
+
+  settleWalletCallsRequest(accountId: string, handlerId: string, error?: Error) {
+    if (typeof accountId !== 'string' || typeof handlerId !== 'string' || !handlerId) {
+      throw new Error('Invalid wallet-call request identity')
+    }
+
+    const account = this.accounts[accountId.toLowerCase()]
+    if (!account) return false
+    const request = account.getRequest<WalletCallsRequest>(handlerId)
+    if (!request) return false
+    if (
+      request.type !== 'walletCalls' ||
+      typeof request.account !== 'string' ||
+      request.account.toLowerCase() !== account.id ||
+      !request.locked ||
+      request.status !== RequestStatus.Pending
+    ) {
+      throw new Error('Wallet-call request is not awaiting an execution outcome')
+    }
+
+    const previousState = {
+      hadStatus: Object.prototype.hasOwnProperty.call(request, 'status'),
+      status: request.status,
+      hadNotice: Object.prototype.hasOwnProperty.call(request, 'notice'),
+      notice: request.notice,
+      hadMode: Object.prototype.hasOwnProperty.call(request, 'mode'),
+      mode: request.mode
+    }
+    request.status = error ? RequestStatus.Error : RequestStatus.Success
+    request.notice = error
+      ? (error.message || 'Wallet-call execution failed').slice(0, 240)
+      : 'Batch Submitted'
+    request.mode = RequestMode.Monitor
+    try {
+      account.update()
+    } catch (updateError) {
+      if (previousState.hadStatus) request.status = previousState.status
+      else delete request.status
+      if (previousState.hadNotice) request.notice = previousState.notice
+      else delete request.notice
+      if (previousState.hadMode) request.mode = previousState.mode
+      else delete request.mode
+      throw updateError
+    }
+
+    setTimeout(
+      () => {
+        if (this.accounts[account.id] === account && account.getRequest(handlerId) === request) {
+          account.clearRequest(handlerId)
+        }
+      },
+      error ? 8000 : 3300
+    )
+
+    return true
   }
 
   signerCompatibility(handlerId: string, cb: Callback<SignerCompatibility>) {

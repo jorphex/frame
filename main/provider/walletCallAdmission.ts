@@ -3,13 +3,13 @@ import { WalletCallBatchSchema, type WalletCallBatch } from '../store/state/type
 import { snapshotWalletCalls } from './walletCallExecution'
 import { parseSendCalls, type SendCallsRequest } from './walletCalls'
 
-interface WalletCallAdmissionCapability {
+export interface WalletCallAdmissionCapability {
   batch: WalletCallBatch
   commit(): void
   rollback(): void
 }
 
-interface WalletCallAdmissionLedger {
+export interface WalletCallAdmissionLedger {
   create(input: {
     id?: string
     origin: string

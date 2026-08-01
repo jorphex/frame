@@ -864,18 +864,36 @@ class FrameAccount {
       preparation: walletCalls.preparation
     })
 
+    const previousState = {
+      hadLocked: Object.prototype.hasOwnProperty.call(walletCalls, 'locked'),
+      locked: walletCalls.locked,
+      hadStatus: Object.prototype.hasOwnProperty.call(walletCalls, 'status'),
+      status: walletCalls.status,
+      hadNotice: Object.prototype.hasOwnProperty.call(walletCalls, 'notice'),
+      notice: walletCalls.notice
+    }
+    walletCalls.locked = true
+    walletCalls.status = RequestStatus.Pending
+    walletCalls.notice =
+      this.lastSignerType !== SignerType.Seed && this.lastSignerType !== SignerType.Ring ? 'See Signer' : ''
+    try {
+      this.update()
+    } catch (error) {
+      if (previousState.hadLocked) walletCalls.locked = previousState.locked
+      else delete walletCalls.locked
+      if (previousState.hadStatus) walletCalls.status = previousState.status
+      else delete walletCalls.status
+      if (previousState.hadNotice) walletCalls.notice = previousState.notice
+      else delete walletCalls.notice
+      throw error
+    }
+
     clearTimeout(this.simulationTimers[handlerId])
     delete this.simulationTimers[handlerId]
     this.simulationVersions[handlerId] = (this.simulationVersions[handlerId] || 0) + 1
     clearTimeout(this.preparationTimers[handlerId])
     delete this.preparationTimers[handlerId]
     this.preparationVersions[handlerId] = (this.preparationVersions[handlerId] || 0) + 1
-
-    walletCalls.locked = true
-    walletCalls.status = RequestStatus.Pending
-    walletCalls.notice =
-      this.lastSignerType !== SignerType.Seed && this.lastSignerType !== SignerType.Ring ? 'See Signer' : ''
-    this.update()
 
     return snapshot
   }

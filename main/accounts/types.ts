@@ -264,6 +264,13 @@ export interface WalletCallsRequest extends AccountRequest<'walletCalls'> {
   locked?: boolean
   preparation: WalletCallsPreparation
   simulation: WalletCallsSimulation
+  res?: WalletCallsResponder
+}
+
+export interface WalletCallsResponder {
+  (response?: RPCResponsePayload): void
+  readonly walletCallsLifecycle: true
+  accept(id: string): void
 }
 
 export type WalletCallsPreparation =

@@ -1269,6 +1269,89 @@ describe('#claimWalletCallsRequest', () => {
   ])('rejects %s', (_label, accountId, handlerId, message) => {
     expect(() => Accounts.claimWalletCallsRequest(accountId, handlerId)).toThrow(message)
   })
+
+  it('atomically claims and detaches the lifecycle responder from the explicit account', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const request = readyRequest('wallet-calls-with-response')
+    const responder = jest.fn()
+    responder.walletCallsLifecycle = true
+    responder.accept = jest.fn()
+    request.res = responder
+    targetAccount.requests[request.handlerId] = request
+
+    const claimed = Accounts.claimWalletCallsRequestWithResponse(
+      account2.address.toUpperCase(),
+      request.handlerId
+    )
+
+    expect(Accounts.current().id).toBe(account.address)
+    expect(claimed.snapshot).toMatchObject({ account: account2.address, id: request.batchId })
+    expect(claimed.responder).toBe(responder)
+    expect(request.res).toBeUndefined()
+    expect(request).toMatchObject({ locked: true, status: 'pending' })
+  })
+
+  it('does not claim a request without its specialized lifecycle responder', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const request = readyRequest('wallet-calls-no-response')
+    request.res = jest.fn()
+    targetAccount.requests[request.handlerId] = request
+
+    expect(() => Accounts.claimWalletCallsRequestWithResponse(account2.address, request.handlerId)).toThrow(
+      /response is no longer available/i
+    )
+    expect(request.locked).toBeUndefined()
+    expect(request.status).toBeUndefined()
+  })
+
+  it('settles and expires only the claimed request on its explicit account', () => {
+    jest.useFakeTimers()
+    try {
+      const targetAccount = Accounts.accounts[account2.address]
+      const request = readyRequest('wallet-calls-settlement')
+      targetAccount.requests[request.handlerId] = request
+      Accounts.claimWalletCallsRequest(account2.address, request.handlerId)
+
+      expect(Accounts.settleWalletCallsRequest(account2.address, request.handlerId)).toBe(true)
+      expect(Accounts.current().id).toBe(account.address)
+      expect(request).toMatchObject({ status: 'success', notice: 'Batch Submitted', mode: 'monitor' })
+
+      jest.advanceTimersByTime(3299)
+      expect(targetAccount.requests[request.handlerId]).toBe(request)
+      jest.advanceTimersByTime(1)
+      expect(targetAccount.requests[request.handlerId]).toBeUndefined()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('rejects an outcome for an unclaimed wallet-call request', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const request = readyRequest('wallet-calls-unclaimed-outcome')
+    targetAccount.requests[request.handlerId] = request
+
+    expect(() =>
+      Accounts.settleWalletCallsRequest(account2.address, request.handlerId, new Error('failed'))
+    ).toThrow(/not awaiting an execution outcome/i)
+    expect(request.status).toBeUndefined()
+  })
+
+  it('restores the pending request when publishing its outcome fails', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const request = readyRequest('wallet-calls-outcome-store-failure')
+    targetAccount.requests[request.handlerId] = request
+    Accounts.claimWalletCallsRequest(account2.address, request.handlerId)
+    const expected = JSON.parse(JSON.stringify(request))
+    const update = jest.spyOn(targetAccount, 'update').mockImplementationOnce(() => {
+      throw new Error('account store unavailable')
+    })
+
+    expect(() => Accounts.settleWalletCallsRequest(account2.address, request.handlerId)).toThrow(
+      /store unavailable/
+    )
+    expect(request).toEqual(expected)
+    update.mockRestore()
+  })
 })
 
 describe('#signerCompatibility', () => {
