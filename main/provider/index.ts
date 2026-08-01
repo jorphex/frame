@@ -30,7 +30,7 @@ import { populate as populateTransaction, maxFee, classifyTransaction } from '..
 import { capitalize } from '../../resources/utils'
 import { ApprovalType } from '../../resources/constants'
 import { createObserver as AssetsObserver, loadAssets } from './assets'
-import { getVersionFromTypedData } from './typedData'
+import { parseTypedMessage } from './typedData'
 import { parseAddChainRequest, parseChainRequestId } from './chainRequests'
 import { parseWatchAssetRequest } from './watchAsset'
 import {
@@ -687,14 +687,15 @@ export class Provider extends EventEmitter {
 
   signTypedData(
     rawPayload: RPC.SignTypedData.Request,
-    version: SignTypedDataVersion,
+    version: SignTypedDataVersion | undefined,
     res: RPCCallback<RPC.SignTypedData.Response>
   ) {
     // ensure param order is [address, data, ...] regardless of version
+    const rawParams = Array.isArray(rawPayload.params) ? rawPayload.params : []
     const orderedParams =
-      isAddress(rawPayload.params[1]) && !isAddress(rawPayload.params[0])
-        ? [rawPayload.params[1], rawPayload.params[0], ...rawPayload.params.slice(2)]
-        : [...rawPayload.params]
+      isAddress(rawParams[1]) && !isAddress(rawParams[0])
+        ? [rawParams[1], rawParams[0], ...rawParams.slice(2)]
+        : [...rawParams]
 
     const payload = {
       ...rawPayload,
@@ -703,8 +704,11 @@ export class Provider extends EventEmitter {
 
     let [from = '', typedData, ...additionalParams] = payload.params
 
-    if (!typedData) {
-      return resError(`Missing typed data`, payload, res)
+    if (typedData === undefined) {
+      return resError({ code: -32602, message: 'Invalid params: missing typed data' }, payload, res)
+    }
+    if (!isAddress(from)) {
+      return resError({ code: -32602, message: 'Invalid params: invalid signing address' }, payload, res)
     }
 
     // HACK: Standards clearly say, that second param is an object but it seems like in the wild it can be a JSON-string.
@@ -713,18 +717,17 @@ export class Provider extends EventEmitter {
         typedData = JSON.parse(typedData) as LegacyTypedData | TypedData
         payload.params = [from, typedData, ...additionalParams]
       } catch (e) {
-        return resError('Malformed typed data', payload, res)
+        return resError({ code: -32602, message: 'Invalid params: malformed typed data JSON' }, payload, res)
       }
     }
 
-    if (!Array.isArray(typedData) && !typedData.message) {
-      return resError('Typed data missing message', payload, res)
+    let typedMessage: TypedMessage
+    try {
+      typedMessage = parseTypedMessage(typedData, version)
+    } catch (error) {
+      return resError(error as EVMError, payload, res)
     }
-
-    // no explicit version called so we choose one which best fits the data
-    if (!version) {
-      version = getVersionFromTypedData(typedData)
-    }
+    version = typedMessage.version
 
     const targetAccount = accounts.get(from.toLowerCase())
 
@@ -755,13 +758,8 @@ export class Provider extends EventEmitter {
       return resError('Lattice only supports eth_signTypedData_v3+', payload, res)
     }
 
-    const handlerId = this.addRequestHandler(res)
-    const typedMessage: TypedMessage<typeof version> = {
-      data: typedData,
-      version
-    }
-
     const type = sigParser.identify(typedMessage)
+    const handlerId = this.addRequestHandler(res)
 
     const req: SignTypedDataRequest = {
       handlerId,

@@ -1498,7 +1498,12 @@ describe('#send', () => {
           { name: 'contents', type: 'string' }
         ]
       },
-      domain: 'domainData',
+      domain: {
+        name: 'Ether Mail',
+        version: '1',
+        chainId: 1,
+        verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC'
+      },
       primaryType: 'Mail',
       message: {
         from: {
@@ -1525,11 +1530,6 @@ describe('#send', () => {
         value: '1212'
       }
     ]
-
-    const typedDataInvalid = {
-      ...typedData,
-      primaryType: 'b0rk'
-    }
 
     const validRequests = [
       {
@@ -1631,22 +1631,77 @@ describe('#send', () => {
       verifyRequest(SignTypedDataVersion.V4, typedData)
     })
 
-    it('handles invalid EIP-712 data by defaulting to v4', () => {
-      const params = [typedDataInvalid, address]
+    it('infers V4 for fixed arrays', () => {
+      const arrayData = {
+        ...typedData,
+        types: {
+          ...typedData.types,
+          Mail: [...typedData.types.Mail, { name: 'values', type: 'uint256[2]' }]
+        },
+        message: { ...typedData.message, values: [1, 2] }
+      }
 
-      send({ method: 'eth_signTypedData', params })
+      send({ method: 'eth_signTypedData', params: [address, arrayData] })
 
-      verifyRequest(SignTypedDataVersion.V4, typedDataInvalid)
+      verifyRequest(SignTypedDataVersion.V4, arrayData)
     })
 
-    it('does not submit a request without a message', (done) => {
-      const params = [address, { ...typedData, message: undefined }]
+    const invalidRequests = [
+      ['null data', 'eth_signTypedData', [address, null]],
+      ['primitive data', 'eth_signTypedData', [address, 1]],
+      ['missing data', 'eth_signTypedData', [address]],
+      ['named params', 'eth_signTypedData', { address, typedData }],
+      ['invalid signing address', 'eth_signTypedData_v4', [1, typedData]],
+      ['missing types', 'eth_signTypedData_v4', [address, { ...typedData, types: undefined }]],
+      ['missing domain', 'eth_signTypedData_v4', [address, { ...typedData, domain: undefined }]],
+      ['missing message', 'eth_signTypedData_v3', [address, { ...typedData, message: undefined }]],
+      ['unknown primary type', 'eth_signTypedData', [address, { ...typedData, primaryType: 'Unknown' }]],
+      ['legacy data passed to V4', 'eth_signTypedData_v4', [address, typedDataLegacy]],
+      ['EIP-712 data passed to V1', 'eth_signTypedData_v1', [address, typedData]],
+      [
+        'V3 dynamic array',
+        'eth_signTypedData_v3',
+        [
+          address,
+          {
+            ...typedData,
+            types: {
+              ...typedData.types,
+              Mail: [...typedData.types.Mail, { name: 'values', type: 'uint256[]' }]
+            },
+            message: { ...typedData.message, values: [1, 2] }
+          }
+        ]
+      ],
+      [
+        'V3 fixed array',
+        'eth_signTypedData_v3',
+        [
+          address,
+          {
+            ...typedData,
+            types: {
+              ...typedData.types,
+              Mail: [...typedData.types.Mail, { name: 'values', type: 'uint256[2]' }]
+            },
+            message: { ...typedData.message, values: [1, 2] }
+          }
+        ]
+      ]
+    ]
 
-      send({ method: 'eth_signTypedData_v3', params }, (err) => {
-        expect(err.error.message).toBe('Typed data missing message')
-        expect(err.error.code).toBe(-1)
-        done()
-      })
+    it.each(invalidRequests)('rejects %s before creating request state', (_, method, params) => {
+      const response = jest.fn()
+
+      send({ method, params }, response)
+
+      expect(response).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ code: -32602, message: expect.stringMatching(/^Invalid params:/) })
+        })
+      )
+      expect(accountRequests).toHaveLength(0)
+      expect(provider.handlers).toEqual({})
     })
 
     it('does not submit a request from an unknown account', (done) => {
@@ -1670,12 +1725,14 @@ describe('#send', () => {
       })
     })
 
-    it('does not submit a request with malformed type data', (done) => {
+    it('does not submit a request with malformed typed data JSON', (done) => {
       const params = [address, 'test']
 
       send({ method: 'eth_signTypedData_v3', params }, (err) => {
-        expect(err.error.message).toBe('Malformed typed data')
-        expect(err.error.code).toBe(-1)
+        expect(err.error.message).toBe('Invalid params: malformed typed data JSON')
+        expect(err.error.code).toBe(-32602)
+        expect(accountRequests).toHaveLength(0)
+        expect(provider.handlers).toEqual({})
         done()
       })
     })
