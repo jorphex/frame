@@ -1,4 +1,3 @@
-import { intToHex } from '@ethereumjs/util'
 import { chainUsesOptimismFees } from '../../../resources/utils/chains'
 
 import type { GasFees } from '../../store/state'
@@ -13,24 +12,32 @@ type CalcOpts = Partial<{
 }>
 
 type RawGasFees = {
-  nextBaseFee: number
-  maxBaseFeePerGas: number
-  maxPriorityFeePerGas: number
-  maxFeePerGas: number
+  nextBaseFee: bigint
+  maxBaseFeePerGas: bigint
+  maxPriorityFeePerGas: bigint
+  maxFeePerGas: bigint
 }
 
 export type Block = {
-  baseFee: number
-  rewards: number[]
-  gasUsedRatio: number
+  baseFee: bigint
+  rewards: bigint[]
+  gasUsedRatio?: number
+}
+
+const MAX_UINT256 = (1n << 256n) - 1n
+const POLYGON_MIN_PRIORITY_FEE = 25_000_000_000n
+
+function quantityToHex(value: bigint) {
+  if (value < 0n || value > MAX_UINT256) throw new Error('Calculated gas fee exceeds uint256')
+  return `0x${value.toString(16)}`
 }
 
 function feesToHex(fees: RawGasFees) {
   return {
-    nextBaseFee: intToHex(fees.nextBaseFee),
-    maxBaseFeePerGas: intToHex(fees.maxBaseFeePerGas),
-    maxPriorityFeePerGas: intToHex(fees.maxPriorityFeePerGas),
-    maxFeePerGas: intToHex(fees.maxFeePerGas)
+    nextBaseFee: quantityToHex(fees.nextBaseFee),
+    maxBaseFeePerGas: quantityToHex(fees.maxBaseFeePerGas),
+    maxPriorityFeePerGas: quantityToHex(fees.maxPriorityFeePerGas),
+    maxFeePerGas: quantityToHex(fees.maxFeePerGas)
   }
 }
 
@@ -57,9 +64,10 @@ function calculateReward(blocks: Block[], opts: CalcOpts = {}) {
   const eligibleRewardsBlocks = rewardCalculationStrategies.reduce((foundBlocks, strategy) => {
     if (foundBlocks.length === 0) {
       const blockSample = blocks.slice(blocks.length - Math.min(strategy.blockSampleSize, blocks.length))
-      const eligibleBlocks = blockSample.filter(
-        (block) => block.gasUsedRatio > strategy.minRatio && block.gasUsedRatio <= strategy.maxRatio
-      )
+      const eligibleBlocks = blockSample.filter((block) => {
+        const ratio = block.gasUsedRatio
+        return ratio !== undefined && ratio > strategy.minRatio && ratio <= strategy.maxRatio
+      })
 
       if (eligibleBlocks.length > 0) return eligibleBlocks
     }
@@ -67,31 +75,35 @@ function calculateReward(blocks: Block[], opts: CalcOpts = {}) {
     return foundBlocks
   }, [] as Block[])
 
+  const rewardAtBand = (block: Block) => block.rewards[Math.min(percentileBand, block.rewards.length - 1)]
+  const lastBlockFee = rewardAtBand(blocks[blocks.length - 1]) ?? 0n
+  const eligibleRewards = eligibleRewardsBlocks.map(rewardAtBand).filter((reward) => reward !== undefined)
+
+  if (eligibleRewards.length === 0) return lastBlockFee
   if (averageMethod === 'average') {
-    return Math.floor(
-      eligibleRewardsBlocks
-        .map((block) => block.rewards[Math.min(percentileBand, block.rewards.length - 1)])
-        .reduce((sum, reward) => sum + reward, 0) / eligibleRewardsBlocks.length
-    )
-  } else {
-    // use the median reward from the block sample or use the fee from the last block as a last resort
-    const lastBlockFee = blocks[blocks.length - 1].rewards[0]
-    return (
-      eligibleRewardsBlocks
-        .map((block) => block.rewards[Math.min(percentileBand, block.rewards.length - 1)])
-        .sort()[Math.floor(eligibleRewardsBlocks.length / 2)] || lastBlockFee
-    )
+    return eligibleRewards.reduce((sum, reward) => sum + reward, 0n) / BigInt(eligibleRewards.length)
   }
+
+  // Keep the existing upper-median convention for an even number of samples.
+  return eligibleRewards.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[Math.floor(eligibleRewards.length / 2)]
 }
 
 function estimateGasFees(blocks: Block[], opts: CalcOpts = {}) {
+  if (blocks.length < 2) throw new Error('Fee history requires at least one completed block')
+
+  const normalizedBlocks = blocks.map((block) => ({
+    ...block,
+    baseFee: BigInt(block.baseFee),
+    rewards: block.rewards.map((reward) => BigInt(reward))
+  }))
+
   // plan for max fee of 2 full blocks, each one increasing the fee by 12.5%
-  const nextBlockFee = blocks[blocks.length - 1].baseFee // base fee for next block
-  const calculatedFee = Math.ceil(nextBlockFee * 1.125 * 1.125)
+  const nextBlockFee = normalizedBlocks[normalizedBlocks.length - 1].baseFee // base fee for next block
+  const calculatedFee = (nextBlockFee * 81n + 63n) / 64n
 
   // the last block contains only the base fee for the next block but no fee history, so
   // don't use it in the block reward calculation
-  const medianBlockReward = calculateReward(blocks.slice(0, blocks.length - 1), opts)
+  const medianBlockReward = calculateReward(normalizedBlocks.slice(0, normalizedBlocks.length - 1), opts)
 
   const estimatedGasFees = {
     nextBaseFee: nextBlockFee,
@@ -118,7 +130,10 @@ function PolygonGasCalculator() {
     calculateGas: (blocks: Block[]) => {
       const fees = estimateGasFees(blocks)
 
-      const maxPriorityFeePerGas = Math.max(fees.maxPriorityFeePerGas, 30e9)
+      const maxPriorityFeePerGas =
+        fees.maxPriorityFeePerGas > POLYGON_MIN_PRIORITY_FEE
+          ? fees.maxPriorityFeePerGas
+          : POLYGON_MIN_PRIORITY_FEE
 
       return feesToHex({
         ...fees,
@@ -139,11 +154,11 @@ function OpStackGasCalculator() {
   }
 }
 
-export function createGasCalculator(chainId: string): GasCalculator {
-  const id = parseInt(chainId)
+export function createGasCalculator(chainId: string | number = 0): GasCalculator {
+  const id = Number(chainId)
   // TODO: maybe this can be tied into chain config somehow
-  if (id === 137 || id === 80001) {
-    // Polygon and Mumbai testnet
+  if (id === 137) {
+    // Polygon PoS mainnet requires a minimum priority fee.
     return PolygonGasCalculator()
   }
 

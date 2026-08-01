@@ -40,11 +40,14 @@ class MockConnection extends EventEmitter {
         } else if (payload.method === 'eth_gasPrice') {
           return resolve(gasPrice)
         } else if (payload.method === 'eth_feeHistory') {
-          return resolve({
-            baseFeePerGas: [gweiToHex(15), gweiToHex(8), gweiToHex(9), gweiToHex(8), gweiToHex(7)],
-            gasUsedRatio: [0.11, 0.8, 0.2, 0.5],
-            reward: [[gweiToHex(32)], [gweiToHex(32)], [gweiToHex(32)], [gweiToHex(32)]]
-          })
+          return resolve(
+            feeHistoryResponse || {
+              baseFeePerGas: [gweiToHex(15), gweiToHex(8), gweiToHex(9), gweiToHex(8), gweiToHex(7)],
+              gasUsedRatio: [0.11, 0.8, 0.2, 0.5],
+              oldestBlock: '0x1',
+              reward: Array(4).fill([gweiToHex(32), gweiToHex(32)])
+            }
+          )
         }
 
         return reject('unknown method!')
@@ -58,7 +61,7 @@ class MockConnection extends EventEmitter {
   }
 }
 
-let block, gasPrice, observer, connectionObserver
+let block, feeHistoryResponse, gasPrice, observer, connectionObserver
 
 const state = {
   main: {
@@ -174,6 +177,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   block = {}
+  feeHistoryResponse = undefined
 
   connectionObserver = store.observer(() => {
     Object.values(mockConnections).forEach((chain) => {
@@ -324,4 +328,30 @@ Object.values(mockConnections).forEach((chain) => {
 
     store.toggleConnection('ethereum', chain.id, 'primary', true)
   })
+})
+
+it('falls back to legacy gas pricing when fee history is malformed', (done) => {
+  const chain = mockConnections['wss://evm.pylon.link/sepolia']
+  gasPrice = gweiToHex(6)
+  block = {
+    number: addHexPrefix((12965200).toString(16)),
+    baseFeePerGas: gweiToHex(9)
+  }
+  feeHistoryResponse = {
+    baseFeePerGas: ['0x01', '0x2'],
+    gasUsedRatio: [0.5],
+    oldestBlock: '0x1',
+    reward: [[gweiToHex(1), gweiToHex(1)]]
+  }
+
+  observer = store.observer(() => {
+    const gas = store(`main.networksMeta.ethereum.${chain.id}.gas.price`)
+
+    if (gas.levels.fast === gasPrice) {
+      expect(gas.fees).toBeNull()
+      done()
+    }
+  })
+
+  store.toggleConnection('ethereum', chain.id, 'primary', true)
 })

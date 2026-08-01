@@ -220,7 +220,7 @@ class ChainConnection extends EventEmitter {
 
       try {
         if (feeMarket) {
-          const gasPrice = parseInt(feeMarket.maxBaseFeePerGas) + parseInt(feeMarket.maxPriorityFeePerGas)
+          const gasPrice = BigInt(feeMarket.maxBaseFeePerGas) + BigInt(feeMarket.maxPriorityFeePerGas)
 
           store.setGasPrices(this.type, this.chainId, { fast: addHexPrefix(gasPrice.toString(16)) })
           store.setGasDefault(this.type, this.chainId, 'fast')

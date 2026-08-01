@@ -33,6 +33,31 @@ describe('#createGasCalculator', () => {
       expect(maxPriorityFeePerGas).toBe('0x77359400')
     })
 
+    it('sorts priority fee samples numerically', async () => {
+      const feeHistory = [
+        { baseFee: 1, gasUsedRatio: 0.5, rewards: [2] },
+        { baseFee: 1, gasUsedRatio: 0.5, rewards: [10] },
+        { baseFee: 1, gasUsedRatio: 0.5, rewards: [11] },
+        { baseFee: 1, rewards: [] }
+      ]
+
+      const { maxPriorityFeePerGas } = await gasCalculator.calculateGas(feeHistory)
+
+      expect(maxPriorityFeePerGas).toBe('0xa')
+    })
+
+    it('calculates base fees exactly beyond the safe integer range', async () => {
+      const nextBaseFee = 9007199254740993n
+      const feeHistory = [
+        { baseFee: 1n, gasUsedRatio: 0.5, rewards: [1n] },
+        { baseFee: nextBaseFee, rewards: [] }
+      ]
+
+      const { maxBaseFeePerGas } = await gasCalculator.calculateGas(feeHistory)
+
+      expect(maxBaseFeePerGas).toBe(`0x${((nextBaseFee * 81n + 63n) / 64n).toString(16)}`)
+    })
+
     it('excludes full blocks from the priority fee calculation', async () => {
       // all full blocks (gas ratios above 0.9) will be excluded from calculating the median priority fee
       const feeHistory = [
@@ -144,17 +169,17 @@ describe('#createGasCalculator', () => {
   describe('polygon gas calculator', () => {
     const gasCalculator = createGasCalculator(137)
 
-    it('should enforce a minimum of 30 gwei for the priority fee', async () => {
+    it('enforces the documented 25 gwei mainnet priority fee minimum', async () => {
       const { maxPriorityFeePerGas } = await gasCalculator.calculateGas([
         { baseFee: 8, gasUsedRatio: 0.07942918604838942, rewards: [1000000000] },
         { baseFee: 8, gasUsedRatio: 0.990240614960509, rewards: [1000000000] },
         { baseFee: 182, rewards: [] }
       ])
 
-      expect(maxPriorityFeePerGas).toBe(gweiToHex(30))
+      expect(maxPriorityFeePerGas).toBe(gweiToHex(25))
     })
 
-    it('does not change the priority fee if above 30 gwei', async () => {
+    it('does not change the priority fee if above 25 gwei', async () => {
       const gasCalculator = createGasCalculator(137)
 
       const { maxPriorityFeePerGas } = await gasCalculator.calculateGas([
@@ -164,6 +189,16 @@ describe('#createGasCalculator', () => {
       ])
 
       expect(maxPriorityFeePerGas).toBe(gweiToHex(45))
+    })
+
+    it.each([80001, 80002])('does not apply the mainnet floor to chain %s', async (chainId) => {
+      const gasCalculator = createGasCalculator(chainId)
+      const { maxPriorityFeePerGas } = await gasCalculator.calculateGas([
+        { baseFee: 8, gasUsedRatio: 0.5, rewards: [1000000000] },
+        { baseFee: 182, rewards: [] }
+      ])
+
+      expect(maxPriorityFeePerGas).toBe(gweiToHex(1))
     })
   })
 })
