@@ -3,12 +3,13 @@ import log from 'electron-log'
 
 import provider from '../provider'
 import accounts from '../accounts'
-import store from '../store'
 
 import { updateOrigin, isTrusted, parseOrigin } from './origins'
 import parsePayload, { JsonRpcError, MAX_REQUEST_BYTES } from './validPayload'
 import protectedMethods from './protectedMethods'
 import { parseChainId } from '../provider/chainRequests'
+import originSessions from './originSessions'
+import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
 
 const logTraffic = process.env.LOG_TRAFFIC
 
@@ -30,7 +31,19 @@ const polls: Record<string, string[]> = {}
 const pollSubs: Record<string, Subscription> = {}
 const pending: Record<string, PendingRequest> = {}
 const cleanupTimers: Record<string, NodeJS.Timeout> = {}
-const connectionMonitors: Record<string, NodeJS.Timeout> = {}
+
+export const HTTP_MAX_CONNECTIONS = 128
+export const HTTP_HEADERS_TIMEOUT_MS = 10 * 1000
+export const HTTP_REQUEST_TIMEOUT_MS = 30 * 1000
+export const HTTP_KEEP_ALIVE_TIMEOUT_MS = 5 * 1000
+export const HTTP_MAX_REQUESTS_PER_SOCKET = 1000
+export const HTTP_REQUEST_RATE_LIMIT: RateLimitOptions = { maxRequests: 3000, windowMs: 10 * 1000 }
+export const HTTP_SOCKET_RATE_LIMIT: RateLimitOptions = { maxRequests: 300, windowMs: 10 * 1000 }
+
+interface HTTPServerOptions {
+  requestRateLimit?: RateLimitOptions
+  socketRateLimit?: RateLimitOptions
+}
 
 const sendJson = (
   res: ServerResponse,
@@ -57,16 +70,11 @@ const rejectOversizedRequest = (req: IncomingMessage, res: ServerResponse) => {
   })
 }
 
-function extendSession(originId: string) {
-  if (originId) {
-    clearTimeout(connectionMonitors[originId])
-
-    const timer = setTimeout(() => {
-      store.endOriginSession(originId)
-    }, 60 * 1000)
-    timer.unref()
-    connectionMonitors[originId] = timer
-  }
+const rejectRateLimitedRequest = (req: IncomingMessage, res: ServerResponse) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Connection', 'close')
+  res.once('finish', () => req.destroy())
+  sendTransportError(res, 429, null, { code: -32005, message: 'Request rate limit exceeded' })
 }
 
 const cleanup = (id: string) => {
@@ -155,7 +163,7 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
           })
         }
 
-        extendSession(payload._origin)
+        originSessions.extend(payload._origin)
 
         if (protectedMethods.indexOf(payload.method) > -1 && !(await isTrusted(payload))) {
           let error = { message: `Permission denied, approve ${origin} in Frame to continue`, code: 4100 }
@@ -233,6 +241,28 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
   }
 }
 
+const withRateLimits = (
+  requestHandler: typeof handler,
+  requestRateLimit: RateLimitOptions,
+  socketRateLimit: RateLimitOptions
+) => {
+  const requests = new FixedWindowRateLimiter(requestRateLimit)
+  const socketRequests = new WeakMap<IncomingMessage['socket'], FixedWindowRateLimiter>()
+
+  return (req: IncomingMessage, res: ServerResponse) => {
+    let socketLimiter = socketRequests.get(req.socket)
+    if (!socketLimiter) {
+      socketLimiter = new FixedWindowRateLimiter(socketRateLimit)
+      socketRequests.set(req.socket, socketLimiter)
+    }
+
+    if (!requests.allow() || !socketLimiter.allow()) {
+      return rejectRateLimitedRequest(req, res)
+    }
+    return requestHandler(req, res)
+  }
+}
+
 provider.on('data:subscription', (payload: RPC.Susbcription.Response) => {
   const subscription = pollSubs[payload.params.subscription]
   if (subscription) {
@@ -245,6 +275,18 @@ provider.on('data:subscription', (payload: RPC.Susbcription.Response) => {
   }
 })
 
-export default function () {
-  return http.createServer(handler)
+export default function (options: HTTPServerOptions = {}) {
+  const server = http.createServer(
+    withRateLimits(
+      handler,
+      options.requestRateLimit ?? HTTP_REQUEST_RATE_LIMIT,
+      options.socketRateLimit ?? HTTP_SOCKET_RATE_LIMIT
+    )
+  )
+  server.maxConnections = HTTP_MAX_CONNECTIONS
+  server.headersTimeout = HTTP_HEADERS_TIMEOUT_MS
+  server.requestTimeout = HTTP_REQUEST_TIMEOUT_MS
+  server.keepAliveTimeout = HTTP_KEEP_ALIVE_TIMEOUT_MS
+  server.maxRequestsPerSocket = HTTP_MAX_REQUESTS_PER_SOCKET
+  return server
 }

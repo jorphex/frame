@@ -30,8 +30,10 @@ they are not proof of process identity.
 Protected RPC methods require an account permission. Requests from the companion
 extension have separate recognition logic. The current model does not fully
 isolate permissions by process identity, transport, account, chain, method, or
-expiry. Request bodies are bounded, but connection counts and request rates are
-not yet strictly bounded.
+expiry. Request bodies, HTTP connections, WebSocket clients, and request rates
+have explicit ceilings. Header and request-body receive times are bounded; HTTP
+subscription polls complete within 15 seconds. These availability controls do
+not authenticate callers or make asserted origins trustworthy.
 
 The operating system account is therefore a major trust boundary. Frame is not
 expected to protect wallet data from malware, debuggers, or an administrator that

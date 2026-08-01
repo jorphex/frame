@@ -2,6 +2,7 @@ import WebSocket from 'ws'
 import { EventEmitter } from 'stream'
 
 import store from '../../../main/store'
+import provider from '../../../main/provider'
 import ws from '../../../main/api/ws'
 import { MAX_REQUEST_BYTES } from '../../../main/api/validPayload'
 
@@ -15,7 +16,7 @@ const extensionRequest = {
 
 jest.mock('ws')
 jest.mock('../../../main/store')
-jest.mock('../../../main/provider', () => ({ on: jest.fn() }))
+jest.mock('../../../main/provider', () => ({ on: jest.fn(), send: jest.fn() }))
 jest.mock('../../../main/accounts', () => {})
 jest.mock('../../../main/windows', () => {})
 
@@ -25,6 +26,7 @@ beforeEach(() => {
   socketConnection = new EventEmitter()
   mockSocket = new EventEmitter()
   mockSocket.readyState = WebSocket.OPEN
+  mockSocket.close = jest.fn()
 
   WebSocket.Server.mockReturnValueOnce(socketConnection)
 
@@ -33,7 +35,77 @@ beforeEach(() => {
 })
 
 it('configures the shared request size limit', () => {
-  expect(WebSocket.Server).toHaveBeenCalledWith({ server: undefined, maxPayload: MAX_REQUEST_BYTES })
+  expect(WebSocket.Server).toHaveBeenCalledWith({
+    server: undefined,
+    maxPayload: MAX_REQUEST_BYTES,
+    perMessageDeflate: false
+  })
+})
+
+it('closes a client that exceeds its message rate without processing the excess request', () => {
+  const limitedServer = new EventEmitter()
+  const limitedSocket = new EventEmitter()
+  limitedSocket.readyState = WebSocket.OPEN
+  limitedSocket.close = jest.fn()
+  limitedSocket.send = jest.fn()
+  WebSocket.Server.mockReturnValueOnce(limitedServer)
+  ws(undefined, { messageRateLimit: { maxRequests: 1, windowMs: 1000 } })
+  limitedServer.emit('connection', limitedSocket, extensionRequest)
+
+  limitedSocket.emit('message', '{')
+  limitedSocket.emit('message', '{')
+
+  expect(limitedSocket.send).toHaveBeenCalledTimes(1)
+  expect(limitedSocket.close).toHaveBeenCalledWith(1013, 'Request rate limit exceeded')
+})
+
+it('closes clients beyond the configured connection limit', () => {
+  const limitedServer = new EventEmitter()
+  const firstSocket = new EventEmitter()
+  const secondSocket = new EventEmitter()
+  const replacementSocket = new EventEmitter()
+  firstSocket.close = jest.fn()
+  secondSocket.close = jest.fn()
+  replacementSocket.close = jest.fn()
+  WebSocket.Server.mockReturnValueOnce(limitedServer)
+  ws(undefined, { maxClients: 1 })
+
+  limitedServer.emit('connection', firstSocket, extensionRequest)
+  limitedServer.emit('connection', secondSocket, extensionRequest)
+
+  expect(firstSocket.close).not.toHaveBeenCalled()
+  expect(secondSocket.close).toHaveBeenCalledWith(1013, 'Server capacity exceeded')
+
+  firstSocket.emit('close')
+  limitedServer.emit('connection', replacementSocket, extensionRequest)
+  expect(replacementSocket.close).not.toHaveBeenCalled()
+})
+
+it('does not deliver subscriptions to a closing socket', () => {
+  const subscriptionId = 'subscription-closing-socket'
+  provider.send.mockImplementationOnce((payload, callback) =>
+    callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: subscriptionId })
+  )
+  const regularSocket = new EventEmitter()
+  regularSocket.readyState = WebSocket.OPEN
+  regularSocket.close = jest.fn()
+  regularSocket.send = jest.fn()
+  socketConnection.emit('connection', regularSocket, { headers: { origin: 'https://example.com' } })
+  regularSocket.emit(
+    'message',
+    JSON.stringify({ id: 9, jsonrpc: '2.0', method: 'eth_subscribe', params: ['newHeads'] })
+  )
+  regularSocket.send.mockClear()
+  regularSocket.readyState = WebSocket.CLOSING
+
+  const subscriptionListener = provider.on.mock.calls.at(-1)[1]
+  subscriptionListener({
+    jsonrpc: '2.0',
+    method: 'eth_subscription',
+    params: { subscription: subscriptionId, result: {} }
+  })
+
+  expect(regularSocket.send).not.toHaveBeenCalled()
 })
 
 it('responds to malformed JSON with a parse error', (done) => {
@@ -99,7 +171,7 @@ it('always responds to an extension request for net version with the requested c
     const responsePayload = JSON.parse(response)
     expect(responsePayload.id).toBe(rpcRequest.id)
     expect(responsePayload.jsonrpc).toBe(rpcRequest.jsonrpc)
-    expect(responsePayload.result).toBe(1)
+    expect(responsePayload.result).toBe('1')
 
     done()
   }

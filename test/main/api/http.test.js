@@ -1,6 +1,13 @@
-import { request } from 'http'
+import { Agent, request } from 'http'
 
 import createHttpServer from '../../../main/api/http'
+import {
+  HTTP_HEADERS_TIMEOUT_MS,
+  HTTP_KEEP_ALIVE_TIMEOUT_MS,
+  HTTP_MAX_CONNECTIONS,
+  HTTP_MAX_REQUESTS_PER_SOCKET,
+  HTTP_REQUEST_TIMEOUT_MS
+} from '../../../main/api/http'
 import { MAX_REQUEST_BYTES } from '../../../main/api/validPayload'
 import provider from '../../../main/provider'
 import accounts from '../../../main/accounts'
@@ -45,14 +52,15 @@ afterEach((done) => {
   server.close(done)
 })
 
-const send = ({ body = '', method = 'POST', headers = {} } = {}) =>
+const send = ({ body = '', method = 'POST', headers = {}, agent } = {}) =>
   new Promise((resolve, reject) => {
     const req = request(
       {
         host: '127.0.0.1',
         port,
         method,
-        headers
+        headers,
+        agent
       },
       (res) => {
         const chunks = []
@@ -86,6 +94,66 @@ const sendChunked = (chunks) =>
     chunks.forEach((chunk) => req.write(chunk))
     req.end()
   })
+
+const restartServer = (options) =>
+  new Promise((resolve) => {
+    server.close(() => {
+      server = createHttpServer(options)
+      server.listen(0, '127.0.0.1', () => {
+        port = server.address().port
+        resolve()
+      })
+    })
+  })
+
+it('configures explicit connection and timeout limits', () => {
+  expect(server.maxConnections).toBe(HTTP_MAX_CONNECTIONS)
+  expect(server.headersTimeout).toBe(HTTP_HEADERS_TIMEOUT_MS)
+  expect(server.requestTimeout).toBe(HTTP_REQUEST_TIMEOUT_MS)
+  expect(server.keepAliveTimeout).toBe(HTTP_KEEP_ALIVE_TIMEOUT_MS)
+  expect(server.maxRequestsPerSocket).toBe(HTTP_MAX_REQUESTS_PER_SOCKET)
+  expect(server.requestTimeout).toBeGreaterThan(15 * 1000)
+})
+
+it('rejects excess requests before provider forwarding', async () => {
+  await restartServer({
+    requestRateLimit: { maxRequests: 1, windowMs: 1000 },
+    socketRateLimit: { maxRequests: 10, windowMs: 1000 }
+  })
+  const payload = { id: 7, jsonrpc: '2.0', method: 'eth_chainId', params: [] }
+
+  await expect(send({ body: JSON.stringify(payload) })).resolves.toMatchObject({ status: 200 })
+  await expect(send({ body: JSON.stringify(payload) })).resolves.toMatchObject({
+    status: 429,
+    headers: { 'access-control-allow-origin': '*', connection: 'close' },
+    body: {
+      id: null,
+      jsonrpc: '2.0',
+      error: { code: -32005, message: 'Request rate limit exceeded' }
+    }
+  })
+  expect(provider.send).toHaveBeenCalledTimes(1)
+})
+
+it('applies the per-socket request rate to reused connections', async () => {
+  await restartServer({
+    requestRateLimit: { maxRequests: 10, windowMs: 1000 },
+    socketRateLimit: { maxRequests: 1, windowMs: 1000 }
+  })
+  const agent = new Agent({ keepAlive: true, maxSockets: 1 })
+  const payload = { id: 7, jsonrpc: '2.0', method: 'eth_chainId', params: [] }
+
+  try {
+    await expect(send({ body: JSON.stringify(payload), agent })).resolves.toMatchObject({ status: 200 })
+    await expect(send({ body: JSON.stringify(payload), agent })).resolves.toMatchObject({
+      status: 429,
+      body: { error: { code: -32005 } }
+    })
+  } finally {
+    agent.destroy()
+  }
+  expect(provider.send).toHaveBeenCalledTimes(1)
+})
 
 it('returns a JSON-RPC parse error for malformed JSON', async () => {
   await expect(send({ body: '{' })).resolves.toMatchObject({

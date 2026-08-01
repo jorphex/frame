@@ -3,7 +3,6 @@ import WebSocket from 'ws'
 import { v4 as uuid } from 'uuid'
 import log from 'electron-log'
 
-import store from '../store'
 import provider from '../provider'
 import accounts from '../accounts'
 import windows from '../windows'
@@ -19,12 +18,21 @@ import {
 import parsePayload, { MAX_REQUEST_BYTES } from './validPayload'
 import protectedMethods from './protectedMethods'
 import { parseChainId } from '../provider/chainRequests'
+import originSessions from './originSessions'
+import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
 
 const logTraffic = (origin: string) =>
   process.env.LOG_TRAFFIC === 'true' || process.env.LOG_TRAFFIC === origin
 
 const subs: Record<string, Subscription> = {}
-const connectionMonitors: Record<string, NodeJS.Timeout> = {}
+
+export const WS_MAX_CLIENTS = 64
+export const WS_MESSAGE_RATE_LIMIT: RateLimitOptions = { maxRequests: 300, windowMs: 10 * 1000 }
+
+interface WebSocketServerOptions {
+  maxClients?: number
+  messageRateLimit?: RateLimitOptions
+}
 
 interface Subscription {
   originId: string
@@ -50,22 +58,11 @@ type TransportResponse =
       error: { code: number; message: string }
     }
 
-function extendSession(originId: string) {
-  if (originId) {
-    clearTimeout(connectionMonitors[originId])
-
-    const timer = setTimeout(() => {
-      store.endOriginSession(originId)
-    }, 60 * 1000)
-    timer.unref()
-    connectionMonitors[originId] = timer
-  }
-}
-
-const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
+const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLimitOptions) => {
   socket.id = uuid()
   socket.origin = req.headers.origin
   socket.frameExtension = parseFrameExtension(req)
+  const requests = new FixedWindowRateLimiter(rateLimit)
 
   const res = (payload: TransportResponse) => {
     if (socket.readyState === WebSocket.OPEN) {
@@ -76,6 +73,11 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
   }
 
   socket.on('message', async (data) => {
+    if (!requests.allow()) {
+      socket.close(1013, 'Request rate limit exceeded')
+      return
+    }
+
     const parsedPayload = parsePayload<ExtensionPayload>(data.toString())
     if (!parsedPayload.success) {
       return res({ id: parsedPayload.id, jsonrpc: '2.0', error: parsedPayload.error })
@@ -136,7 +138,7 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
     }
 
     if (!rawPayload.__extensionConnecting) {
-      extendSession(payload._origin)
+      originSessions.extend(payload._origin)
     }
 
     if (origin === 'frame-extension') {
@@ -145,7 +147,8 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
 
       const { id, jsonrpc } = rawPayload
       if (rawPayload.method === 'eth_chainId') return res({ id, jsonrpc, result: chainId })
-      if (rawPayload.method === 'net_version') return res({ id, jsonrpc, result: parseInt(chainId, 16) })
+      if (rawPayload.method === 'net_version')
+        return res({ id, jsonrpc, result: BigInt(chainId).toString(10) })
     }
 
     if (protectedMethods.indexOf(payload.method) > -1 && !(await isTrusted(payload))) {
@@ -192,14 +195,27 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage) => {
   })
 }
 
-export default function (server: Server) {
-  const ws = new WebSocket.Server({ server, maxPayload: MAX_REQUEST_BYTES })
-  ws.on('connection', handler)
+export default function (server: Server, options: WebSocketServerOptions = {}) {
+  const clients = new Set<FrameWebSocket>()
+  const maxClients = options.maxClients ?? WS_MAX_CLIENTS
+  const messageRateLimit = options.messageRateLimit ?? WS_MESSAGE_RATE_LIMIT
+  const ws = new WebSocket.Server({ server, maxPayload: MAX_REQUEST_BYTES, perMessageDeflate: false })
+  ws.on('connection', (socket: FrameWebSocket, req: IncomingMessage) => {
+    if (clients.size >= maxClients) {
+      socket.on('error', (err) => log.error(err))
+      socket.close(1013, 'Server capacity exceeded')
+      return
+    }
+
+    clients.add(socket)
+    socket.once('close', () => clients.delete(socket))
+    handler(socket, req, messageRateLimit)
+  })
 
   provider.on('data:subscription', (payload: RPC.Susbcription.Response) => {
     const subscription = subs[payload.params.subscription]
 
-    if (subscription) {
+    if (subscription && subscription.socket.readyState === WebSocket.OPEN) {
       subscription.socket.send(JSON.stringify(payload))
     }
   })
