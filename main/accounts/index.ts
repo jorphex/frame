@@ -183,10 +183,11 @@ export class Accounts extends EventEmitter {
     log.info('confirmRequestApproval', reqId, approvalType)
 
     const currentAccount = this.current()
-    if (currentAccount && currentAccount.requests[reqId]) {
-      const txRequest = this.getTransactionRequest(currentAccount, reqId)
-
-      const approval = (txRequest.approvals || []).find((a) => a.type === approvalType)
+    const request = currentAccount?.getRequest(reqId) as
+      | (TransactionRequest | PermitSignatureRequest)
+      | undefined
+    if (currentAccount && request && request.status === undefined) {
+      const approval = (request.approvals || []).find((a) => a.type === approvalType)
 
       if (approval) {
         approval.approve(approvalData)
@@ -235,6 +236,7 @@ export class Accounts extends EventEmitter {
       const normalizedAmount = amount.toString(10)
       permitReq.typedMessage.data.message.value = normalizedAmount
       permitReq.permit.value = normalizedAmount
+      currentAccount.syncPermitApprovalRisk(permitReq)
       currentAccount.update()
     }
   }

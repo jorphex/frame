@@ -59,6 +59,39 @@ const tokenContract = '0x2222222222222222222222222222222222222222'
 const delegate = '0x3333333333333333333333333333333333333333'
 const maxTokenAmount = 2n ** 256n - 1n
 
+const permitRequest = (value, handlerId = 'token-permit') => ({
+  handlerId,
+  type: 'signErc20Permit',
+  account: accountState.address,
+  origin: 'example.test',
+  payload: { params: [accountState.address, {}] },
+  typedMessage: {
+    data: {
+      domain: { chainId: 1, verifyingContract: tokenContract },
+      message: {
+        owner: accountState.address,
+        spender: delegate,
+        value,
+        nonce: '0',
+        deadline: '2000000000'
+      }
+    },
+    version: 'V4'
+  },
+  permit: {
+    owner: accountState.address,
+    spender: { address: delegate, ens: '', type: 'external' },
+    value,
+    nonce: '0',
+    deadline: '2000000000',
+    chainId: 1,
+    verifyingContract: { address: tokenContract, ens: '', type: 'contract' }
+  },
+  tokenData: { name: 'Test Token', symbol: 'TST', decimals: 18 },
+  context: { requestChainId: 1, domainChainId: '1', risks: [] },
+  approvals: []
+})
+
 beforeEach(() => {
   jest.clearAllTimers()
   simulateTransaction.mockImplementation(() => new Promise(() => {}))
@@ -67,6 +100,67 @@ beforeEach(() => {
 })
 
 describe('#addRequest', () => {
+  it('requires explicit consent for an unlimited EIP-2612 permit', () => {
+    const request = permitRequest(maxTokenAmount.toString(10))
+
+    account.addRequest(request)
+
+    expect(request.approvals).toHaveLength(1)
+    expect(request.approvals[0]).toMatchObject({
+      type: ApprovalType.TokenPermitRisk,
+      approved: false,
+      data: {
+        title: 'Unlimited Token Permit',
+        confirmLabel: 'Sign Permit Anyway'
+      }
+    })
+  })
+
+  it('does not require extra consent for an initially finite EIP-2612 permit', () => {
+    const request = permitRequest('100', 'finite-token-permit')
+
+    account.addRequest(request)
+
+    expect(request.approvals).toEqual([])
+  })
+
+  it('synchronizes unlimited permit consent across safe and repeated values', () => {
+    const request = permitRequest(maxTokenAmount.toString(10), 'permit-consent-lifecycle')
+    account.addRequest(request)
+    const approval = request.approvals[0]
+    approval.approve()
+
+    account.syncPermitApprovalRisk(request)
+    expect(request.approvals[0]).toBe(approval)
+    expect(approval.approved).toBe(true)
+
+    request.permit.value = '100'
+    request.typedMessage.data.message.value = '100'
+    account.syncPermitApprovalRisk(request)
+    expect(request.approvals).toEqual([])
+
+    request.permit.value = maxTokenAmount.toString(10)
+    request.typedMessage.data.message.value = maxTokenAmount.toString(10)
+    account.syncPermitApprovalRisk(request)
+    expect(request.approvals).toHaveLength(1)
+    expect(request.approvals[0].approved).toBe(false)
+
+    request.permit.value = '0'
+    request.typedMessage.data.message.value = '0'
+    account.syncPermitApprovalRisk(request)
+    expect(request.approvals).toEqual([])
+  })
+
+  it('derives permit authority from the exact typed message sent to the signer', () => {
+    const request = permitRequest(maxTokenAmount.toString(10), 'permit-signed-value')
+    request.permit.value = '1'
+
+    account.addRequest(request)
+
+    expect(request.approvals).toHaveLength(1)
+    expect(request.approvals[0].type).toBe(ApprovalType.TokenPermitRisk)
+  })
+
   describe('recognizing requests', () => {
     it('recognizes an ERC-20 approval', (done) => {
       const request = {

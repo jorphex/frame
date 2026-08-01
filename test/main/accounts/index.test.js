@@ -9,6 +9,7 @@ import signers from '../../../main/signers'
 import { signerCompatibility, maxFee } from '../../../main/transaction'
 import { toRpcQuantity } from '../../../resources/domain/transaction/quantity'
 import { GasFeesSource } from '../../../resources/domain/transaction'
+import { ApprovalType } from '../../../resources/constants'
 import { gweiToHex } from '../../util'
 
 jest.mock('../../../main/provider', () => ({ send: jest.fn(), emit: jest.fn(), on: jest.fn() }))
@@ -895,6 +896,49 @@ describe('#updateRequest', () => {
 
     expect(permitRequest.typedMessage.data.message.value).toBe('1')
     expect(update).not.toHaveBeenCalled()
+  })
+
+  it('adds, confirms, and removes unlimited permit consent in main-owned state', () => {
+    const activeAccount = Accounts.current()
+    const permitRequest = {
+      handlerId: 'permit-approval-lifecycle',
+      type: 'signErc20Permit',
+      typedMessage: { data: { message: { value: '1' } } },
+      permit: { value: '1' },
+      approvals: []
+    }
+    activeAccount.requests[permitRequest.handlerId] = permitRequest
+    const max = (2n ** 256n - 1n).toString(10)
+
+    Accounts.updateRequest(permitRequest.handlerId, { amount: max }, null)
+
+    expect(permitRequest.approvals).toHaveLength(1)
+    expect(permitRequest.approvals[0]).toMatchObject({
+      type: ApprovalType.TokenPermitRisk,
+      approved: false
+    })
+
+    Accounts.confirmRequestApproval(permitRequest.handlerId, ApprovalType.TokenPermitRisk, {})
+    expect(permitRequest.approvals[0].approved).toBe(true)
+
+    Accounts.updateRequest(permitRequest.handlerId, { amount: '0' }, null)
+    expect(permitRequest.approvals).toEqual([])
+  })
+
+  it('does not confirm a permit approval after submission starts', () => {
+    const activeAccount = Accounts.current()
+    const approve = jest.fn()
+    const permitRequest = {
+      handlerId: 'submitted-permit-approval',
+      type: 'signErc20Permit',
+      status: 'pending',
+      approvals: [{ type: ApprovalType.TokenPermitRisk, approved: false, approve }]
+    }
+    activeAccount.requests[permitRequest.handlerId] = permitRequest
+
+    Accounts.confirmRequestApproval(permitRequest.handlerId, ApprovalType.TokenPermitRisk, {})
+
+    expect(approve).not.toHaveBeenCalled()
   })
 })
 

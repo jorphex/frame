@@ -126,6 +126,38 @@ describe('#approveTransactionRequest', () => {
   })
 })
 
+describe('#approveSignTypedData', () => {
+  it('refuses to sign a permit while its required approval is unconfirmed', (done) => {
+    accounts.signTypedData = jest.fn()
+
+    provider.approveSignTypedData(
+      {
+        handlerId: 'unconfirmed-permit',
+        type: 'signErc20Permit',
+        approvals: [{ type: 'approveUnlimitedTokenPermit', approved: false }]
+      },
+      (error) => {
+        expect(error.message).toMatch(/missing or unconfirmed/i)
+        expect(accounts.signTypedData).not.toHaveBeenCalled()
+        done()
+      }
+    )
+  })
+
+  it('fails closed when permit approval state is missing', (done) => {
+    accounts.signTypedData = jest.fn()
+
+    provider.approveSignTypedData(
+      { handlerId: 'missing-permit-approval', type: 'signErc20Permit' },
+      (error) => {
+        expect(error.message).toMatch(/missing or unconfirmed/i)
+        expect(accounts.signTypedData).not.toHaveBeenCalled()
+        done()
+      }
+    )
+  })
+})
+
 describe('#send', () => {
   beforeEach(() => {
     store.set('main.origins', '8073729a-5e59-53b7-9e69-5d9bcff94087', {
@@ -1768,6 +1800,38 @@ describe('#send', () => {
       }
     ]
 
+    const permitData = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' }
+        ],
+        Permit: [
+          { name: 'owner', type: 'address' },
+          { name: 'spender', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'nonce', type: 'uint256' },
+          { name: 'deadline', type: 'uint256' }
+        ]
+      },
+      domain: {
+        name: 'Test Token',
+        version: '1',
+        chainId: 1,
+        verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC'
+      },
+      primaryType: 'Permit',
+      message: {
+        owner: address,
+        spender: '0x1111111111111111111111111111111111111111',
+        value: (2n ** 256n - 1n).toString(10),
+        nonce: '0',
+        deadline: '2000000000'
+      }
+    }
+
     const validRequests = [
       {
         method: 'eth_signTypedData',
@@ -1871,6 +1935,42 @@ describe('#send', () => {
       send({ method: 'eth_signTypedData', params })
 
       verifyRequest(SignTypedDataVersion.V4, typedData)
+    })
+
+    it('creates a main-owned EIP-2612 permit request with approval state', () => {
+      send({ method: 'eth_signTypedData_v4', params: [address, permitData] })
+
+      expect(accountRequests).toHaveLength(1)
+      expect(accountRequests[0]).toMatchObject({
+        type: 'signErc20Permit',
+        account: address,
+        approvals: [],
+        permit: {
+          owner: address,
+          value: permitData.message.value
+        }
+      })
+    })
+
+    it('rejects an EIP-2612 owner mismatch before allocating request state', () => {
+      const response = jest.fn()
+      const mismatchedPermit = {
+        ...permitData,
+        message: {
+          ...permitData.message,
+          owner: '0x1111111111111111111111111111111111111111'
+        }
+      }
+
+      send({ method: 'eth_signTypedData_v4', params: [address, mismatchedPermit] }, response)
+
+      expect(response).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: { code: -32602, message: 'Invalid params: permit owner does not match signing address' }
+        })
+      )
+      expect(accountRequests).toHaveLength(0)
+      expect(provider.handlers).toEqual({})
     })
 
     it('infers V4 for fixed arrays', () => {

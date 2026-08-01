@@ -17,6 +17,7 @@ import windows from '../../windows'
 import nav from '../../windows/nav'
 import store from '../../store'
 import { TransactionData } from '../../../resources/domain/transaction'
+import { MAX_UINT256 } from '../../../resources/domain/transaction/quantity'
 import { isBroadTokenAuthorityEffect } from '../../../resources/domain/transaction/effects'
 import {
   effectReportsBroadTokenAuthorityIntent,
@@ -26,6 +27,7 @@ import { Type as SignerType, getSignerType } from '../../../resources/domain/sig
 
 import provider from '../../provider'
 import { ApprovalType } from '../../../resources/constants'
+import { parseTokenBaseUnitAmount } from '../../../resources/domain/token/amount'
 
 import reveal from '../../reveal'
 import { isTransactionRequest, isTypedMessageSignatureRequest } from '../../../resources/domain/request'
@@ -47,6 +49,8 @@ const storeApi = {
 interface SignerOptions {
   type?: string
 }
+
+type ManagedApprovalRequest = TransactionRequest | PermitSignatureRequest
 
 interface AccountOptions {
   address?: Address
@@ -393,11 +397,15 @@ class FrameAccount {
     }
   }
 
-  private removeApproval(req: TransactionRequest, type: ApprovalType) {
+  private removeApproval(req: ManagedApprovalRequest, type: ApprovalType) {
     req.approvals = (req.approvals || []).filter((approval) => approval.type !== type)
   }
 
-  private syncManagedApproval(req: TransactionRequest, type: ApprovalType, data?: Record<string, unknown>) {
+  private syncManagedApproval(
+    req: ManagedApprovalRequest,
+    type: ApprovalType,
+    data?: Record<string, unknown>
+  ) {
     if (!data) {
       this.removeApproval(req, type)
       return
@@ -421,8 +429,8 @@ class FrameAccount {
       data,
       approved: false,
       approve: () => {
-        const knownRequest = this.requests[req.handlerId] as TransactionRequest | undefined
-        const knownApproval = knownRequest?.approvals.find((candidate) => candidate.type === type)
+        const knownRequest = this.requests[req.handlerId] as ManagedApprovalRequest | undefined
+        const knownApproval = knownRequest?.approvals?.find((candidate) => candidate.type === type)
 
         if (knownRequest === req && knownApproval === approval) {
           approval.approved = true
@@ -508,6 +516,21 @@ class FrameAccount {
       confirmLabel: 'Approve Anyway',
       riskCount: broadApprovalCount,
       evidence
+    })
+  }
+
+  syncPermitApprovalRisk(req: PermitSignatureRequest) {
+    const amount = parseTokenBaseUnitAmount(req.typedMessage?.data?.message?.value)
+    if (amount !== MAX_UINT256) {
+      this.removeApproval(req, ApprovalType.TokenPermitRisk)
+      return
+    }
+
+    this.syncManagedApproval(req, ApprovalType.TokenPermitRisk, {
+      title: 'Unlimited Token Permit',
+      message:
+        'This EIP-2612 signature authorizes the displayed spender to use the maximum uint256 token amount. It can grant broad authority without sending an onchain transaction.',
+      confirmLabel: 'Sign Permit Anyway'
     })
   }
 
@@ -608,6 +631,11 @@ class FrameAccount {
       this.requests[r.handlerId].mode = RequestMode.Normal
       this.requests[r.handlerId].created = Date.now()
       this.requests[r.handlerId].res = res
+
+      if (req.type === 'signErc20Permit') {
+        req.approvals = req.approvals || []
+        this.syncPermitApprovalRisk(req)
+      }
 
       this.revealDetails(req)
 

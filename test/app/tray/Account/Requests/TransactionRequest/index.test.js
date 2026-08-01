@@ -9,7 +9,10 @@ import {
   getSimulationPresentation
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
 import { SimulationEffects } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData/effects'
-import { canApproveTransaction } from '../../../../../../app/tray/Footer/RequestCommand'
+import {
+  canApproveTransaction,
+  getRequiredRequestApproval
+} from '../../../../../../app/tray/Footer/RequestCommand'
 import TxApproval from '../../../../../../app/tray/Footer/RequestCommand/TxApproval'
 import link from '../../../../../../resources/link'
 import { TxClassification } from '../../../../../../main/accounts/types'
@@ -150,6 +153,45 @@ describe('simulation review', () => {
     expect(screen.getByText('Broad Token Approval')).toBeTruthy()
     expect(screen.getByText(approval.data.message)).toBeTruthy()
     await user.click(screen.getByText('Approve Anyway'))
+    expect(link.rpc).toHaveBeenCalledWith(
+      'confirmRequestApproval',
+      req,
+      approval.type,
+      {},
+      expect.any(Function)
+    )
+  })
+
+  it('selects an unconfirmed permit warning only before submission', () => {
+    const approval = { type: 'approveUnlimitedTokenPermit', approved: false }
+    const approved = { type: 'alreadyApproved', approved: true }
+
+    expect(getRequiredRequestApproval({ type: 'signErc20Permit', approvals: [approved, approval] })).toBe(
+      approval
+    )
+    expect(
+      getRequiredRequestApproval({ type: 'signErc20Permit', status: 'pending', approvals: [approval] })
+    ).toBe(false)
+  })
+
+  it('renders and confirms unlimited permit consent through the shared warning UI', async () => {
+    const req = { handlerId: 'unlimited-token-permit', type: 'signErc20Permit' }
+    const approval = {
+      type: 'approveUnlimitedTokenPermit',
+      approved: false,
+      data: {
+        title: 'Unlimited Token Permit',
+        message:
+          'This EIP-2612 signature authorizes the displayed spender to use the maximum uint256 token amount.',
+        confirmLabel: 'Sign Permit Anyway'
+      }
+    }
+
+    const { user } = render(<TxApproval req={req} approval={approval} />)
+
+    expect(screen.getByText('Unlimited Token Permit')).toBeTruthy()
+    expect(screen.getByText(approval.data.message)).toBeTruthy()
+    await user.click(screen.getByText('Sign Permit Anyway'))
     expect(link.rpc).toHaveBeenCalledWith(
       'confirmRequestApproval',
       req,

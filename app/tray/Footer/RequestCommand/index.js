@@ -19,6 +19,10 @@ export function canApproveTransaction(allowInput, simulation) {
   return allowInput && simulation?.status !== 'pending'
 }
 
+export function getRequiredRequestApproval(req) {
+  return !req?.status && (req?.approvals || []).find((approval) => !approval.approved)
+}
+
 class RequestCommand extends React.Component {
   constructor(props, context) {
     super(props, context)
@@ -325,12 +329,12 @@ class RequestCommand extends React.Component {
 
   renderTxCommand() {
     const { req } = this.props
-    const { notice, status, mode } = req
+    const { notice, mode } = req
 
     const { infoPane } = this.state
 
-    const showWarning = !status && mode !== 'monitor'
-    const requiredApproval = showWarning && (req.approvals || []).filter((a) => !a.approved)[0]
+    const showWarning = mode !== 'monitor'
+    const requiredApproval = showWarning && getRequiredRequestApproval(req)
 
     if (requiredApproval) {
       return (
@@ -357,6 +361,17 @@ class RequestCommand extends React.Component {
   renderSignDataCommand() {
     const { req } = this.props
     const { status, notice } = req
+    const requiredApproval = getRequiredRequestApproval(req)
+
+    if (requiredApproval) {
+      return (
+        <div className='requestNotice requestNoticeApproval'>
+          <div className='requestNoticeInner requestNoticeInnerApproval'>
+            <TxApproval req={req} approval={requiredApproval} />
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div>

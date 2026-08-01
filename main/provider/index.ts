@@ -315,6 +315,13 @@ export class Provider extends EventEmitter {
       delete this.handlers[req.handlerId]
     }
 
+    if (
+      req.type === 'signErc20Permit' &&
+      (!Array.isArray(req.approvals) || req.approvals.some((approval) => !approval.approved))
+    ) {
+      return cb(new Error('Token permit approval state is missing or unconfirmed'))
+    }
+
     const { payload, typedMessage } = req
     const [address] = payload.params
 
@@ -781,6 +788,17 @@ export class Provider extends EventEmitter {
     }
 
     const type = sigParser.identify(typedMessage)
+    if (type === 'signErc20Permit') {
+      const { owner } = (typedMessage.data as EIP2612TypedData).message
+      if (!isAddress(owner) || owner.toLowerCase() !== targetAccount.address.toLowerCase()) {
+        return resError(
+          { code: -32602, message: 'Invalid params: permit owner does not match signing address' },
+          payload,
+          res
+        )
+      }
+    }
+
     const handlerId = this.addRequestHandler(res)
     const context = getTypedDataContext(typedMessage, targetChain.id)
 
@@ -829,7 +847,8 @@ export class Provider extends EventEmitter {
         tokenData: {
           name: '',
           symbol: ''
-        }
+        },
+        approvals: []
       }
 
       accounts.addRequest(permitRequest)

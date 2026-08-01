@@ -230,6 +230,7 @@ export interface PermitSignatureRequest extends AccountRequest<'signErc20Permit'
   permit: PermitData
   tokenData: TokenData
   context: TypedDataContext
+  approvals: Approval[]
 }
 
 export type AccessRequest = AccountRequest<'access'>

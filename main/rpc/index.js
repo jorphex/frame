@@ -152,6 +152,7 @@ const rpc = {
     const storedRequest = accounts.current()?.getRequest(req.handlerId)
     if (!storedRequest) return
     req = storedRequest
+    if ((req.approvals || []).some((approval) => !approval.approved)) return
 
     accounts.setRequestPending(req)
     if (req.type === 'transaction') {
