@@ -674,6 +674,158 @@ describe('#addRequest', () => {
     expect(request.approvals).toEqual([])
   })
 
+  it('requires zero-first consent when replacing a different nonzero allowance', async () => {
+    const requestedAmount = '42'
+    const allowance = {
+      source: 'eth_call',
+      token: tokenContract,
+      owner: accountState.address.toLowerCase(),
+      spender: delegate,
+      currentAmount: '7',
+      requestedAmount
+    }
+    simulateTransaction
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call', allowance })
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call', allowance })
+    const request = {
+      handlerId: 'existing-token-allowance',
+      type: 'transaction',
+      account: accountState.address,
+      data: {
+        chainId: '0x1',
+        from: accountState.address,
+        to: tokenContract,
+        data: tokenInterface.encodeFunctionData('approve', [delegate, requestedAmount])
+      },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    const approval = request.approvals[0]
+    expect(approval).toMatchObject({
+      type: ApprovalType.TokenAllowanceChangeRisk,
+      approved: false,
+      data: {
+        title: 'Existing Token Allowance',
+        confirmLabel: 'Change Anyway',
+        currentAmount: '7',
+        requestedAmount
+      }
+    })
+    expect(approval.data.message).toMatch(/setting the allowance to zero/i)
+
+    approval.approve()
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals[0]).toBe(approval)
+    expect(approval.approved).toBe(true)
+
+    request.data.data = tokenInterface.encodeFunctionData('approve', [delegate, 8])
+    account.refreshTransactionSimulation(request)
+    expect(request.approvals).toEqual([])
+  })
+
+  it.each([
+    ['zero current allowance', '0', '42'],
+    ['revocation', '7', '0'],
+    ['unchanged allowance', '7', '7']
+  ])('does not require zero-first consent for %s', async (_label, currentAmount, requestedAmount) => {
+    simulateTransaction.mockResolvedValueOnce({
+      status: 'succeeded',
+      source: 'eth_call',
+      allowance: {
+        source: 'eth_call',
+        token: tokenContract,
+        owner: accountState.address,
+        spender: delegate,
+        currentAmount,
+        requestedAmount
+      }
+    })
+    const request = {
+      handlerId: `safe-token-allowance-${currentAmount}-${requestedAmount}`,
+      type: 'transaction',
+      account: accountState.address,
+      data: {
+        chainId: '0x1',
+        from: accountState.address,
+        to: tokenContract,
+        data: tokenInterface.encodeFunctionData('approve', [delegate, requestedAmount])
+      },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals).toEqual([])
+  })
+
+  it('rejects mismatched allowance evidence and composes valid evidence with broad-authority consent', async () => {
+    const requestedAmount = maxTokenAmount.toString(10)
+    simulateTransaction
+      .mockResolvedValueOnce({
+        status: 'succeeded',
+        source: 'eth_call',
+        allowance: {
+          source: 'eth_call',
+          token: '0x4444444444444444444444444444444444444444',
+          owner: accountState.address,
+          spender: delegate,
+          currentAmount: '7',
+          requestedAmount
+        }
+      })
+      .mockResolvedValueOnce({
+        status: 'succeeded',
+        source: 'eth_call',
+        allowance: {
+          source: 'eth_call',
+          token: tokenContract,
+          owner: accountState.address,
+          spender: delegate,
+          currentAmount: '7',
+          requestedAmount
+        }
+      })
+    const request = (handlerId) => ({
+      handlerId,
+      type: 'transaction',
+      account: accountState.address,
+      data: {
+        chainId: '0x1',
+        from: accountState.address,
+        to: tokenContract,
+        data: tokenInterface.encodeFunctionData('approve', [delegate, requestedAmount])
+      },
+      approvals: [],
+      simulation: { status: 'pending' }
+    })
+    const mismatched = request('mismatched-token-allowance')
+
+    account.addRequest(mismatched)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(mismatched.approvals.map(({ type }) => type)).toEqual([ApprovalType.TokenApprovalRisk])
+
+    const composed = request('composed-token-allowance')
+    account.addRequest(composed)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(composed.approvals.map(({ type }) => type)).toEqual([
+      ApprovalType.TokenApprovalRisk,
+      ApprovalType.TokenAllowanceChangeRisk
+    ])
+  })
+
   it('requires fresh consent when a preserved broad-authority warning expands', async () => {
     const topLevelEffect = {
       type: 'approval',

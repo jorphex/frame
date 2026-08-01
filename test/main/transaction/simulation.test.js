@@ -19,6 +19,13 @@ const transaction = {
   gasFeesSource: 'Frame'
 }
 
+const approvalSpender = '0x3333333333333333333333333333333333333333'
+const approvalAmount = 42n
+const approvalData = `0x095ea7b3${'0'.repeat(24)}${approvalSpender.slice(2)}${approvalAmount
+  .toString(16)
+  .padStart(64, '0')}`
+const approvalTransaction = { ...transaction, data: approvalData }
+
 const simulateSuccess = [
   {
     calls: [{ status: '0x1', gasUsed: '0x5208', returnData: '0x', logs: [] }]
@@ -262,5 +269,86 @@ it('shares one timeout budget with the fallback call', async () => {
     status: 'failed',
     source: 'eth_call',
     reason: 'RPC execution check timed out'
+  })
+})
+
+it('attaches an exact configured-RPC allowance read to an approval simulation', async () => {
+  const currentAmount = 7n
+  const send = jest.fn((payload, callback) => {
+    if (payload.method === 'eth_simulateV1') {
+      callback({ id: payload.id, jsonrpc: '2.0', result: simulateSuccess })
+    } else {
+      callback({
+        id: payload.id,
+        jsonrpc: '2.0',
+        result: `0x${currentAmount.toString(16).padStart(64, '0')}`
+      })
+    }
+  })
+
+  await expect(simulateTransaction(approvalTransaction, { send })).resolves.toEqual({
+    status: 'succeeded',
+    source: 'eth_simulateV1',
+    gasUsed: '0x5208',
+    allowance: {
+      source: 'eth_call',
+      token: transaction.to,
+      owner: transaction.from,
+      spender: approvalSpender,
+      currentAmount: '7',
+      requestedAmount: '42'
+    }
+  })
+  expect(send).toHaveBeenCalledTimes(2)
+  expect(send.mock.calls[1][0]).toEqual({
+    id: 2,
+    jsonrpc: '2.0',
+    method: 'eth_call',
+    params: [
+      {
+        to: transaction.to,
+        data: `0xdd62ed3e${'0'.repeat(24)}${transaction.from.slice(2)}${'0'.repeat(
+          24
+        )}${approvalSpender.slice(2)}`
+      },
+      'latest'
+    ]
+  })
+})
+
+it.each([
+  { result: '0x1' },
+  { result: `0x${'00'.repeat(33)}` },
+  { error: { code: 3, message: 'execution reverted' } }
+])('omits unusable allowance evidence without weakening execution status: %p', async (response) => {
+  const send = jest.fn((payload, callback) =>
+    callback(
+      payload.method === 'eth_simulateV1'
+        ? { id: payload.id, jsonrpc: '2.0', result: simulateSuccess }
+        : { id: payload.id, jsonrpc: '2.0', ...response }
+    )
+  )
+
+  await expect(simulateTransaction(approvalTransaction, { send })).resolves.toEqual({
+    status: 'succeeded',
+    source: 'eth_simulateV1',
+    gasUsed: '0x5208'
+  })
+})
+
+it('bounds a missing allowance response without changing a successful execution result', async () => {
+  const send = jest.fn((payload, callback) => {
+    if (payload.method === 'eth_simulateV1') {
+      callback({ id: payload.id, jsonrpc: '2.0', result: simulateSuccess })
+    }
+  })
+  const pending = simulateTransaction(approvalTransaction, { send, timeoutMs: 25 })
+
+  jest.advanceTimersByTime(25)
+
+  await expect(pending).resolves.toEqual({
+    status: 'succeeded',
+    source: 'eth_simulateV1',
+    gasUsed: '0x5208'
   })
 })

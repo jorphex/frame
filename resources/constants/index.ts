@@ -3,6 +3,7 @@ export enum ApprovalType {
   GasLimitApproval = 'approveGasLimit',
   SimulationApproval = 'approveSimulationOverride',
   TokenApprovalRisk = 'approveBroadTokenAuthority',
+  TokenAllowanceChangeRisk = 'approveExistingTokenAllowanceChange',
   TokenPermitRisk = 'approveUnlimitedTokenPermit',
   SignatureRisk = 'approveDangerousSignature'
 }

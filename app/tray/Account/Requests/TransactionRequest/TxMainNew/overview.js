@@ -128,6 +128,23 @@ export function getSimulationEffectsPresentation(simulation, account) {
   }
 }
 
+export function getAllowancePresentation(simulation) {
+  const allowance = simulation?.allowance
+  if (!allowance) return null
+
+  if (allowance.currentAmount === allowance.requestedAmount) {
+    return { className: '_txMainTagGood', label: 'RPC reports allowance already matches request' }
+  }
+  if (allowance.currentAmount === '0') {
+    return { className: '_txMainTagWarning', label: 'RPC reports no current token allowance' }
+  }
+  if (allowance.requestedAmount === '0') {
+    return { className: '_txMainTagGood', label: 'RPC reports existing token allowance will be revoked' }
+  }
+
+  return { className: '_txMainTagBad', label: 'RPC reports a different nonzero token allowance' }
+}
+
 const BaseOverviews = {
   CONTRACT_DEPLOY: DeployContractOverview,
   CONTRACT_CALL: ContractCallOverview,
@@ -149,6 +166,7 @@ const TxOverview = ({
   const { data: calldata } = tx
   const simulation = getSimulationPresentation(req.simulation)
   const simulationEffects = getSimulationEffectsPresentation(req.simulation, req.account)
+  const allowance = getAllowancePresentation(req.simulation)
 
   const Description = BaseOverviews[classification]
 
@@ -217,6 +235,13 @@ const TxOverview = ({
           <ClusterRow>
             <ClusterValue>
               <div className='_txMainTag _txMainTagBad'>RPC reports broad token approval</div>
+            </ClusterValue>
+          </ClusterRow>
+        )}
+        {allowance && (
+          <ClusterRow>
+            <ClusterValue>
+              <div className={`_txMainTag ${allowance.className}`}>{allowance.label}</div>
             </ClusterValue>
           </ClusterRow>
         )}

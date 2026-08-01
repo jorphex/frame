@@ -5,10 +5,14 @@ import { screen, render } from '../../../../../componentSetup'
 import TxRequestComponent from '../../../../../../app/tray/Account/Requests/TransactionRequest'
 import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew'
 import {
+  getAllowancePresentation,
   getSimulationEffectsPresentation,
   getSimulationPresentation
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
-import { SimulationEffects } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData/effects'
+import {
+  SimulationAllowance,
+  SimulationEffects
+} from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData/effects'
 import {
   canApproveTransaction,
   getRequiredRequestApproval
@@ -262,6 +266,42 @@ describe('simulation review', () => {
     expect(getSimulationEffectsPresentation(simulation, '0x1')).toBeNull()
     render(<SimulationEffects account='0x1' simulation={simulation} />)
     expect(screen.queryByText('RPC-Reported Effects')).toBeNull()
+  })
+
+  it.each([
+    ['0', '42', '_txMainTagWarning', 'no current token allowance'],
+    ['7', '0', '_txMainTagGood', 'existing token allowance will be revoked'],
+    ['7', '7', '_txMainTagGood', 'allowance already matches request'],
+    ['7', '42', '_txMainTagBad', 'a different nonzero token allowance']
+  ])('summarizes current allowance %s and request %s', (currentAmount, requestedAmount, className, label) => {
+    expect(getAllowancePresentation({ allowance: { currentAmount, requestedAmount } })).toEqual({
+      className,
+      label: `RPC reports ${label}`
+    })
+  })
+
+  it('renders qualified current allowance details in raw units', () => {
+    const allowance = {
+      source: 'eth_call',
+      token: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      owner: account,
+      spender: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      currentAmount: '7',
+      requestedAmount: '42'
+    }
+
+    render(<SimulationAllowance simulation={{ status: 'succeeded', allowance }} />)
+
+    expect(screen.getByText('RPC-Reported Current Allowance')).toBeTruthy()
+    expect(screen.getByRole('note').textContent).toMatch(/not independently verified/i)
+    expect(screen.getByText('7')).toBeTruthy()
+    expect(screen.getByText('42')).toBeTruthy()
+  })
+
+  it('omits allowance presentation when no valid evidence is attached', () => {
+    expect(getAllowancePresentation({ status: 'succeeded' })).toBeNull()
+    render(<SimulationAllowance simulation={{ status: 'succeeded' }} />)
+    expect(screen.queryByText('RPC-Reported Current Allowance')).toBeNull()
   })
 })
 

@@ -1,5 +1,10 @@
 import type { Chain } from '../chains'
 import type { TransactionData } from '../../resources/domain/transaction'
+import {
+  buildErc20AllowanceCalldata,
+  parseErc20AllowanceResult,
+  parseErc20ApprovalIntent
+} from '../../resources/domain/transaction/allowance'
 import { parseRpcQuantity } from '../../resources/domain/transaction/quantity'
 import { parseSimulationEffects } from './effects'
 import type { SimulationEffect } from './effects'
@@ -12,6 +17,15 @@ const MAX_UINT64 = (1n << 64n) - 1n
 type SimulationSource = 'eth_simulateV1' | 'eth_call'
 type SimulationStatus = 'pending' | 'succeeded' | 'reverted' | 'unavailable' | 'failed'
 
+export interface TokenAllowanceSnapshot {
+  source: 'eth_call'
+  token: string
+  owner: string
+  spender: string
+  currentAmount: string
+  requestedAmount: string
+}
+
 export interface TransactionSimulation {
   status: SimulationStatus
   source?: SimulationSource
@@ -19,6 +33,7 @@ export interface TransactionSimulation {
   reason?: string
   effects?: SimulationEffect[]
   effectsTruncated?: boolean
+  allowance?: TokenAllowanceSnapshot
 }
 
 type ChainSend = (payload: JSONRPCRequestPayload, callback: RPCRequestCallback, targetChain: Chain) => void
@@ -136,6 +151,46 @@ export function buildEthCall(transaction: TransactionData) {
   return ethCall
 }
 
+async function readTokenAllowance(
+  transaction: TransactionData,
+  send: ChainSend,
+  targetChain: Chain,
+  timeoutMs: number
+): Promise<TokenAllowanceSnapshot | undefined> {
+  const intent = parseErc20ApprovalIntent(transaction.data)
+  const owner = typeof transaction.from === 'string' ? transaction.from.toLowerCase() : undefined
+  const allowanceData = intent && buildErc20AllowanceCalldata(owner, intent.spender)
+  if (!intent || !owner || !allowanceData || typeof transaction.to !== 'string') return
+
+  const token = transaction.to.toLowerCase()
+  if (!/^0x[0-9a-f]{40}$/.test(token)) return
+
+  const outcome = await requestRpc(
+    send,
+    {
+      id: 2,
+      jsonrpc: '2.0',
+      method: 'eth_call',
+      params: [{ to: token, data: allowanceData }, 'latest']
+    },
+    targetChain,
+    timeoutMs
+  )
+  if ('timedOut' in outcome || !isRecord(outcome.response) || outcome.response.error !== undefined) return
+
+  const currentAmount = parseErc20AllowanceResult(outcome.response.result)
+  if (currentAmount === undefined) return
+
+  return {
+    source: 'eth_call',
+    token,
+    owner,
+    spender: intent.spender,
+    currentAmount,
+    requestedAmount: intent.amount
+  }
+}
+
 export function parseSimulateResult(result: unknown): TransactionSimulation | undefined {
   if (!Array.isArray(result) || result.length !== 1 || !isRecord(result[0])) return
 
@@ -171,24 +226,13 @@ export function parseSimulateResult(result: unknown): TransactionSimulation | un
   }
 }
 
-export async function simulateTransaction(
+async function simulateExecution(
   transaction: TransactionData,
-  dependencies: SimulationDependencies
+  send: ChainSend,
+  targetChain: Chain,
+  timeoutMs: number
 ): Promise<TransactionSimulation> {
-  const { send } = dependencies
-  const configuredTimeout = dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const timeoutMs =
-    Number.isFinite(configuredTimeout) && configuredTimeout > 0
-      ? Math.min(configuredTimeout, DEFAULT_TIMEOUT_MS)
-      : DEFAULT_TIMEOUT_MS
   const startedAt = Date.now()
-  const chainId = parseRpcQuantity(transaction.chainId)
-
-  if (chainId === undefined || chainId > BigInt(Number.MAX_SAFE_INTEGER)) {
-    return { status: 'failed', reason: 'Transaction has an invalid chain ID' }
-  }
-
-  const targetChain: Chain = { type: 'ethereum', id: Number(chainId) }
   const simulatePayload: JSONRPCRequestPayload = {
     id: 1,
     jsonrpc: '2.0',
@@ -263,4 +307,29 @@ export async function simulateTransaction(
   return isData(callResponse.result)
     ? { status: 'succeeded', source: 'eth_call' }
     : { status: 'failed', source: 'eth_call', reason: 'RPC returned an invalid call result' }
+}
+
+export async function simulateTransaction(
+  transaction: TransactionData,
+  dependencies: SimulationDependencies
+): Promise<TransactionSimulation> {
+  const { send } = dependencies
+  const configuredTimeout = dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const timeoutMs =
+    Number.isFinite(configuredTimeout) && configuredTimeout > 0
+      ? Math.min(configuredTimeout, DEFAULT_TIMEOUT_MS)
+      : DEFAULT_TIMEOUT_MS
+  const chainId = parseRpcQuantity(transaction.chainId)
+
+  if (chainId === undefined || chainId > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return { status: 'failed', reason: 'Transaction has an invalid chain ID' }
+  }
+
+  const targetChain: Chain = { type: 'ethereum', id: Number(chainId) }
+  const [simulation, allowance] = await Promise.all([
+    simulateExecution(transaction, send, targetChain, timeoutMs),
+    readTokenAllowance(transaction, send, targetChain, timeoutMs)
+  ])
+
+  return allowance ? { ...simulation, allowance } : simulation
 }

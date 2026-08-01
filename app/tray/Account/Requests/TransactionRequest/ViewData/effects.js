@@ -111,3 +111,29 @@ export const SimulationEffects = ({ account, simulation }) => {
     </div>
   )
 }
+
+export const SimulationAllowance = ({ simulation }) => {
+  const allowance = simulation?.allowance
+  if (!allowance) return null
+
+  return (
+    <div className='txViewData'>
+      <div className='txViewDataHeader'>RPC-Reported Current Allowance</div>
+      <div className='simulationEffectsNotice' role='note'>
+        Read from your configured RPC at review time. Contract identity and current state are not
+        independently verified.
+      </div>
+      <SimpleJSON
+        humanizeKeys
+        quoteStrings={false}
+        json={{
+          tokenContract: allowance.token,
+          owner: allowance.owner,
+          spender: allowance.spender,
+          currentAmountRawUnits: allowance.currentAmount,
+          requestedAmountRawUnits: allowance.requestedAmount
+        }}
+      />
+    </div>
+  )
+}

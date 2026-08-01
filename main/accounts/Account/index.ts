@@ -38,6 +38,7 @@ import { simulateTransaction } from '../../transaction/simulation'
 import type { PermitSignatureRequest, SignatureRequest, SignRequest, TypedMessage } from '../types'
 import type { Permission } from '../../store/state'
 import type { TransactionSimulation } from '../../transaction/simulation'
+import { parseErc20ApprovalIntent } from '../../../resources/domain/transaction/allowance'
 
 const nebula = nebulaApi()
 
@@ -446,6 +447,7 @@ class FrameAccount {
   private removeSimulationApprovals(req: TransactionRequest) {
     this.removeApproval(req, ApprovalType.SimulationApproval)
     this.removeApproval(req, ApprovalType.TokenApprovalRisk)
+    this.removeApproval(req, ApprovalType.TokenAllowanceChangeRisk)
   }
 
   private syncSimulationApproval(req: TransactionRequest, simulation: TransactionSimulation) {
@@ -520,6 +522,40 @@ class FrameAccount {
     })
   }
 
+  private syncTokenAllowanceChangeRisk(req: TransactionRequest, simulation: TransactionSimulation) {
+    const allowance = simulation.allowance
+    const intent = parseErc20ApprovalIntent(req.data.data)
+    const sameAddress = (left: unknown, right: unknown) =>
+      typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase()
+    const evidenceMatchesRequest =
+      allowance !== undefined &&
+      intent !== undefined &&
+      sameAddress(allowance.token, req.data.to) &&
+      sameAddress(allowance.owner, req.account) &&
+      sameAddress(allowance.owner, req.data.from) &&
+      sameAddress(allowance.spender, intent.spender) &&
+      allowance.requestedAmount === intent.amount
+    const changesNonzeroAllowance =
+      evidenceMatchesRequest &&
+      allowance.currentAmount !== '0' &&
+      allowance.requestedAmount !== '0' &&
+      allowance.currentAmount !== allowance.requestedAmount
+
+    if (!changesNonzeroAllowance) {
+      this.removeApproval(req, ApprovalType.TokenAllowanceChangeRisk)
+      return
+    }
+
+    this.syncManagedApproval(req, ApprovalType.TokenAllowanceChangeRisk, {
+      title: 'Existing Token Allowance',
+      message:
+        'Your configured RPC reports a different nonzero allowance for this owner and spender. ERC-20 recommends setting the allowance to zero before assigning another nonzero value to reduce an approval-race risk.',
+      confirmLabel: 'Change Anyway',
+      currentAmount: allowance.currentAmount,
+      requestedAmount: allowance.requestedAmount
+    })
+  }
+
   syncPermitApprovalRisk(req: PermitSignatureRequest) {
     const amount = parseTokenBaseUnitAmount(req.typedMessage?.data?.message?.value)
     if (amount !== MAX_UINT256) {
@@ -559,6 +595,7 @@ class FrameAccount {
     req.simulation = simulation
     this.syncSimulationApproval(req, simulation)
     this.syncTokenApprovalRisk(req, simulation)
+    this.syncTokenAllowanceChangeRisk(req, simulation)
     this.update()
   }
 
