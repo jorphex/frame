@@ -176,6 +176,34 @@ it('distinguishes signed reservations from submitted transactions', () => {
   expect(ledger.getStatus(origin, account, 'app-id', 1004).status).toBe(400)
 })
 
+it('lists only live final signed reservations as immutable reconciliation candidates', () => {
+  const { ledger } = createLedger()
+  const firstHash = hash('1')
+  const secondHash = hash('2')
+  ledger.create(batch({ id: 'submitted', callCount: 2 }), 1000)
+  ledger.recordTransaction(origin, account, 'submitted', firstHash, 1001)
+  ledger.reserveTransaction(origin, account, 'submitted', secondHash, 1002)
+  ledger.create(batch({ id: 'failed', account: otherAccount }), 1003)
+  ledger.reserveTransaction(origin, otherAccount, 'failed', hash('3'), 1004)
+  ledger.fail(origin, otherAccount, 'failed', 1005)
+  ledger.create(batch({ id: 'complete', account: hash('4').slice(0, 42) }), 1006)
+  ledger.recordTransaction(origin, hash('4').slice(0, 42), 'complete', hash('5'), 1007)
+  ledger.complete(origin, hash('4').slice(0, 42), 'complete', 1008)
+
+  const candidates = ledger.listReconciliationCandidates(1009)
+  expect(candidates).toEqual([
+    { origin, account, id: 'submitted', chainId: '0x1', hash: secondHash },
+    { origin, account: otherAccount, id: 'failed', chainId: '0x1', hash: hash('3') }
+  ])
+  expect(Object.isFrozen(candidates)).toBe(true)
+  expect(candidates.every(Object.isFrozen)).toBe(true)
+  expect(() => {
+    candidates[0].hash = hash('9')
+  }).toThrow()
+  expect(ledger.listReconciliationCandidates(1009)[0].hash).toBe(secondHash)
+  expect(ledger.listReconciliationCandidates(1003 + WALLET_CALL_BATCH_TTL_MS)).toEqual([])
+})
+
 it('recovers a signed reservation when broadcast acceptance is confirmed after failure', () => {
   const { ledger } = createLedger()
   const transactionHash = hash('1')

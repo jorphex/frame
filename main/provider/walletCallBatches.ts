@@ -41,6 +41,14 @@ export interface WalletCallsStatus {
   receipts?: WalletCallReceipt[]
 }
 
+export interface WalletCallReconciliationCandidate {
+  origin: string
+  account: string
+  id: string
+  chainId: string
+  hash: string
+}
+
 function rpcError(code: number, message: string): EVMError {
   return { code, message }
 }
@@ -223,6 +231,27 @@ export class WalletCallBatchLedger {
 
   getStatus(origin: string, account: string, id: string, now = Date.now()) {
     return deriveStatus(this.get(origin, account, id, now))
+  }
+
+  listReconciliationCandidates(now = Date.now()): readonly Readonly<WalletCallReconciliationCandidate>[] {
+    const candidates = Object.entries(this.read(now))
+      .sort((left, right) => left[1].createdAt - right[1].createdAt || left[0].localeCompare(right[0]))
+      .flatMap(([_key, batch]) => {
+        const transaction = batch.transactions[batch.transactions.length - 1]
+        if (!transaction || transaction.state !== 'signed') return []
+
+        return [
+          Object.freeze({
+            origin: batch.origin,
+            account: batch.account,
+            id: batch.id,
+            chainId: batch.chainId,
+            hash: transaction.hash
+          })
+        ]
+      })
+
+    return Object.freeze(candidates)
   }
 
   reserveTransaction(origin: string, account: string, id: string, hash: string, now = Date.now()) {
