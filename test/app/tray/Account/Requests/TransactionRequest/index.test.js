@@ -4,6 +4,8 @@ import store from '../../../../../../main/store'
 import { screen, render } from '../../../../../componentSetup'
 import TxRequestComponent from '../../../../../../app/tray/Account/Requests/TransactionRequest'
 import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew'
+import { getSimulationPresentation } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
+import { canApproveTransaction } from '../../../../../../app/tray/Footer/RequestCommand'
 import { TxClassification } from '../../../../../../main/accounts/types'
 
 jest.mock('../../../../../../main/store/persist')
@@ -62,6 +64,42 @@ describe('confirm', () => {
 
     const notice = screen.getByRole('alert')
     expect(notice.textContent).toMatch(/insufficient funds for gas/i)
+  })
+
+  it('shows a qualified RPC execution warning', () => {
+    const req = {
+      handlerId: 'test-simulation',
+      type: 'transaction',
+      data: { chainId: '0x89' },
+      simulation: { status: 'reverted', source: 'eth_simulateV1' },
+      classification: TxClassification.NATIVE_TRANSFER
+    }
+
+    addRequest(req)
+    render(<TxRequest req={req} step='confirm' />)
+
+    expect(screen.getByText('RPC reports execution will revert via eth_simulateV1')).toBeTruthy()
+  })
+})
+
+describe('simulation review', () => {
+  it('qualifies success and failure as configured-RPC results', () => {
+    expect(getSimulationPresentation({ status: 'succeeded', source: 'eth_call' })).toEqual({
+      className: '_txMainTagGood',
+      label: 'RPC execution check passed via eth_call'
+    })
+    expect(getSimulationPresentation({ status: 'failed', source: 'eth_simulateV1' })).toEqual({
+      className: '_txMainTagBad',
+      label: 'RPC execution check failed via eth_simulateV1'
+    })
+  })
+
+  it('blocks approval only while the execution check is pending', () => {
+    expect(canApproveTransaction(true, { status: 'pending' })).toBe(false)
+    expect(canApproveTransaction(true, { status: 'reverted' })).toBe(true)
+    expect(canApproveTransaction(true, { status: 'failed' })).toBe(true)
+    expect(canApproveTransaction(true)).toBe(true)
+    expect(canApproveTransaction(false, { status: 'succeeded' })).toBe(false)
   })
 })
 

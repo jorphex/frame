@@ -1,8 +1,10 @@
 import Account from '../../../../main/accounts/Account'
 import reveal from '../../../../main/reveal'
 import { fetchContract } from '../../../../main/contracts'
+import { simulateTransaction } from '../../../../main/transaction/simulation'
 
 jest.mock('../../../../main/reveal')
+jest.mock('../../../../main/transaction/simulation', () => ({ simulateTransaction: jest.fn() }))
 jest.mock('../../../../main/contracts', () => {
   const real = jest.requireActual('../../../../main/contracts')
 
@@ -33,6 +35,7 @@ jest.mock('../../../../main/store', () => {
   store.setPermission = jest.fn()
   store.setSignerView = jest.fn()
   store.setPanelView = jest.fn()
+  store.navClearReq = jest.fn()
   store.observer = jest.fn()
   return store
 })
@@ -47,6 +50,8 @@ const accountState = {
 }
 
 beforeEach(() => {
+  jest.clearAllTimers()
+  simulateTransaction.mockImplementation(() => new Promise(() => {}))
   account = new Account(accountState, accounts)
   fetchContract.mockResolvedValueOnce(undefined)
 })
@@ -78,5 +83,74 @@ describe('#addRequest', () => {
 
       account.addRequest(request)
     })
+  })
+
+  it('keeps only the newest execution check result', async () => {
+    let resolveInitial
+    let resolveUpdated
+    simulateTransaction
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveInitial = resolve)))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveUpdated = resolve)))
+
+    const request = {
+      handlerId: 'simulation-version',
+      type: 'transaction',
+      data: { chainId: '0x1', gasLimit: '0x5208' },
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    request.data.gasLimit = '0x6000'
+    account.refreshTransactionSimulation(request)
+    jest.advanceTimersByTime(1)
+    expect(simulateTransaction).toHaveBeenCalledTimes(2)
+
+    resolveUpdated({ status: 'succeeded', source: 'eth_call' })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.simulation).toEqual({ status: 'succeeded', source: 'eth_call' })
+
+    resolveInitial({ status: 'reverted', source: 'eth_simulateV1' })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.simulation).toEqual({ status: 'succeeded', source: 'eth_call' })
+  })
+
+  it('coalesces same-turn transaction updates before calling the RPC', async () => {
+    simulateTransaction.mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call' })
+    const request = {
+      handlerId: 'coalesced-simulation',
+      type: 'transaction',
+      data: { chainId: '0x1', gasLimit: '0x5208' },
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    request.data.gasLimit = '0x6000'
+    account.refreshTransactionSimulation(request)
+    jest.advanceTimersByTime(1)
+    await Promise.resolve()
+
+    expect(simulateTransaction).toHaveBeenCalledTimes(1)
+    expect(simulateTransaction.mock.calls[0][0].gasLimit).toBe('0x6000')
+    expect(request.simulation.status).toBe('succeeded')
+  })
+
+  it('does not apply an execution check after its request is removed', async () => {
+    let resolveSimulation
+    simulateTransaction.mockImplementationOnce(() => new Promise((resolve) => (resolveSimulation = resolve)))
+    const request = {
+      handlerId: 'removed-simulation',
+      type: 'transaction',
+      data: { chainId: '0x1' },
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    account.clearRequest(request.handlerId)
+    resolveSimulation({ status: 'succeeded', source: 'eth_call' })
+    await Promise.resolve()
+
+    expect(account.requests[request.handlerId]).toBeUndefined()
   })
 })

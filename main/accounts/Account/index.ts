@@ -25,6 +25,7 @@ import { ApprovalType } from '../../../resources/constants'
 import reveal from '../../reveal'
 import { isTransactionRequest, isTypedMessageSignatureRequest } from '../../../resources/domain/request'
 import Erc20Contract from '../../contracts/erc20'
+import { simulateTransaction } from '../../transaction/simulation'
 
 import type { PermitSignatureRequest, SignRequest, TypedMessage } from '../types'
 import type { Permission } from '../../store/state'
@@ -64,6 +65,8 @@ class FrameAccount {
 
   accounts: Accounts
   requests: Record<string, AccountRequest> = {}
+  private simulationVersions: Record<string, number> = {}
+  private simulationTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 
   accountObserver: Observer
 
@@ -233,6 +236,9 @@ class FrameAccount {
     log.info(`clearRequest(${handlerId}) for account ${this.id}`)
 
     delete this.requests[handlerId]
+    delete this.simulationVersions[handlerId]
+    clearTimeout(this.simulationTimers[handlerId])
+    delete this.simulationTimers[handlerId]
     store.navClearReq(handlerId, Object.keys(this.requests).length > 0)
 
     this.update()
@@ -381,6 +387,43 @@ class FrameAccount {
     }
   }
 
+  refreshTransactionSimulation(req: TransactionRequest, publishPending = true) {
+    if (this.requests[req.handlerId] !== req) return
+
+    const version = (this.simulationVersions[req.handlerId] || 0) + 1
+    this.simulationVersions[req.handlerId] = version
+    req.simulation = { status: 'pending' }
+
+    if (publishPending) this.update()
+
+    clearTimeout(this.simulationTimers[req.handlerId])
+    this.simulationTimers[req.handlerId] = setTimeout(() => {
+      delete this.simulationTimers[req.handlerId]
+      if (this.requests[req.handlerId] !== req || this.simulationVersions[req.handlerId] !== version) return
+
+      simulateTransaction(req.data, {
+        send: (payload, callback, targetChain) => provider.connection.send(payload, callback, targetChain)
+      })
+        .then((simulation) => {
+          const knownRequest = this.requests[req.handlerId]
+          if (knownRequest !== req || this.simulationVersions[req.handlerId] !== version) return
+
+          req.simulation = simulation
+          this.update()
+        })
+        .catch((error) => {
+          const knownRequest = this.requests[req.handlerId]
+          if (knownRequest !== req || this.simulationVersions[req.handlerId] !== version) return
+
+          req.simulation = {
+            status: 'failed',
+            reason: error instanceof Error ? error.message.slice(0, 240) : 'RPC execution check failed'
+          }
+          this.update()
+        })
+    }, 0)
+  }
+
   private async decodeTypedMessage(req: SignTypedDataRequest) {
     if (req.type === 'signTypedData') return
 
@@ -417,6 +460,7 @@ class FrameAccount {
     if (!req) return
 
     if (isTransactionRequest(req)) {
+      this.refreshTransactionSimulation(req, false)
       this.recipientIdentity(req)
       this.decodeCalldata(req)
       this.recognizeActions(req)
@@ -558,6 +602,8 @@ class FrameAccount {
   }
 
   close() {
+    Object.values(this.simulationTimers).forEach(clearTimeout)
+    this.simulationTimers = {}
     this.accountObserver.remove()
   }
 

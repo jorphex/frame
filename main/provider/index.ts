@@ -426,6 +426,10 @@ export class Provider extends EventEmitter {
   }
 
   approveTransactionRequest(req: TransactionRequest, cb: Callback<string>) {
+    if (req.simulation?.status === 'pending') {
+      return cb(new Error('Transaction execution check is still pending'))
+    }
+
     const signAndSend = (requestToSign: TransactionRequest) => {
       // remove callback from logging
       const { res, ...txToLog } = requestToSign
@@ -612,7 +616,8 @@ export class Provider extends EventEmitter {
             approvals: [],
             feesUpdatedByUser: false,
             recipientType,
-            recognizedActions: []
+            recognizedActions: [],
+            simulation: { status: 'pending' }
           } as Omit<TransactionRequest, 'classification'>
 
           const classification = classifyTransaction(unclassifiedReq)

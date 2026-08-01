@@ -87,7 +87,26 @@ beforeEach(() => {
   )
   accounts.signTransaction = jest.fn()
   accounts.setTxSigned = jest.fn()
+  accounts.lockRequest = jest.fn()
   accounts.rejectUnapprovedRequestsForOriginChain = jest.fn()
+})
+
+describe('#approveTransactionRequest', () => {
+  it('refuses to lock or sign while the execution check is pending', (done) => {
+    provider.approveTransactionRequest(
+      {
+        handlerId: 'pending-simulation',
+        data: { nonce: '0x1' },
+        simulation: { status: 'pending' }
+      },
+      (error) => {
+        expect(error.message).toMatch(/execution check is still pending/i)
+        expect(accounts.lockRequest).not.toHaveBeenCalled()
+        expect(accounts.signTransaction).not.toHaveBeenCalled()
+        done()
+      }
+    )
+  })
 })
 
 describe('#send', () => {
@@ -1307,6 +1326,7 @@ describe('#send', () => {
         try {
           const initialRequest = accountRequests[0]
           expect(initialRequest.data.chainId).toBe('0x89')
+          expect(initialRequest.simulation).toEqual({ status: 'pending' })
           done()
         } catch (e) {
           done(e)

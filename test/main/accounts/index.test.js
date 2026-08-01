@@ -576,9 +576,12 @@ describe('#setGasLimit', () => {
   })
 
   it('sets a valid gas limit', () => {
+    const simulation = jest.spyOn(Accounts.current(), 'refreshTransactionSimulation')
+
     setGasLimit('0x61a8')
 
     expect(Accounts.current().requests[1].data.gasLimit).toBe('0x61a8')
+    expect(simulation).toHaveBeenCalledWith(Accounts.current().requests[1])
   })
 
   it('does not exceed the max fee for pre-EIP-1559 transactions', () => {

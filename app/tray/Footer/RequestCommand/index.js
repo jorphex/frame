@@ -15,6 +15,10 @@ import { isCancelableRequest, isSignatureRequest } from '../../../../resources/d
 
 const FEE_WARNING_THRESHOLD_USD = 50
 
+export function canApproveTransaction(allowInput, simulation) {
+  return allowInput && simulation?.status !== 'pending'
+}
+
 class RequestCommand extends React.Component {
   constructor(props, context) {
     super(props, context)
@@ -200,6 +204,7 @@ class RequestCommand extends React.Component {
 
   signOrDecline() {
     const { req } = this.props
+    const allowApproval = canApproveTransaction(this.state.allowInput, req.simulation)
     const chain = {
       type: 'ethereum',
       id: parseInt(req.data.chainId, 'hex')
@@ -242,8 +247,9 @@ class RequestCommand extends React.Component {
           </div>
           <div
             className={this.state.signerLocked ? 'requestSign headShake' : 'requestSign'}
+            style={{ pointerEvents: allowApproval ? 'auto' : 'none' }}
             onClick={() => {
-              if (this.state.allowInput) {
+              if (allowApproval) {
                 link.rpc('signerCompatibility', req.handlerId, (e, compatibility) => {
                   if (e === 'No signer') {
                     this.store.notify('noSignerWarning', { req })
@@ -281,7 +287,7 @@ class RequestCommand extends React.Component {
                   <span>{svg.lock(13)}</span>
                 </span>
               ) : (
-                <span>Sign</span>
+                <span>{req.simulation?.status === 'pending' ? 'Checking' : 'Sign'}</span>
               )}
             </div>
           </div>

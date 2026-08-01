@@ -209,6 +209,8 @@ export class Accounts extends EventEmitter {
       if (!action?.update) return
 
       action?.update(transactionReq, data)
+      currentAccount.refreshTransactionSimulation(transactionReq)
+      return
     }
 
     if (request.type === 'signErc20Permit') {
@@ -1047,7 +1049,7 @@ export class Accounts extends EventEmitter {
       }
     }
 
-    currentAccount.update()
+    currentAccount.refreshTransactionSimulation(txRequest)
   }
 
   setBaseFee(baseFee: string, handlerId: string, userUpdate: boolean) {
@@ -1203,7 +1205,7 @@ export class Accounts extends EventEmitter {
         const adjustedNonce = intToHex(updatedNonce)
 
         txRequest.data.nonce = adjustedNonce
-        currentAccount.update()
+        currentAccount.refreshTransactionSimulation(txRequest)
       } else {
         const { from, chainId } = txRequest.data
         this.sendRequest(
@@ -1215,7 +1217,7 @@ export class Accounts extends EventEmitter {
               if (updatedNonce < 0) updatedNonce = 0
               const adjustedNonce = intToHex(updatedNonce)
               txRequest.data.nonce = adjustedNonce
-              currentAccount.update()
+              currentAccount.refreshTransactionSimulation(txRequest)
             }
           }
         )
@@ -1234,7 +1236,7 @@ export class Accounts extends EventEmitter {
     } else {
       delete txRequest.data.nonce
     }
-    currentAccount.update()
+    currentAccount.refreshTransactionSimulation(txRequest)
   }
 
   lockRequest(handlerId: string) {

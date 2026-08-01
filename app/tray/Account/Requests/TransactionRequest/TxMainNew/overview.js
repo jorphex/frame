@@ -86,6 +86,31 @@ function renderRecognizedActions(req) {
   )
 }
 
+const simulationLabels = {
+  pending: 'Checking execution with configured RPC',
+  succeeded: 'RPC execution check passed',
+  reverted: 'RPC reports execution will revert',
+  unavailable: 'RPC execution check unavailable',
+  failed: 'RPC execution check failed'
+}
+
+export function getSimulationPresentation(simulation) {
+  if (!simulation || !simulationLabels[simulation.status]) return null
+
+  const method = simulation.source ? ` via ${simulation.source}` : ''
+  const className =
+    simulation.status === 'succeeded'
+      ? '_txMainTagGood'
+      : simulation.status === 'reverted' || simulation.status === 'failed'
+      ? '_txMainTagBad'
+      : '_txMainTagWarning'
+
+  return {
+    className,
+    label: `${simulationLabels[simulation.status]}${method}`
+  }
+}
+
 const BaseOverviews = {
   CONTRACT_DEPLOY: DeployContractOverview,
   CONTRACT_CALL: ContractCallOverview,
@@ -105,6 +130,7 @@ const TxOverview = ({
 }) => {
   const { data: tx = {}, classification } = req
   const { data: calldata } = tx
+  const simulation = getSimulationPresentation(req.simulation)
 
   const Description = BaseOverviews[classification]
 
@@ -155,6 +181,13 @@ const TxOverview = ({
               </ClusterValue>
             </ClusterRow>
           ))}
+        {simulation && (
+          <ClusterRow>
+            <ClusterValue>
+              <div className={`_txMainTag ${simulation.className}`}>{simulation.label}</div>
+            </ClusterValue>
+          </ClusterRow>
+        )}
         {isNonZeroHex(calldata) && (
           <ClusterRow>
             <ClusterValue>

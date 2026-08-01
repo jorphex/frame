@@ -208,8 +208,7 @@ const surface = {
     )
 
     return actions
-  },
-  simulate: async () => {}
+  }
 }
 
 export default surface

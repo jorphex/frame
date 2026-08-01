@@ -10,6 +10,7 @@ import type { TransactionData } from '../../resources/domain/transaction'
 import type { Action } from '../transaction/actions'
 import type { TokenData } from '../contracts/erc20'
 import type { Token } from '../store/state'
+import type { TransactionSimulation } from '../transaction/simulation'
 
 export enum ReplacementType {
   Speed = 'speed',
@@ -124,6 +125,7 @@ export interface TransactionRequest extends AccountRequest<'transaction'> {
   recipientType: string
   recognizedActions: Action<unknown>[]
   classification: TxClassification
+  simulation: TransactionSimulation
 }
 
 export interface SignRequest extends AccountRequest<'sign'> {
