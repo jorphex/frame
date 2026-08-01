@@ -1,7 +1,8 @@
 export enum ApprovalType {
   OtherChainApproval = 'approveOtherChain',
   GasLimitApproval = 'approveGasLimit',
-  SimulationApproval = 'approveSimulationOverride'
+  SimulationApproval = 'approveSimulationOverride',
+  TokenApprovalRisk = 'approveBroadTokenAuthority'
 }
 
 const NETWORK_PRESETS = {

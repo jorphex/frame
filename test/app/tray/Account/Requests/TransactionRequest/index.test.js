@@ -133,6 +133,32 @@ describe('simulation review', () => {
     )
   })
 
+  it('renders and confirms broad token authority consent', async () => {
+    const req = { handlerId: 'broad-token-approval' }
+    const approval = {
+      type: 'approveBroadTokenAuthority',
+      data: {
+        title: 'Broad Token Approvals',
+        message:
+          'Your configured RPC reports 2 broad token permissions. Review RPC-reported effects before proceeding.',
+        confirmLabel: 'Approve Anyway'
+      }
+    }
+
+    const { user } = render(<TxApproval req={req} approval={approval} />)
+
+    expect(screen.getByText('Broad Token Approvals')).toBeTruthy()
+    expect(screen.getByText(approval.data.message)).toBeTruthy()
+    await user.click(screen.getByText('Approve Anyway'))
+    expect(link.rpc).toHaveBeenCalledWith(
+      'confirmRequestApproval',
+      req,
+      approval.type,
+      {},
+      expect.any(Function)
+    )
+  })
+
   it('qualifies RPC-reported effects and highlights broad approvals', () => {
     const account = '0x1111111111111111111111111111111111111111'
     const token = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -161,7 +187,7 @@ describe('simulation review', () => {
       ]
     }
 
-    expect(getSimulationEffectsPresentation(simulation)).toEqual({
+    expect(getSimulationEffectsPresentation(simulation, account)).toEqual({
       broadApproval: true,
       label: '2 RPC-reported token effects (truncated)'
     })
@@ -179,7 +205,7 @@ describe('simulation review', () => {
   it('does not claim effects for an eth_call fallback', () => {
     const simulation = { status: 'succeeded', source: 'eth_call' }
 
-    expect(getSimulationEffectsPresentation(simulation)).toBeNull()
+    expect(getSimulationEffectsPresentation(simulation, '0x1')).toBeNull()
     render(<SimulationEffects account='0x1' simulation={simulation} />)
     expect(screen.queryByText('RPC-Reported Effects')).toBeNull()
   })

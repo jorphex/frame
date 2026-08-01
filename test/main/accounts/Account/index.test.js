@@ -205,6 +205,120 @@ describe('#addRequest', () => {
     expect(request.approvals).toEqual([])
   })
 
+  it('requires one approval for broad token authority and invalidates it on intent edits', async () => {
+    const max = (2n ** 256n - 1n).toString(10)
+    const owner = accountState.address.toLowerCase()
+    simulateTransaction.mockResolvedValueOnce({
+      status: 'succeeded',
+      source: 'eth_simulateV1',
+      effects: [
+        { type: 'approval', standard: 'erc20', owner, amount: max },
+        { type: 'operator-approval', standard: 'erc721-or-erc1155', owner, approved: true },
+        { type: 'approval', standard: 'erc20', owner, amount: '100' },
+        { type: 'approval', standard: 'erc721', owner, tokenId: max },
+        { type: 'operator-approval', standard: 'erc721-or-erc1155', owner, approved: false },
+        {
+          type: 'approval',
+          standard: 'erc20',
+          owner: '0x1111111111111111111111111111111111111111',
+          amount: max
+        }
+      ]
+    })
+    const gasApproval = { type: ApprovalType.GasLimitApproval, approved: false, data: {} }
+    const request = {
+      handlerId: 'broad-token-approval',
+      type: 'transaction',
+      account: accountState.address,
+      data: { chainId: '0x1', gasLimit: '0x5208' },
+      approvals: [gasApproval],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals[0]).toBe(gasApproval)
+    expect(request.approvals[1]).toMatchObject({
+      type: ApprovalType.TokenApprovalRisk,
+      approved: false,
+      data: {
+        title: 'Broad Token Approvals',
+        confirmLabel: 'Approve Anyway',
+        riskCount: 2
+      }
+    })
+    expect(request.approvals[1].data.message).toMatch(/configured RPC reports 2 broad token permissions/i)
+
+    request.approvals[1].approve()
+    expect(request.approvals[1].approved).toBe(true)
+
+    request.data.gasLimit = '0x6000'
+    account.refreshTransactionSimulation(request)
+    expect(request.approvals).toEqual([gasApproval])
+  })
+
+  it('preserves broad-authority consent for fee-only rechecks and removes it when no longer reported', async () => {
+    const broadEffect = {
+      type: 'operator-approval',
+      standard: 'erc721-or-erc1155',
+      owner: accountState.address.toLowerCase(),
+      approved: true
+    }
+    simulateTransaction
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_simulateV1', effects: [broadEffect] })
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_simulateV1', effects: [] })
+    const request = {
+      handlerId: 'preserved-token-approval',
+      type: 'transaction',
+      account: accountState.address,
+      data: { chainId: '0x1', maxFeePerGas: '0x10' },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    const existingApproval = request.approvals[0]
+    existingApproval.approve()
+
+    account.refreshTransactionSimulation(request, true, true)
+    expect(request.approvals[0]).toBe(existingApproval)
+    expect(existingApproval.approved).toBe(true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals).toEqual([])
+  })
+
+  it('does not require broad-authority consent for finite, revoked, or ERC-721 token approvals', async () => {
+    simulateTransaction.mockResolvedValueOnce({
+      status: 'succeeded',
+      source: 'eth_simulateV1',
+      effects: [
+        { type: 'approval', standard: 'erc20', amount: '100' },
+        { type: 'approval', standard: 'erc20', amount: '0' },
+        { type: 'approval', standard: 'erc721', tokenId: '42' },
+        { type: 'operator-approval', standard: 'erc721-or-erc1155', approved: false }
+      ]
+    })
+    const request = {
+      handlerId: 'ordinary-token-approval',
+      type: 'transaction',
+      data: { chainId: '0x1' },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals).toEqual([])
+  })
+
   it('does not apply an execution check after its request is removed', async () => {
     let resolveSimulation
     simulateTransaction.mockImplementationOnce(() => new Promise((resolve) => (resolveSimulation = resolve)))

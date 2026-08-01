@@ -17,6 +17,7 @@ import windows from '../../windows'
 import nav from '../../windows/nav'
 import store from '../../store'
 import { TransactionData } from '../../../resources/domain/transaction'
+import { isBroadTokenAuthorityEffect } from '../../../resources/domain/transaction/effects'
 import { Type as SignerType, getSignerType } from '../../../resources/domain/signer'
 
 import provider from '../../provider'
@@ -388,15 +389,48 @@ class FrameAccount {
     }
   }
 
-  private removeSimulationApproval(req: TransactionRequest) {
-    req.approvals = (req.approvals || []).filter(
-      (approval) => approval.type !== ApprovalType.SimulationApproval
-    )
+  private removeApproval(req: TransactionRequest, type: ApprovalType) {
+    req.approvals = (req.approvals || []).filter((approval) => approval.type !== type)
+  }
+
+  private syncManagedApproval(req: TransactionRequest, type: ApprovalType, data?: Record<string, unknown>) {
+    if (!data) {
+      this.removeApproval(req, type)
+      return
+    }
+
+    const existingApproval = (req.approvals || []).find((approval) => approval.type === type)
+    if (existingApproval) {
+      existingApproval.data = data
+      return
+    }
+
+    const approval = {
+      type,
+      data,
+      approved: false,
+      approve: () => {
+        const knownRequest = this.requests[req.handlerId] as TransactionRequest | undefined
+        const knownApproval = knownRequest?.approvals.find((candidate) => candidate.type === type)
+
+        if (knownRequest === req && knownApproval === approval) {
+          approval.approved = true
+          this.update()
+        }
+      }
+    }
+
+    req.approvals = [...(req.approvals || []), approval]
+  }
+
+  private removeSimulationApprovals(req: TransactionRequest) {
+    this.removeApproval(req, ApprovalType.SimulationApproval)
+    this.removeApproval(req, ApprovalType.TokenApprovalRisk)
   }
 
   private syncSimulationApproval(req: TransactionRequest, simulation: TransactionSimulation) {
     if (simulation.status === 'succeeded') {
-      this.removeSimulationApproval(req)
+      this.removeApproval(req, ApprovalType.SimulationApproval)
       return
     }
 
@@ -425,38 +459,37 @@ class FrameAccount {
     }
     const detail = simulation.reason ? ` RPC detail: ${simulation.reason}` : ''
     const data = { ...copy, message: `${copy.message}${detail}`, confirmLabel: 'Sign Anyway' }
-    const existingApproval = (req.approvals || []).find(
-      (approval) => approval.type === ApprovalType.SimulationApproval
-    )
+    this.syncManagedApproval(req, ApprovalType.SimulationApproval, data)
+  }
 
-    if (existingApproval) {
-      existingApproval.data = data
+  private syncTokenApprovalRisk(req: TransactionRequest, simulation: TransactionSimulation) {
+    const broadApprovalCount =
+      simulation.status === 'succeeded'
+        ? (simulation.effects || []).filter((effect) => isBroadTokenAuthorityEffect(effect, req.account))
+            .length
+        : 0
+
+    if (broadApprovalCount === 0) {
+      this.removeApproval(req, ApprovalType.TokenApprovalRisk)
       return
     }
 
-    const approval = {
-      type: ApprovalType.SimulationApproval,
-      data,
-      approved: false,
-      approve: () => {
-        const knownRequest = this.requests[req.handlerId] as TransactionRequest | undefined
-        const knownApproval = knownRequest?.approvals.find(
-          (candidate) => candidate.type === ApprovalType.SimulationApproval
-        )
-
-        if (knownRequest === req && knownApproval === approval) {
-          approval.approved = true
-          this.update()
-        }
-      }
-    }
-
-    req.approvals = [...(req.approvals || []), approval]
+    const subject =
+      broadApprovalCount === 1
+        ? 'one broad token permission'
+        : `${broadApprovalCount} broad token permissions`
+    this.syncManagedApproval(req, ApprovalType.TokenApprovalRisk, {
+      title: broadApprovalCount === 1 ? 'Broad Token Approval' : 'Broad Token Approvals',
+      message: `Your configured RPC reports ${subject}. This may grant maximum ERC-20 spending or collection-wide operator access. Review RPC-reported effects before proceeding.`,
+      confirmLabel: 'Approve Anyway',
+      riskCount: broadApprovalCount
+    })
   }
 
   private applySimulationResult(req: TransactionRequest, simulation: TransactionSimulation) {
     req.simulation = simulation
     this.syncSimulationApproval(req, simulation)
+    this.syncTokenApprovalRisk(req, simulation)
     this.update()
   }
 
@@ -466,7 +499,7 @@ class FrameAccount {
     const version = (this.simulationVersions[req.handlerId] || 0) + 1
     this.simulationVersions[req.handlerId] = version
     req.simulation = { status: 'pending' }
-    if (!preserveApproval) this.removeSimulationApproval(req)
+    if (!preserveApproval) this.removeSimulationApprovals(req)
 
     if (publishPending) this.update()
 

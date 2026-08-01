@@ -8,7 +8,7 @@ import { Cluster, ClusterRow, ClusterValue } from '../../../../../../resources/C
 import { DisplayValue } from '../../../../../../resources/Components/DisplayValue'
 import RequestHeader from '../../../../../../resources/Components/RequestHeader'
 import BigNumber from 'bignumber.js'
-import { MAX_UINT256 } from '../../../../../../resources/domain/transaction/quantity'
+import { isBroadTokenAuthorityEffect } from '../../../../../../resources/domain/transaction/effects'
 
 const SimpleContractCallOverview = ({ method }) => {
   const body = method ? `Calling Contract Method ${method}` : 'Calling Contract'
@@ -112,19 +112,13 @@ export function getSimulationPresentation(simulation) {
   }
 }
 
-const MAX_UINT256_DECIMAL = MAX_UINT256.toString(10)
-
-export function getSimulationEffectsPresentation(simulation) {
+export function getSimulationEffectsPresentation(simulation, account) {
   if (simulation?.status !== 'succeeded' || simulation.source !== 'eth_simulateV1') return null
 
   const effects = simulation.effects || []
   if (!effects.length && !simulation.effectsTruncated) return null
 
-  const broadApproval = effects.some(
-    (effect) =>
-      (effect.type === 'approval' && effect.standard === 'erc20' && effect.amount === MAX_UINT256_DECIMAL) ||
-      (effect.type === 'operator-approval' && effect.approved)
-  )
+  const broadApproval = effects.some((effect) => isBroadTokenAuthorityEffect(effect, account))
   const count = effects.length
   const countLabel = `${count} RPC-reported token effect${count === 1 ? '' : 's'}`
 
@@ -154,7 +148,7 @@ const TxOverview = ({
   const { data: tx = {}, classification } = req
   const { data: calldata } = tx
   const simulation = getSimulationPresentation(req.simulation)
-  const simulationEffects = getSimulationEffectsPresentation(req.simulation)
+  const simulationEffects = getSimulationEffectsPresentation(req.simulation, req.account)
 
   const Description = BaseOverviews[classification]
 
