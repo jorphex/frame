@@ -1,4 +1,5 @@
 import Account from '../../../../main/accounts/Account'
+import { utils } from 'ethers'
 import reveal from '../../../../main/reveal'
 import { fetchContract } from '../../../../main/contracts'
 import { simulateTransaction } from '../../../../main/transaction/simulation'
@@ -49,6 +50,14 @@ const accountState = {
   address: '0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990',
   name: 'Test Account'
 }
+
+const tokenInterface = new utils.Interface([
+  'function approve(address spender, uint256 amount)',
+  'function setApprovalForAll(address operator, bool approved)'
+])
+const tokenContract = '0x2222222222222222222222222222222222222222'
+const delegate = '0x3333333333333333333333333333333333333333'
+const maxTokenAmount = 2n ** 256n - 1n
 
 beforeEach(() => {
   jest.clearAllTimers()
@@ -205,6 +214,35 @@ describe('#addRequest', () => {
     expect(request.approvals).toEqual([])
   })
 
+  it('requires fresh consent when a preserved execution warning changes', async () => {
+    simulateTransaction
+      .mockResolvedValueOnce({ status: 'failed', source: 'eth_simulateV1', reason: 'RPC timeout' })
+      .mockResolvedValueOnce({ status: 'reverted', source: 'eth_simulateV1', reason: 'denied' })
+    const request = {
+      handlerId: 'changed-simulation-approval',
+      type: 'transaction',
+      data: { chainId: '0x1', maxFeePerGas: '0x10' },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    const approval = request.approvals[0]
+    approval.approve()
+
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals[0]).toBe(approval)
+    expect(approval).toMatchObject({
+      approved: false,
+      data: { title: 'RPC Reports Revert' }
+    })
+  })
+
   it('requires one approval for broad token authority and invalidates it on intent edits', async () => {
     const max = (2n ** 256n - 1n).toString(10)
     const owner = accountState.address.toLowerCase()
@@ -291,6 +329,227 @@ describe('#addRequest', () => {
     await jest.advanceTimersByTimeAsync(0)
 
     expect(request.approvals).toEqual([])
+  })
+
+  it('requires calldata-based consent when only fallback simulation is available', async () => {
+    simulateTransaction.mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call' })
+    const request = {
+      handlerId: 'calldata-token-approval',
+      type: 'transaction',
+      account: accountState.address,
+      data: {
+        chainId: '0x1',
+        to: tokenContract,
+        data: tokenInterface.encodeFunctionData('approve', [delegate, maxTokenAmount])
+      },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals).toHaveLength(1)
+    expect(request.approvals[0]).toMatchObject({
+      type: ApprovalType.TokenApprovalRisk,
+      approved: false,
+      data: { riskCount: 1, evidence: 'calldata', confirmLabel: 'Approve Anyway' }
+    })
+    expect(request.approvals[0].data.message).toMatch(/does not prove the contract standard/i)
+  })
+
+  it('does not classify contract-creation initcode as token approval calldata', async () => {
+    simulateTransaction.mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call' })
+    const request = {
+      handlerId: 'contract-creation-selector-collision',
+      type: 'transaction',
+      account: accountState.address,
+      data: {
+        chainId: '0x1',
+        data: tokenInterface.encodeFunctionData('approve', [delegate, maxTokenAmount])
+      },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals).toEqual([])
+  })
+
+  it('does not double-count matching calldata and RPC-reported authority', async () => {
+    simulateTransaction.mockResolvedValueOnce({
+      status: 'succeeded',
+      source: 'eth_simulateV1',
+      effects: [
+        {
+          type: 'approval',
+          standard: 'erc20',
+          contract: tokenContract,
+          owner: accountState.address,
+          spender: delegate,
+          amount: maxTokenAmount.toString(10)
+        }
+      ]
+    })
+    const request = {
+      handlerId: 'deduplicated-token-approval',
+      type: 'transaction',
+      account: accountState.address,
+      data: {
+        chainId: '0x1',
+        to: tokenContract,
+        data: tokenInterface.encodeFunctionData('approve', [delegate, maxTokenAmount])
+      },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals[0]).toMatchObject({
+      data: { riskCount: 1, evidence: 'calldata-and-rpc' }
+    })
+  })
+
+  it('counts additional simulated broad effects beyond top-level intent', async () => {
+    simulateTransaction.mockResolvedValueOnce({
+      status: 'succeeded',
+      source: 'eth_simulateV1',
+      effects: [
+        {
+          type: 'operator-approval',
+          standard: 'erc721-or-erc1155',
+          contract: tokenContract,
+          owner: accountState.address,
+          operator: delegate,
+          approved: true
+        },
+        {
+          type: 'approval',
+          standard: 'erc20',
+          contract: '0x4444444444444444444444444444444444444444',
+          owner: accountState.address,
+          spender: delegate,
+          amount: maxTokenAmount.toString(10)
+        }
+      ]
+    })
+    const request = {
+      handlerId: 'combined-token-approval',
+      type: 'transaction',
+      account: accountState.address,
+      data: {
+        chainId: '0x1',
+        to: tokenContract,
+        data: tokenInterface.encodeFunctionData('setApprovalForAll', [delegate, true])
+      },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals[0]).toMatchObject({
+      data: { riskCount: 2, evidence: 'calldata-and-rpc' }
+    })
+  })
+
+  it('preserves calldata consent for fee-only rechecks and removes it after a finite edit', async () => {
+    simulateTransaction
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call' })
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call' })
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call' })
+    const request = {
+      handlerId: 'calldata-consent-lifecycle',
+      type: 'transaction',
+      account: accountState.address,
+      data: {
+        chainId: '0x1',
+        to: tokenContract,
+        data: tokenInterface.encodeFunctionData('approve', [delegate, maxTokenAmount])
+      },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    const approval = request.approvals[0]
+    approval.approve()
+
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.approvals[0]).toBe(approval)
+    expect(approval.approved).toBe(true)
+
+    request.data.data = tokenInterface.encodeFunctionData('approve', [delegate, 100])
+    account.refreshTransactionSimulation(request)
+    expect(request.approvals).toEqual([])
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.approvals).toEqual([])
+  })
+
+  it('requires fresh consent when a preserved broad-authority warning expands', async () => {
+    const topLevelEffect = {
+      type: 'approval',
+      standard: 'erc20',
+      contract: tokenContract,
+      owner: accountState.address,
+      spender: delegate,
+      amount: maxTokenAmount.toString(10)
+    }
+    simulateTransaction
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call' })
+      .mockResolvedValueOnce({
+        status: 'succeeded',
+        source: 'eth_simulateV1',
+        effects: [
+          topLevelEffect,
+          {
+            ...topLevelEffect,
+            contract: '0x4444444444444444444444444444444444444444'
+          }
+        ]
+      })
+    const request = {
+      handlerId: 'expanded-calldata-consent',
+      type: 'transaction',
+      account: accountState.address,
+      data: {
+        chainId: '0x1',
+        to: tokenContract,
+        data: tokenInterface.encodeFunctionData('approve', [delegate, maxTokenAmount])
+      },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    const approval = request.approvals[0]
+    approval.approve()
+
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.approvals[0]).toBe(approval)
+    expect(approval).toMatchObject({
+      approved: false,
+      data: { riskCount: 2, evidence: 'calldata-and-rpc' }
+    })
   })
 
   it('does not require broad-authority consent for finite, revoked, or ERC-721 token approvals', async () => {

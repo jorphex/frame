@@ -138,16 +138,16 @@ describe('simulation review', () => {
     const approval = {
       type: 'approveBroadTokenAuthority',
       data: {
-        title: 'Broad Token Approvals',
+        title: 'Broad Token Approval',
         message:
-          'Your configured RPC reports 2 broad token permissions. Review RPC-reported effects before proceeding.',
+          'Top-level calldata requests one broad token permission. The selector matches maximum approve(address,uint256) or enabled setApprovalForAll(address,bool), but does not prove the contract standard or successful execution.',
         confirmLabel: 'Approve Anyway'
       }
     }
 
     const { user } = render(<TxApproval req={req} approval={approval} />)
 
-    expect(screen.getByText('Broad Token Approvals')).toBeTruthy()
+    expect(screen.getByText('Broad Token Approval')).toBeTruthy()
     expect(screen.getByText(approval.data.message)).toBeTruthy()
     await user.click(screen.getByText('Approve Anyway'))
     expect(link.rpc).toHaveBeenCalledWith(

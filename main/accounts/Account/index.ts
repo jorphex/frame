@@ -18,6 +18,10 @@ import nav from '../../windows/nav'
 import store from '../../store'
 import { TransactionData } from '../../../resources/domain/transaction'
 import { isBroadTokenAuthorityEffect } from '../../../resources/domain/transaction/effects'
+import {
+  effectReportsBroadTokenAuthorityIntent,
+  parseBroadTokenAuthorityIntent
+} from '../../../resources/domain/transaction/approvalRisk'
 import { Type as SignerType, getSignerType } from '../../../resources/domain/signer'
 
 import provider from '../../provider'
@@ -401,7 +405,14 @@ class FrameAccount {
 
     const existingApproval = (req.approvals || []).find((approval) => approval.type === type)
     if (existingApproval) {
+      const previousKeys = Object.keys(existingApproval.data || {})
+      const nextKeys = Object.keys(data)
+      const unchanged =
+        previousKeys.length === nextKeys.length &&
+        nextKeys.every((key) => Object.is(existingApproval.data?.[key], data[key]))
+
       existingApproval.data = data
+      if (!unchanged) existingApproval.approved = false
       return
     }
 
@@ -463,11 +474,17 @@ class FrameAccount {
   }
 
   private syncTokenApprovalRisk(req: TransactionRequest, simulation: TransactionSimulation) {
-    const broadApprovalCount =
+    const broadEffects =
       simulation.status === 'succeeded'
         ? (simulation.effects || []).filter((effect) => isBroadTokenAuthorityEffect(effect, req.account))
-            .length
-        : 0
+        : []
+    const intent = req.data.to ? parseBroadTokenAuthorityIntent(req.data.data) : undefined
+    const intentReported =
+      intent !== undefined &&
+      broadEffects.some((effect) =>
+        effectReportsBroadTokenAuthorityIntent(intent, effect, req.account, req.data.to)
+      )
+    const broadApprovalCount = broadEffects.length + (intent && !intentReported ? 1 : 0)
 
     if (broadApprovalCount === 0) {
       this.removeApproval(req, ApprovalType.TokenApprovalRisk)
@@ -478,11 +495,19 @@ class FrameAccount {
       broadApprovalCount === 1
         ? 'one broad token permission'
         : `${broadApprovalCount} broad token permissions`
+    const evidence = intent ? (broadEffects.length > 0 ? 'calldata-and-rpc' : 'calldata') : 'rpc'
+    const message =
+      evidence === 'rpc'
+        ? `Your configured RPC reports ${subject}. This may grant maximum ERC-20 spending or collection-wide operator access. Review RPC-reported effects before proceeding.`
+        : evidence === 'calldata-and-rpc'
+        ? `Top-level calldata requests broad token-like authority, and your configured RPC reports ${subject}. Review both the request intent and RPC-reported effects before proceeding.`
+        : `Top-level calldata requests ${subject}. The selector matches maximum approve(address,uint256) or enabled setApprovalForAll(address,bool), but does not prove the contract standard or successful execution.`
     this.syncManagedApproval(req, ApprovalType.TokenApprovalRisk, {
       title: broadApprovalCount === 1 ? 'Broad Token Approval' : 'Broad Token Approvals',
-      message: `Your configured RPC reports ${subject}. This may grant maximum ERC-20 spending or collection-wide operator access. Review RPC-reported effects before proceeding.`,
+      message,
       confirmLabel: 'Approve Anyway',
-      riskCount: broadApprovalCount
+      riskCount: broadApprovalCount,
+      evidence
     })
   }
 
