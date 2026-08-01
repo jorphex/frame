@@ -837,7 +837,7 @@ Object.keys(initial.main.accounts).forEach((id) => {
 
   // remote lastUpdated timestamp from balances
   // TODO: define account schema more accurately
-  // @ts-ignore
+  // @ts-expect-error -- Legacy account balances do not match the current persisted-state type.
   initial.main.accounts[id].balances = { lastUpdated: undefined }
 })
 

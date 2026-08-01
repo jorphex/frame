@@ -1,91 +1,88 @@
-name: Build and publish installer artifacts for all platforms
+name: Build a draft Linux release
 
 on:
-  push:
-    branches:
-      - 'develop'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Optional release tag; defaults to v<package version>
+        required: false
+        type: string
 
-env:
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+permissions:
+  artifact-metadata: write
+  attestations: write
+  contents: write
+  id-token: write
+
+concurrency:
+  group: linux-release
+  cancel-in-progress: false
 
 jobs:
-  create_draft_release:
-    runs-on: ubuntu-latest
+  release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
-      - name: read version from package.json
-        id: package-version
-        uses: martinbeentjes/npm-get-version-action@master
-      - name: check for existing release
-        run: gh release list --exclude-drafts | grep -q ".*v${{ steps.package-version.outputs.current-version }}" && exit 1 || true
-      - name: remove old draft releases
-        run: gh release list | grep -e "Draft.*v${{ steps.package-version.outputs.current-version }}" | awk '{print $3}' | xargs -r gh release delete
-      - name: create new draft release
-        uses: marvinpinto/action-automatic-releases@latest
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          automatic_release_tag: v${{ steps.package-version.outputs.current-version }}
-          prerelease: false
-          draft: true
-          title: ${{ steps.package-version.outputs.current-version }}
-
-  build_release:
-    needs: [create_draft_release]
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-20.04
-          - ubuntu-22.04-arm
-        include:
-          - os: macos-13
-            cert_key: APPLE_DEVELOPER_SIGNING_CERTIFICATE
-            cert_password_key: APPLE_CERTIFICATE_PASSWORD
-            apple_id_key: APPLE_ID
-            apple_app_specific_password_key: APPLE_ID_PASSWORD
-            apple_team_id_key: APPLE_TEAM_ID
-          - os: windows-latest
-            cert_key: WINDOWS_CSC_CERTIFICATE
-            cert_password_key: WINDOWS_CSC_PASSWORD
-
-    runs-on: ${{ matrix.os }}
-
-    env:
-      CSC_LINK: ${{ secrets[matrix.cert_key] }}
-      CSC_KEY_PASSWORD: ${{ secrets[matrix.cert_password_key] }}
-      APPLE_ID: ${{ secrets[matrix.apple_id_key] }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets[matrix.apple_app_specific_password_key] }}
-      APPLE_TEAM_ID: ${{ secrets[matrix.apple_team_id_key] }}
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
-      - name: install Linux dev tools
-        if: startsWith(matrix.os, 'ubuntu')
+      - run: npm install --global npm@11.12.0
+      - name: Resolve release metadata
+        id: release
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
-          sudo apt update -y
-          sudo apt install -y libudev-dev
-      - name: install Macos dev tools
-        if: startsWith(matrix.os, 'macos')
+          version=$(node --print "require('./package.json').version")
+          tag="${REQUESTED_TAG:-v${version}}"
+          if [[ ! "$tag" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Release tag contains unsupported characters" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+      - name: Install Linux build prerequisites
         run: |
-          sudo -H pip install setuptools
-      - name: create NPM config file
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_AUTH_TOKEN }}" > ./.npmrc
+          sudo apt-get update
+          sudo apt-get install --yes libudev-dev
       - run: npm run setup:ci
+      - run: npm run format:check
+      - run: npm run lint
       - run: npm run compile
-      - run: npm run test:unit:main -- --testTimeout=5000 --verbose --detectOpenHandles --forceExit
-      - run: npm run test:unit:components
+      - run: npm test
+      - run: npm run test:usbAdapters
       - run: npm run bundle
-      - name: Sleep for 4 seconds
-        shell: bash
-        run: sleep 4
-      - name: Publish
-        if: ${{ startsWith(matrix.os, 'ubuntu') && endsWith(matrix.os, 'arm') }}
-        run: npm run publish:linux:arm64
-      - name: Publish
-        if: ${{ !startsWith(matrix.os, 'ubuntu') || !endsWith(matrix.os, 'arm') }}
-        run: npm run publish
+      - run: npm run package:linux:x64
+      - run: npm run package:verify:linux
+      - name: Generate CycloneDX SBOM
+        run: npm run sbom:linux
+      - name: Attest build provenance
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: |
+            dist/*.AppImage
+            dist/*_amd64.deb
+      - name: Attest package SBOM
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: |
+            dist/*.AppImage
+            dist/*_amd64.deb
+          sbom-path: dist/frame.cdx.json
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
+              echo "Refusing to replace assets on published release $RELEASE_TAG" >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --draft --title "$RELEASE_VERSION" --notes "Automated Linux draft build."
+          fi
+          gh release upload "$RELEASE_TAG" dist/*.AppImage dist/*_amd64.deb dist/SHA256SUMS dist/frame.cdx.json --clobber

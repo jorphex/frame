@@ -79,7 +79,7 @@ const storeApi = {
   getOrigin: (id: string) => store('main.origins', id) as Origin
 }
 
-const getAccounts = () => require('../accounts').default as typeof accounts
+const getAccounts = () => accounts
 
 const getPayloadOrigin = ({ _origin }: RPCRequestPayload) => storeApi.getOrigin(_origin)
 

@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-expect-error -- getos does not ship declarations compatible with this TypeScript version.
 import getos from 'getos'
 import path from 'path'
 import { app, screen, BrowserWindow, Menu, KeyboardEvent, Rectangle, Tray as ElectronTray } from 'electron'

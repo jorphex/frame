@@ -1,5 +1,4 @@
 import { BrowserWindow, app, dialog } from 'electron'
-import windows from '../'
 
 enum ExitAction {
   OK,

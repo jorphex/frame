@@ -50,8 +50,7 @@ Frame is a web3 platform that creates a secure system-wide interface to your cha
 
 #### Downloads
 
-- [Production Releases](https://github.com/floating/frame/releases)
-- [Canary Releases](https://github.com/frame-labs/frame-canary/releases)
+- [Fork Releases](https://github.com/jorphex/frame/releases)
 
 #### Arch Linux
 
@@ -63,11 +62,15 @@ If you use an arch-based distro, you can use an AUR Helper like [yay](https://gi
 
 ```bash
 # Clone
-› git clone https://github.com/floating/frame
+› git clone https://github.com/jorphex/frame
+› cd frame
 
 # Use the pinned Node version
 › nvm install
 › nvm use
+
+# Use the pinned npm resolver
+› npm install --global npm@11.12.0
 
 
 # Install

@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment -- Legacy JS migrations are not typed yet.
 // @ts-nocheck
 // legacy migrations that were written in JS and have not been ported
 // to Typescript

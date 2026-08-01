@@ -1,5 +1,3 @@
-import React from 'react'
-
 import link from '../../../../resources/link'
 import { render, screen } from '../../../componentSetup'
 

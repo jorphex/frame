@@ -6,3 +6,5 @@ package-lock.json
 cache
 .vscode
 scratch*
+/PLAN.md
+/NOTES.md

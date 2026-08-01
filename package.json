@@ -8,7 +8,7 @@
     "clean": "npx rimraf dist bundle compiled .parcel-cache node_modules",
     "setup:full": "npm run clean && npm cache clean --force && npm run setup:ci",
     "setup:clean": "npm run clean && npm run setup:ci",
-    "setup:ci": "npm ci && npm run setup:scripts",
+    "setup:ci": "node scripts/check-toolchain.mjs && npm ci && npm run setup:scripts",
     "setup:deps": "npm run setup:ci",
     "setup:scripts": "allow-scripts && npm run setup:native",
     "setup:native": "electron-rebuild --force --only node-hid",
@@ -40,6 +40,9 @@
     "compile": "npm run copy-assets && tsc --project tsconfig.build.json",
     "compile:watch": "npm run copy-assets && tsc --project tsconfig.build.json -w",
     "build": "npm run compile && sleep 4 && npm run bundle && sleep 4 && electron-builder --config=build/electron-builder-standard.js",
+    "package:linux:x64": "electron-builder --config=build/electron-builder-standard.js --linux AppImage deb --x64 --publish never",
+    "package:verify:linux": "node scripts/verify-linux-package.mjs",
+    "sbom:linux": "npm sbom --sbom-format cyclonedx > dist/frame.cdx.json",
     "copy-assets": "shx mkdir -p ./compiled/main/windows && shx cp ./main/windows/*.png ./compiled/main/windows",
     "parcel:build": "parcel build --no-autoinstall --public-url .",
     "publish": "electron-builder -c.snap.publish=github --config=build/electron-builder-standard.js",
@@ -203,7 +206,8 @@
   },
   "engines": {
     "electron": "23",
-    "node": ">=20.18.0 <21"
+    "node": "20.20.1",
+    "npm": "11.12.0"
   },
   "browserslist": [
     "last 1 Electron major version"
@@ -266,13 +270,16 @@
       "@noble/curves": "1.4.2",
       "@noble/hashes": "1.4.0"
     },
-    "@trezor/connect": {
+    "@ethereumjs/tx@10.1.2": {
       "@noble/curves": "1.9.7",
       "@noble/hashes": "1.8.0"
     },
-    "@trezor/device-authenticity": {
+    "@ethereumjs/util@10.1.2": {
       "@noble/curves": "1.9.7",
       "@noble/hashes": "1.8.0"
+    },
+    "@trezor/device-authenticity@1.1.2": {
+      "@noble/curves": "1.9.7"
     },
     "usb@2.18.0": {
       "node-addon-api": "8.5.0"

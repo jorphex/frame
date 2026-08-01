@@ -1,33 +1,88 @@
-name: Compile and run unit tests
+name: Quality and package checks
 
 on:
   push:
     branches:
-      - 'beta.*'
-      - 'canary'
-      - 'develop'
+      - safe7-workable
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  quality:
+    name: Lint, compile, and test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.nvmrc'
-      - name: Electronegativity
-        uses: doyensec/electronegativity-action@v2.0
-      - name: Upload sarif
-        uses: github/codeql-action/upload-sarif@v2
+          cache: 'npm'
+      - run: npm install --global npm@11.12.0
+      - name: Install Linux build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libudev-dev
+      - run: npm run setup:ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run compile
+      - run: npm test
+      - run: npm run test:usbAdapters
+
+  package-linux:
+    name: Build Linux packages
+    needs: quality
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          sarif_file: ../electronegativity_results
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
-      - run: |
-          sudo apt update -y
-          sudo apt install -y libudev-dev
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm install --global npm@11.12.0
+      - name: Install Linux build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libudev-dev
       - run: npm run setup:ci
       - run: npm run compile
-      - run: npm run test:unit
+      - run: npm run bundle
+      - run: npm run package:linux:x64
+      - run: npm run package:verify:linux
+      - name: Generate CycloneDX SBOM
+        run: npm run sbom:linux
+      - name: Upload package smoke-test artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: frame-linux-x64-${{ github.sha }}
+          path: |
+            dist/*.AppImage
+            dist/*_amd64.deb
+            dist/SHA256SUMS
+            dist/frame.cdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+  dependency-review:
+    name: Review dependency changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Reject newly introduced vulnerable dependencies
+        uses: actions/dependency-review-action@05fe4576374b728f0c523d6a13d64c25081e0803 # v4.8.3
+        with:
+          fail-on-severity: high
