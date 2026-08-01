@@ -74,7 +74,7 @@
     "@ethersproject/providers": "5.7.2",
     "@framelabs/pylon-client": "0.0.10",
     "@githubprimer/octicons-react": "8.5.0",
-    "@ledgerhq/hw-app-eth": "6.42.1",
+    "@ledgerhq/hw-app-eth": "6.47.1",
     "@ledgerhq/hw-transport-node-hid-noevents": "6.30.5",
     "@ledgerhq/hw-transport-node-hid-singleton": "6.31.5",
     "@ledgerhq/hw-transport-web-ble": "6.29.4",
