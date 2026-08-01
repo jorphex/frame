@@ -992,7 +992,8 @@ describe('#rejectUnapprovedRequestsForOriginChain', () => {
     const activeAccount = Accounts.current()
     const responses = {
       transaction: jest.fn(),
-      sign: jest.fn()
+      sign: jest.fn(),
+      walletCalls: jest.fn()
     }
     const requestFor = (handlerId, overrides) => ({
       ...request,
@@ -1008,6 +1009,14 @@ describe('#rejectUnapprovedRequestsForOriginChain', () => {
         data: { context: { requestChainId: 1 } }
       }),
       responses.sign
+    )
+    Accounts.addRequest(
+      requestFor('old-wallet-calls', {
+        type: 'walletCalls',
+        chainId: '0x1',
+        calls: [{ data: '0x', value: '0x0' }]
+      }),
+      responses.walletCalls
     )
     Accounts.addRequest(
       requestFor('other-chain', {
@@ -1043,6 +1052,9 @@ describe('#rejectUnapprovedRequestsForOriginChain', () => {
       expect.objectContaining({ error: { code: 4901, message: expect.stringContaining('chain 1') } })
     )
     expect(responses.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ error: { code: 4901, message: expect.stringContaining('chain 1') } })
+    )
+    expect(responses.walletCalls).toHaveBeenCalledWith(
       expect.objectContaining({ error: { code: 4901, message: expect.stringContaining('chain 1') } })
     )
   })

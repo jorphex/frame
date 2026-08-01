@@ -31,5 +31,6 @@ export const accountViewTitles: Record<RequestType, string> = {
   access: 'Account Access',
   addChain: 'Add Chain',
   switchChain: 'Switch Chain',
-  addToken: 'Add Token'
+  addToken: 'Add Token',
+  walletCalls: 'Review Call Batch'
 }

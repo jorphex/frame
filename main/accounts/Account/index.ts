@@ -9,7 +9,8 @@ import {
   RequestMode,
   SignTypedDataRequest,
   SwitchChainRequest,
-  TransactionRequest
+  TransactionRequest,
+  WalletCallsRequest
 } from '..'
 import nebulaApi from '../../nebula'
 import signers from '../../signers'
@@ -281,6 +282,9 @@ class FrameAccount {
       }
       if (request.type === 'switchChain') {
         return (request as SwitchChainRequest).sourceChainId
+      }
+      if (request.type === 'walletCalls') {
+        return parseInt((request as WalletCallsRequest).chainId, 16)
       }
     }
 

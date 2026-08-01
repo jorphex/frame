@@ -255,6 +255,26 @@ class Requests extends React.Component {
                   />
                 </RequestItem>
               )
+            } else if (req.type === 'walletCalls') {
+              const chainId = parseInt(req.chainId, 16)
+              const chainName = this.store('main.networks.ethereum', chainId, 'name') || `Chain ${chainId}`
+              const metadata = this.store('main.networksMeta.ethereum', chainId) || {}
+              return (
+                <RequestItem
+                  key={req.type + i}
+                  req={req}
+                  account={this.props.account}
+                  handlerId={req.handlerId}
+                  i={i}
+                  title={`${chainName} Call Batch`}
+                  color={metadata.primaryColor ? `var(--${metadata.primaryColor})` : 'var(--outerspace)'}
+                  img={metadata.icon}
+                >
+                  <div className='walletCallsRequestSummary'>
+                    {req.calls.length} ordered {req.calls.length === 1 ? 'call' : 'calls'} - non-atomic
+                  </div>
+                </RequestItem>
+              )
             }
           })}
         </Cluster>

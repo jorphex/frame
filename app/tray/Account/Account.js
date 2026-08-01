@@ -24,6 +24,7 @@ import ChainRequest from './Requests/ChainRequest'
 import AddTokenRequest from './Requests/AddTokenRequest'
 import SignTypedDataRequest from './Requests/SignTypedDataRequest'
 import SignPermitRequest from './Requests/SignPermitRequest'
+import WalletCallsRequest from './Requests/WalletCallsRequest'
 import { isHardwareSigner } from '../../../resources/domain/signer'
 import { accountViewTitles } from '../../../resources/domain/request'
 
@@ -35,7 +36,8 @@ const requests = {
   access: ProviderRequest,
   addChain: ChainRequest,
   switchChain: ChainRequest,
-  addToken: AddTokenRequest
+  addToken: AddTokenRequest,
+  walletCalls: WalletCallsRequest
 }
 
 const modules = {
@@ -216,6 +218,14 @@ class _AccountBody extends React.Component {
   }
 
   getChainData(req) {
+    if (req.type === 'walletCalls') {
+      const chainId = parseInt(req.chainId, 16)
+      return {
+        chainId,
+        chainName: this.store('main.networks.ethereum', chainId, 'name') || `Chain ${chainId}`
+      }
+    }
+
     if (req.type === 'switchChain') {
       return {
         sourceChainName: this.store('main.networks', req.chain.type, req.sourceChainId, 'name'),

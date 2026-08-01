@@ -94,7 +94,8 @@ export {
   SignTypedDataRequest,
   AddChainRequest,
   SwitchChainRequest,
-  AddTokenRequest
+  AddTokenRequest,
+  WalletCallsRequest
 } from './types'
 
 type RequestWithId = [string, TransactionRequest]

@@ -45,6 +45,7 @@ export type RequestType =
   | 'addChain'
   | 'switchChain'
   | 'addToken'
+  | 'walletCalls'
 
 interface Request {
   type: RequestType
@@ -248,4 +249,16 @@ export interface SwitchChainRequest extends AccountRequest<'switchChain'> {
 
 export interface AddTokenRequest extends AccountRequest<'addToken'> {
   token: Token
+}
+
+export interface WalletCallsRequest extends AccountRequest<'walletCalls'> {
+  version: '2.0.0'
+  batchId: string
+  chainId: string
+  atomic: false
+  calls: Array<{
+    to?: string
+    data: string
+    value: string
+  }>
 }
