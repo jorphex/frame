@@ -1,7 +1,5 @@
-import os from 'os'
 import log from 'electron-log'
 import HID from 'node-hid'
-import usbDetect from 'usb-detection'
 
 import LedgerSignerAdapter from '../../../../main/signers/ledger/adapter'
 import { Status } from '../../../../main/signers/ledger/Ledger'
@@ -66,12 +64,6 @@ afterEach(() => {
 })
 
 afterAll(() => {
-  if (os.platform().toLowerCase() !== 'linux') {
-    // calling stopMonitoring() causes a segmentation fault on Linux
-    // https://github.com/MadLittleMods/node-usb-detection/issues/57
-    usbDetect.stopMonitoring()
-  }
-
   jest.useRealTimers()
   log.transports.console.level = 'debug'
 })
