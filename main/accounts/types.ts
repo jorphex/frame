@@ -261,6 +261,7 @@ export interface WalletCallsRequest extends AccountRequest<'walletCalls'> {
     data: string
     value: string
   }>
+  locked?: boolean
   preparation: WalletCallsPreparation
   simulation: WalletCallsSimulation
 }

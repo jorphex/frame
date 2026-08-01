@@ -1122,6 +1122,73 @@ describe('#signTransactionForAccount', () => {
   })
 })
 
+describe('#claimWalletCallsRequest', () => {
+  const readyRequest = (handlerId = 'wallet-calls-claim') => {
+    const call = {
+      to: '0x3333333333333333333333333333333333333333',
+      data: '0xabcd',
+      value: '0x0'
+    }
+    return {
+      handlerId,
+      type: 'walletCalls',
+      account: account2.address,
+      origin: 'example.test',
+      payload: { id: 1, jsonrpc: '2.0', method: 'wallet_sendCalls', params: [] },
+      version: '2.0.0',
+      batchId: 'batch-id',
+      chainId: '0x1',
+      atomic: false,
+      calls: [call],
+      simulation: {
+        status: 'succeeded',
+        source: 'eth_simulateV1',
+        calls: [{ status: 'succeeded', source: 'eth_simulateV1', gasUsed: '0x1' }]
+      },
+      preparation: {
+        status: 'succeeded',
+        calls: [
+          {
+            transaction: {
+              from: account2.address,
+              chainId: '0x1',
+              nonce: '0x5',
+              type: '0x2',
+              gasLimit: '0x5208',
+              ...call,
+              maxFeePerGas: '0x10',
+              maxPriorityFeePerGas: '0x1',
+              gasFeesSource: GasFeesSource.Frame
+            },
+            maxFee: '0x52080'
+          }
+        ],
+        maxFee: '0x52080'
+      }
+    }
+  }
+
+  it('claims from the explicit account while another account remains current', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const request = readyRequest()
+    targetAccount.requests[request.handlerId] = request
+
+    const snapshot = Accounts.claimWalletCallsRequest(account2.address.toUpperCase(), request.handlerId)
+
+    expect(Accounts.current().id).toBe(account.address)
+    expect(snapshot).toMatchObject({ account: account2.address, id: request.batchId })
+    expect(request).toMatchObject({ locked: true, status: 'pending' })
+  })
+
+  it.each([
+    ['invalid account identity', undefined, 'wallet-calls-claim', /invalid/i],
+    ['invalid handler identity', account2.address, '', /invalid/i],
+    ['unknown account', '0x3333333333333333333333333333333333333333', 'wallet-calls-claim', /locate/i]
+  ])('rejects %s', (_label, accountId, handlerId, message) => {
+    expect(() => Accounts.claimWalletCallsRequest(accountId, handlerId)).toThrow(message)
+  })
+})
+
 describe('#signerCompatibility', () => {
   let activeSigner
 

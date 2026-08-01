@@ -152,6 +152,36 @@ const walletCallsRequest = (handlerId = 'wallet-calls') => ({
   simulation: { status: 'pending', calls: [] }
 })
 
+const readyWalletCallsRequest = (handlerId = 'ready-wallet-calls') => {
+  const request = walletCallsRequest(handlerId)
+  request.simulation = {
+    status: 'succeeded',
+    source: 'eth_simulateV1',
+    calls: request.calls.map(() => ({ status: 'succeeded', source: 'eth_simulateV1', gasUsed: '0x1' }))
+  }
+  request.preparation = {
+    status: 'succeeded',
+    calls: request.calls.map((call, index) => ({
+      transaction: {
+        from: accountState.address.toLowerCase(),
+        chainId: request.chainId,
+        nonce: `0x${(5 + index).toString(16)}`,
+        type: '0x2',
+        gasLimit: '0x5208',
+        ...(call.to ? { to: call.to } : {}),
+        data: call.data,
+        value: call.value,
+        maxFeePerGas: '0x10',
+        maxPriorityFeePerGas: '0x1',
+        gasFeesSource: GasFeesSource.Frame
+      },
+      maxFee: '0x52080'
+    })),
+    maxFee: '0xa4100'
+  }
+  return request
+}
+
 beforeEach(() => {
   jest.clearAllTimers()
   simulateTransaction.mockImplementation(() => new Promise(() => {}))
@@ -1200,6 +1230,110 @@ describe('#addRequest', () => {
     await Promise.resolve()
 
     expect(account.requests[request.handlerId]).toBeUndefined()
+  })
+})
+
+describe('#claimWalletCallsRequest', () => {
+  it('atomically claims a detached snapshot of the reviewed batch', () => {
+    const request = readyWalletCallsRequest()
+    account.requests[request.handlerId] = request
+    accounts.update.mockClear()
+
+    const snapshot = account.claimWalletCallsRequest(request.handlerId)
+
+    expect(request).toMatchObject({ locked: true, status: 'pending', notice: 'See Signer' })
+    expect(snapshot).toMatchObject({
+      id: request.batchId,
+      origin: request.origin,
+      account: accountState.address.toLowerCase(),
+      chainId: request.chainId,
+      calls: request.calls,
+      preparation: { maxFee: '0xa4100' }
+    })
+    expect(snapshot.calls).not.toBe(request.calls)
+    expect(snapshot.preparation).not.toBe(request.preparation)
+    expect(snapshot.preparation.calls[0].transaction).not.toBe(request.preparation.calls[0].transaction)
+    expect(Object.isFrozen(snapshot.preparation.calls[0].transaction)).toBe(true)
+    expect(accounts.update).toHaveBeenCalledTimes(1)
+
+    request.calls[0].data = '0xffff'
+    request.preparation.calls[0].transaction.data = '0xffff'
+    expect(snapshot.calls[0].data).toBe('0xabcd')
+    expect(snapshot.preparation.calls[0].transaction.data).toBe('0xabcd')
+    expect(() => account.claimWalletCallsRequest(request.handlerId)).toThrow(/already been claimed/i)
+  })
+
+  it.each([
+    ['pending simulation', (request) => (request.simulation = { status: 'pending', calls: [] })],
+    ['missing simulation', (request) => (request.simulation = undefined)],
+    ['pending preparation', (request) => (request.preparation = { status: 'pending' })],
+    ['failed preparation', (request) => (request.preparation = { status: 'failed', reason: 'no' })],
+    ['existing status', (request) => (request.status = 'error')],
+    ['existing lock', (request) => (request.locked = true)],
+    [
+      'account ownership mismatch',
+      (request) => (request.account = '0x4444444444444444444444444444444444444444')
+    ],
+    ['missing origin', (request) => (request.origin = '')],
+    ['missing batch id', (request) => (request.batchId = '')],
+    ['invalid prepared fee', (request) => (request.preparation.calls[0].maxFee = '0x1')]
+  ])('rejects %s without changing request state', (_label, mutate) => {
+    const request = readyWalletCallsRequest(`claim-${_label}`)
+    mutate(request)
+    account.requests[request.handlerId] = request
+    const expected = JSON.parse(JSON.stringify(request))
+    accounts.update.mockClear()
+
+    expect(() => account.claimWalletCallsRequest(request.handlerId)).toThrow()
+
+    expect(request).toEqual(expected)
+    expect(accounts.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects a request stored under a different handler identity', () => {
+    const request = readyWalletCallsRequest('redirected-handler')
+    account.requests['claimed-handler'] = request
+
+    expect(() => account.claimWalletCallsRequest('claimed-handler')).toThrow(/identity/i)
+    expect(request.locked).toBeUndefined()
+    expect(request.status).toBeUndefined()
+  })
+
+  it('invalidates in-flight simulation and preparation results when claimed', async () => {
+    let resolveSimulation
+    let resolveNonce
+    simulateWalletCalls.mockImplementationOnce(() => new Promise((resolve) => (resolveSimulation = resolve)))
+    provider.getNonce.mockImplementationOnce((_transaction, callback) => (resolveNonce = callback))
+    const request = walletCallsRequest('claim-in-flight')
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+
+    const ready = readyWalletCallsRequest(request.handlerId)
+    request.simulation = ready.simulation
+    request.preparation = ready.preparation
+    const reviewedSimulation = request.simulation
+    const reviewedPreparation = request.preparation
+    account.claimWalletCallsRequest(request.handlerId)
+
+    resolveSimulation({
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'stale result'
+    })
+    resolveNonce({ result: '0x9' })
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.simulation).toBe(reviewedSimulation)
+    expect(request.preparation).toBe(reviewedPreparation)
+    expect(request).toMatchObject({ locked: true, status: 'pending' })
+  })
+
+  it('rejects a missing or non-wallet-call request', () => {
+    account.requests.transaction = { handlerId: 'transaction', type: 'transaction' }
+
+    expect(() => account.claimWalletCallsRequest('missing')).toThrow(/no longer available/i)
+    expect(() => account.claimWalletCallsRequest('transaction')).toThrow(/no longer available/i)
   })
 })
 

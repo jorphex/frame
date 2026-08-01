@@ -37,8 +37,13 @@ import Erc20Contract from '../../contracts/erc20'
 import { simulateTransaction, simulateWalletCalls } from '../../transaction/simulation'
 import { snapshotWalletCalls } from '../../provider/walletCallExecution'
 import { prepareWalletCallBatch } from '../../provider/walletCallPreparation'
+import {
+  snapshotPreparedWalletCallExecutionInput,
+  type PreparedWalletCallExecutionSnapshot
+} from '../../provider/walletCallPreparedExecution'
 
 import type { PermitSignatureRequest, SignatureRequest, SignRequest, TypedMessage } from '../types'
+import { RequestStatus } from '../types'
 import type { Permission } from '../../store/state'
 import type { TransactionSimulation, WalletCallsSimulationResult } from '../../transaction/simulation'
 import { parseErc20ApprovalIntent } from '../../../resources/domain/transaction/allowance'
@@ -824,6 +829,55 @@ class FrameAccount {
           this.applyWalletCallsPreparationFailure(req, error)
         })
     }, 0)
+  }
+
+  claimWalletCallsRequest(handlerId: string): Readonly<PreparedWalletCallExecutionSnapshot> {
+    const request = this.requests[handlerId]
+    if (!request || request.type !== 'walletCalls') {
+      throw new Error('Wallet-call request is no longer available')
+    }
+
+    const walletCalls = request as WalletCallsRequest
+    if (
+      walletCalls.handlerId !== handlerId ||
+      typeof walletCalls.account !== 'string' ||
+      walletCalls.account.toLowerCase() !== this.address
+    ) {
+      throw new Error('Wallet-call request identity does not match account')
+    }
+    if (walletCalls.locked || walletCalls.status !== undefined) {
+      throw new Error('Wallet-call request has already been claimed')
+    }
+    if (!walletCalls.simulation || walletCalls.simulation.status === 'pending') {
+      throw new Error('Wallet-call execution check is still pending')
+    }
+    if (!walletCalls.preparation || walletCalls.preparation.status !== 'succeeded') {
+      throw new Error('Wallet-call transaction preparation is not ready')
+    }
+
+    const snapshot = snapshotPreparedWalletCallExecutionInput({
+      id: walletCalls.batchId,
+      origin: walletCalls.origin,
+      account: walletCalls.account,
+      chainId: walletCalls.chainId,
+      calls: walletCalls.calls,
+      preparation: walletCalls.preparation
+    })
+
+    clearTimeout(this.simulationTimers[handlerId])
+    delete this.simulationTimers[handlerId]
+    this.simulationVersions[handlerId] = (this.simulationVersions[handlerId] || 0) + 1
+    clearTimeout(this.preparationTimers[handlerId])
+    delete this.preparationTimers[handlerId]
+    this.preparationVersions[handlerId] = (this.preparationVersions[handlerId] || 0) + 1
+
+    walletCalls.locked = true
+    walletCalls.status = RequestStatus.Pending
+    walletCalls.notice =
+      this.lastSignerType !== SignerType.Seed && this.lastSignerType !== SignerType.Ring ? 'See Signer' : ''
+    this.update()
+
+    return snapshot
   }
 
   private async decodeTypedMessage(req: SignTypedDataRequest) {

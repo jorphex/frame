@@ -28,6 +28,15 @@ export interface PreparedWalletCallExecutionInput {
   preparation: PreparedWalletCallBatch
 }
 
+export interface PreparedWalletCallExecutionSnapshot {
+  readonly id: string
+  readonly origin: string
+  readonly account: string
+  readonly chainId: string
+  readonly calls: readonly Readonly<WalletCall>[]
+  readonly preparation: PreparedWalletCallBatch
+}
+
 interface PreparedWalletCallExecutionDependencies {
   ledger: PreparedExecutionLedger
   signTransaction(transaction: Readonly<TransactionData>, index: number): Promise<{ rawTransaction: string }>
@@ -151,10 +160,9 @@ function verifySignedTransaction(rawTransaction: unknown, expected: Readonly<Tra
   return { rawTransaction: rawTransaction as string }
 }
 
-export async function executePreparedWalletCallBatch(
-  input: PreparedWalletCallExecutionInput,
-  dependencies: PreparedWalletCallExecutionDependencies
-) {
+export function snapshotPreparedWalletCallExecutionInput(
+  input: PreparedWalletCallExecutionInput
+): Readonly<PreparedWalletCallExecutionSnapshot> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('Invalid prepared wallet call execution input')
   }
@@ -186,7 +194,7 @@ export async function executePreparedWalletCallBatch(
 
   let firstNonce: bigint | undefined
   let aggregateFee = 0n
-  const transactions = preparedCalls.map((prepared, index) => {
+  const preparedSnapshot = preparedCalls.map((prepared, index) => {
     if (!prepared || typeof prepared !== 'object' || Array.isArray(prepared)) {
       throw new Error('Invalid prepared wallet call')
     }
@@ -220,12 +228,31 @@ export async function executePreparedWalletCallBatch(
     if (aggregateFee > maxFee(transaction)) {
       throw new Error('Prepared wallet call batch fee exceeds Frame hard limit')
     }
-    return transaction
+    return Object.freeze({ transaction, maxFee: toRpcQuantity(reportedFee) })
   })
 
   if (parseRpcQuantity(input.preparation.maxFee) !== aggregateFee) {
     throw new Error('Prepared wallet call batch fee does not match transactions')
   }
+
+  return Object.freeze({
+    id: input.id,
+    origin: input.origin,
+    account: input.account.toLowerCase(),
+    chainId: toRpcQuantity(chainId),
+    calls,
+    preparation: Object.freeze({
+      calls: Object.freeze(preparedSnapshot),
+      maxFee: toRpcQuantity(aggregateFee)
+    })
+  })
+}
+
+export async function executePreparedWalletCallBatch(
+  input: PreparedWalletCallExecutionInput,
+  dependencies: PreparedWalletCallExecutionDependencies
+) {
+  const snapshot = snapshotPreparedWalletCallExecutionInput(input)
 
   if (
     !dependencies ||
@@ -251,12 +278,18 @@ export async function executePreparedWalletCallBatch(
   })
 
   return executeWalletCallBatch(
-    { id: input.id, origin: input.origin, account: input.account.toLowerCase(), calls },
+    {
+      id: snapshot.id,
+      origin: snapshot.origin,
+      account: snapshot.account,
+      calls: snapshot.calls
+    },
     {
       ledger,
       signCall: async (_call, index) => {
-        const signed = await signTransaction(transactions[index], index)
-        return verifySignedTransaction(signed?.rawTransaction, transactions[index])
+        const transaction = snapshot.preparation.calls[index].transaction
+        const signed = await signTransaction(transaction, index)
+        return verifySignedTransaction(signed?.rawTransaction, transaction)
       },
       broadcast
     }

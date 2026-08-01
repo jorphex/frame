@@ -37,6 +37,7 @@ import { accountNS } from '../../resources/domain/account'
 import { chainUsesOptimismFees } from '../../resources/utils/chains'
 import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from '../../resources/domain/transaction/quantity'
 import { parseTokenBaseUnitAmount } from '../../resources/domain/token/amount'
+import type { PreparedWalletCallExecutionSnapshot } from '../provider/walletCallPreparedExecution'
 
 const MAX_FEE_PER_GAS = 9_999n * 1_000_000_000n
 const MAX_GAS_LIMIT = 12_500_000n
@@ -722,6 +723,20 @@ export class Accounts extends EventEmitter {
     if (!matchesAccount) return cb(new Error('Transaction does not match signing account'))
 
     account.signTransaction(rawTx, cb)
+  }
+
+  claimWalletCallsRequest(
+    accountId: string,
+    handlerId: string
+  ): Readonly<PreparedWalletCallExecutionSnapshot> {
+    if (typeof accountId !== 'string' || typeof handlerId !== 'string' || !handlerId) {
+      throw new Error('Invalid wallet-call request identity')
+    }
+
+    const account = this.accounts[accountId.toLowerCase()]
+    if (!account) throw new Error('Could not locate wallet-call account')
+
+    return account.claimWalletCallsRequest(handlerId)
   }
 
   signerCompatibility(handlerId: string, cb: Callback<SignerCompatibility>) {

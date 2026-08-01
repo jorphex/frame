@@ -3,7 +3,10 @@ import { privateToAddress } from '@ethereumjs/util'
 
 import { GasFeesSource } from '../../../resources/domain/transaction'
 import chainConfig from '../../../main/chains/config'
-import { executePreparedWalletCallBatch } from '../../../main/provider/walletCallPreparedExecution'
+import {
+  executePreparedWalletCallBatch,
+  snapshotPreparedWalletCallExecutionInput
+} from '../../../main/provider/walletCallPreparedExecution'
 import { hashSignedTransaction } from '../../../main/provider/walletCallExecution'
 
 const privateKey = Buffer.from('1'.padStart(64, '0'), 'hex')
@@ -107,6 +110,37 @@ function dependencies(events = []) {
     })
   }
 }
+
+it('returns a canonical detached and deeply frozen approval snapshot', () => {
+  const source = input()
+  source.account = `0x${source.account.slice(2).toUpperCase()}`
+
+  const snapshot = snapshotPreparedWalletCallExecutionInput(source)
+
+  expect(snapshot).toEqual({
+    ...input(),
+    account,
+    calls: defaultCalls,
+    preparation: input().preparation
+  })
+  expect(Object.isFrozen(snapshot)).toBe(true)
+  expect(Object.isFrozen(snapshot.calls)).toBe(true)
+  expect(Object.isFrozen(snapshot.calls[0])).toBe(true)
+  expect(Object.isFrozen(snapshot.preparation)).toBe(true)
+  expect(Object.isFrozen(snapshot.preparation.calls)).toBe(true)
+  expect(Object.isFrozen(snapshot.preparation.calls[0])).toBe(true)
+  expect(Object.isFrozen(snapshot.preparation.calls[0].transaction)).toBe(true)
+
+  source.calls[0].data = '0xffff'
+  source.preparation.calls[0].transaction.data = '0xffff'
+  source.preparation.calls[0].maxFee = '0x1'
+
+  expect(snapshot.calls[0].data).toBe('0xabcd')
+  expect(snapshot.preparation.calls[0]).toMatchObject({
+    transaction: { data: '0xabcd' },
+    maxFee: '0x52080'
+  })
+})
 
 it('signs only frozen snapshots of the exact prepared transactions in order', async () => {
   const source = input()
