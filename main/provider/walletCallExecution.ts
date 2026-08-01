@@ -42,7 +42,7 @@ function boundedError(error: unknown, fallback: string) {
   return new Error((message.trim() || fallback).slice(0, MAX_ERROR_MESSAGE_LENGTH))
 }
 
-function snapshotCalls(calls: readonly WalletCall[]) {
+export function snapshotWalletCalls(calls: readonly WalletCall[]) {
   if (!Array.isArray(calls) || calls.length < 1 || calls.length > MAX_WALLET_CALLS) {
     throw new Error('Wallet call execution requires between 1 and 16 calls')
   }
@@ -90,7 +90,7 @@ export async function executeWalletCallBatch(
   input: WalletCallExecutionInput,
   dependencies: WalletCallExecutionDependencies
 ) {
-  const calls = snapshotCalls(input.calls)
+  const calls = snapshotWalletCalls(input.calls)
   const hashes: string[] = []
   let broadcastNeedsReconciliation = false
 
