@@ -15,5 +15,8 @@ export default [
   'wallet_switchEthereumChain',
   'wallet_getEthereumChains',
   'wallet_getAssets',
-  'wallet_watchAsset'
+  'wallet_watchAsset',
+  'wallet_sendCalls',
+  'wallet_getCallsStatus',
+  'wallet_getCapabilities'
 ]

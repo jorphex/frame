@@ -15,11 +15,21 @@ const measure = (ref) => {
 
 let lastHeight
 
+export const canApproveWalletCalls = (req, actionRequestId) =>
+  req?.type === 'walletCalls' &&
+  req.handlerId !== actionRequestId &&
+  req.status === undefined &&
+  !req.locked &&
+  req.simulation !== undefined &&
+  req.simulation?.status !== 'pending' &&
+  req.preparation?.status === 'succeeded'
+
 class Footer extends React.Component {
   constructor(...args) {
     super(...args)
     this.state = {
-      allowInput: true
+      allowInput: true,
+      walletCallsActionId: undefined
     }
     this.footerRef = React.createRef()
   }
@@ -59,6 +69,41 @@ class Footer extends React.Component {
         if (req.type === 'transaction' && crumb.data.step === 'confirm') {
           return (
             <RequestCommand req={req} signingDelay={isHardwareSigner(account.lastSignerType) ? 0 : 1500} />
+          )
+        } else if (req.type === 'walletCalls' && crumb.data.step === 'confirm') {
+          const actionPending = this.state.walletCallsActionId === req.handlerId
+          const canApprove = canApproveWalletCalls(req, this.state.walletCallsActionId)
+          return (
+            <div className='requestApprove'>
+              <div
+                className='requestDecline'
+                style={{ pointerEvents: actionPending ? 'none' : 'auto' }}
+                onClick={() => {
+                  if (!actionPending) {
+                    this.setState({ walletCallsActionId: req.handlerId })
+                    this.decline(req.handlerId, req)
+                  }
+                }}
+              >
+                <div className='requestDeclineButton _txButton _txButtonBad'>
+                  <span>Decline</span>
+                </div>
+              </div>
+              <div
+                className={`requestSign ${canApprove ? '' : 'requestApproveDisabled'}`}
+                style={{ pointerEvents: canApprove ? 'auto' : 'none' }}
+                onClick={() => {
+                  if (canApprove) {
+                    this.setState({ walletCallsActionId: req.handlerId })
+                    this.approve(req.handlerId, req)
+                  }
+                }}
+              >
+                <div className='requestSignButton _txButton'>
+                  <span>Submit Batch</span>
+                </div>
+              </div>
+            </div>
           )
         } else if (req.type === 'access') {
           return (

@@ -1387,6 +1387,9 @@ export class Provider extends EventEmitter {
     if (method === 'wallet_requestPermissions') return this.requestPermissions(payload, res)
     if (method === 'wallet_addEthereumChain') return this.addEthereumChain(payload, res)
     if (method === 'wallet_switchEthereumChain') return this.switchEthereumChain(payload, res)
+    if (method === 'wallet_sendCalls') return this.sendWalletCalls(payload, res)
+    if (method === 'wallet_getCallsStatus') return this.getWalletCallsStatus(payload, res)
+    if (method === 'wallet_getCapabilities') return this.getWalletCallCapabilities(payload, res)
 
     const targetChain = this.parseTargetChain(payload)
 

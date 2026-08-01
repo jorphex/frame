@@ -276,6 +276,22 @@ describe('#wallet-call provider boundary', () => {
 
   beforeEach(authorize)
 
+  it.each([
+    ['wallet_sendCalls', 'sendWalletCalls'],
+    ['wallet_getCallsStatus', 'getWalletCallsStatus'],
+    ['wallet_getCapabilities', 'getWalletCallCapabilities']
+  ])('dispatches %s internally instead of forwarding it to a chain RPC', (method, handler) => {
+    const response = jest.fn()
+    const dispatch = jest.spyOn(provider, handler).mockImplementation(() => 'handled')
+    const request = { id: 70, jsonrpc: '2.0', method, params: [], _origin: originId }
+
+    expect(provider.send(request, response)).toBe('handled')
+
+    expect(dispatch).toHaveBeenCalledWith(request, response)
+    expect(connection.send).not.toHaveBeenCalled()
+    dispatch.mockRestore()
+  })
+
   it('admits an authorized request without allocating a global provider handler', () => {
     const respond = jest.fn()
 

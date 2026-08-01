@@ -5,6 +5,7 @@ const { randomBytes } = require('crypto')
 import { isAddress } from '@ethersproject/address'
 import { openFileDialog } from '../windows/dialog'
 import { openBlockExplorer } from '../windows/window'
+import { routeWalletCallRequest } from './walletCalls'
 
 const accounts = require('../accounts').default
 const signers = require('../signers').default
@@ -148,7 +149,16 @@ const rpc = {
     accounts.updateRequest(reqId, data, actionId)
   },
   approveRequest(req) {
+    if (
+      routeWalletCallRequest(req, accounts, (walletCallsRequest) => {
+        provider
+          .approveWalletCallsRequest(walletCallsRequest.account, walletCallsRequest.handlerId)
+          .catch((error) => log.warn('Wallet-call approval failed', error))
+      })
+    )
+      return
     if (!req || typeof req.handlerId !== 'string') return
+
     const storedRequest = accounts.current()?.getRequest(req.handlerId)
     if (!storedRequest) return
     req = storedRequest
@@ -177,7 +187,14 @@ const rpc = {
     }
   },
   declineRequest(req) {
+    if (
+      routeWalletCallRequest(req, accounts, (walletCallsRequest) =>
+        provider.declineWalletCallsRequest(walletCallsRequest.account, walletCallsRequest.handlerId)
+      )
+    )
+      return
     if (!req || typeof req.handlerId !== 'string') return
+
     const storedRequest = accounts.current()?.getRequest(req.handlerId)
     if (!storedRequest) return
     req = storedRequest
