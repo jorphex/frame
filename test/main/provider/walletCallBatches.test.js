@@ -66,6 +66,32 @@ it('creates unpredictable public and internal identifiers without using app ids 
   expect(JSON.stringify(storage.value())).not.toContain('calls')
 })
 
+it('rolls back only the unchanged batch through its one-use admission capability', () => {
+  const { ledger, storage } = createLedger()
+  const created = ledger.create(batch(), Date.now())
+  const unrelated = ledger.create(batch({ id: 'unrelated', account: otherAccount }), Date.now())
+
+  created.rollback()
+
+  expect(storage.value()[created.key]).toBeUndefined()
+  expect(storage.value()[unrelated.key]).toBeDefined()
+  expect(() => created.rollback()).toThrow(/already closed/)
+})
+
+it('revokes admission rollback on commit or any persisted batch transition', () => {
+  const committed = createLedger()
+  const committedBatch = committed.ledger.create(batch(), Date.now())
+  committedBatch.commit()
+  expect(() => committedBatch.rollback()).toThrow(/already closed/)
+  expect(committed.storage.value()[committedBatch.key]).toBeDefined()
+
+  const changed = createLedger()
+  const changedBatch = changed.ledger.create(batch(), Date.now())
+  changed.ledger.reserveTransaction(origin, account, 'app-id', hash('1'), Date.now())
+  expect(() => changedBatch.rollback()).toThrow(/no longer eligible/)
+  expect(changed.storage.value()[changedBatch.key].transactions).toHaveLength(1)
+})
+
 it('normalizes account metadata and returns defensive copies', () => {
   const { ledger, storage } = createLedger()
   const created = ledger.create(batch({ account: account.toUpperCase().replace('0X', '0x') }), 1000)

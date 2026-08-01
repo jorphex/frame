@@ -948,7 +948,7 @@ class FrameAccount {
       return
     }
 
-    const add = async (r: AccountRequest) => {
+    const add = (r: AccountRequest) => {
       this.requests[r.handlerId] = req
       this.requests[r.handlerId].mode = RequestMode.Normal
       this.requests[r.handlerId].created = Date.now()

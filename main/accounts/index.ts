@@ -824,6 +824,43 @@ export class Accounts extends EventEmitter {
     }
   }
 
+  addRequestForAccount(accountId: string, req: AccountRequest, res?: RPCRequestCallback) {
+    if (
+      typeof accountId !== 'string' ||
+      !req ||
+      typeof req !== 'object' ||
+      typeof req.handlerId !== 'string' ||
+      !req.handlerId ||
+      typeof req.account !== 'string'
+    ) {
+      throw new Error('Invalid account request identity')
+    }
+
+    const account = this.accounts[accountId.toLowerCase()]
+    if (!account) throw new Error('Could not locate request account')
+    if (req.account.toLowerCase() !== account.id) throw new Error('Request does not belong to account')
+    if (account.requests[req.handlerId]) throw new Error('Request handler is already in use')
+
+    try {
+      account.addRequest(req, res)
+      if (account.requests[req.handlerId] !== req) throw new Error('Account did not admit request')
+      return true
+    } catch (error) {
+      if (account.requests[req.handlerId] === req) {
+        try {
+          account.clearRequest(req.handlerId)
+        } catch (cleanupError) {
+          const admissionMessage = error instanceof Error ? error.message : String(error)
+          const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+          throw new Error(
+            `Account request admission failed: ${admissionMessage}; cleanup failed: ${cleanupMessage}`
+          )
+        }
+      }
+      throw error
+    }
+  }
+
   removeRequests(handlerId: string) {
     Object.values(this.accounts).forEach((account) => {
       if (account.requests[handlerId]) {

@@ -221,7 +221,32 @@ export class WalletCallBatchLedger {
     const batch = { ...candidate.data, id }
     batches[key] = batch
     this.write(batches)
-    return { key, batch: clone(batch) }
+
+    const rollbackTarget = clone(batch)
+    let admissionOpen = true
+    const requireOpenAdmission = () => {
+      if (!admissionOpen) throw new Error('Wallet call batch admission is already closed')
+    }
+
+    return {
+      key,
+      batch: clone(batch),
+      commit: () => {
+        requireOpenAdmission()
+        admissionOpen = false
+      },
+      rollback: () => {
+        requireOpenAdmission()
+        const current = this.read(rollbackTarget.createdAt)
+        if (!current[key] || JSON.stringify(current[key]) !== JSON.stringify(rollbackTarget)) {
+          throw new Error('Wallet call batch is no longer eligible for admission rollback')
+        }
+
+        delete current[key]
+        this.write(current)
+        admissionOpen = false
+      }
+    }
   }
 
   get(origin: string, account: string, id: string, now = Date.now()) {

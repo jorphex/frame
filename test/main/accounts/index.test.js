@@ -965,6 +965,88 @@ describe('#updateRequest', () => {
   })
 })
 
+describe('#addRequestForAccount', () => {
+  it('admits through the explicit account while another account remains current', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const explicitRequest = { ...request, handlerId: 'explicit-request', account: account2.address }
+    const add = jest.spyOn(targetAccount, 'addRequest').mockImplementation((candidate) => {
+      targetAccount.requests[candidate.handlerId] = candidate
+    })
+
+    expect(Accounts.addRequestForAccount(account2.address.toUpperCase(), explicitRequest)).toBe(true)
+    expect(Accounts.current().id).toBe(account.address)
+    expect(add).toHaveBeenCalledWith(explicitRequest, undefined)
+    add.mockRestore()
+  })
+
+  it.each([
+    ['unknown account', '0x3333333333333333333333333333333333333333', account2.address, /locate/],
+    ['wrong owner', account2.address, account.address, /belong/]
+  ])('rejects %s before account admission', (_label, accountId, owner, message) => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const add = jest.spyOn(targetAccount, 'addRequest')
+
+    expect(() =>
+      Accounts.addRequestForAccount(accountId, {
+        ...request,
+        handlerId: `rejected-${_label}`,
+        account: owner
+      })
+    ).toThrow(message)
+    expect(add).not.toHaveBeenCalled()
+    add.mockRestore()
+  })
+
+  it('rejects duplicate handlers and account insertion that does not store the exact request', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const duplicate = { ...request, handlerId: 'duplicate-request', account: account2.address }
+    targetAccount.requests[duplicate.handlerId] = duplicate
+
+    expect(() => Accounts.addRequestForAccount(account2.address, duplicate)).toThrow(/already in use/)
+
+    delete targetAccount.requests[duplicate.handlerId]
+    const add = jest.spyOn(targetAccount, 'addRequest').mockImplementation(() => {})
+    expect(() => Accounts.addRequestForAccount(account2.address, duplicate)).toThrow(/did not admit/)
+    add.mockRestore()
+  })
+
+  it('clears a partially stored request before propagating an insertion failure', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const partial = { ...request, handlerId: 'partial-request', account: account2.address }
+    const add = jest.spyOn(targetAccount, 'addRequest').mockImplementation((candidate) => {
+      targetAccount.requests[candidate.handlerId] = candidate
+      throw new Error('request UI failed')
+    })
+    const clear = jest.spyOn(targetAccount, 'clearRequest').mockImplementation((handlerId) => {
+      delete targetAccount.requests[handlerId]
+    })
+
+    expect(() => Accounts.addRequestForAccount(account2.address, partial)).toThrow(/request UI failed/)
+    expect(clear).toHaveBeenCalledWith(partial.handlerId)
+    expect(targetAccount.requests[partial.handlerId]).toBeUndefined()
+    add.mockRestore()
+    clear.mockRestore()
+  })
+
+  it('reports both insertion and cleanup failures', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const partial = { ...request, handlerId: 'unclean-request', account: account2.address }
+    const add = jest.spyOn(targetAccount, 'addRequest').mockImplementation((candidate) => {
+      targetAccount.requests[candidate.handlerId] = candidate
+      throw new Error('request UI failed')
+    })
+    const clear = jest.spyOn(targetAccount, 'clearRequest').mockImplementation(() => {
+      throw new Error('request cleanup failed')
+    })
+
+    expect(() => Accounts.addRequestForAccount(account2.address, partial)).toThrow(
+      /admission failed: request UI failed; cleanup failed: request cleanup failed/
+    )
+    add.mockRestore()
+    clear.mockRestore()
+  })
+})
+
 describe('#rejectRequest', () => {
   it('uses the main-process payload rather than renderer-returned request data', () => {
     const response = jest.fn()
