@@ -10,7 +10,8 @@
     "setup:clean": "npm run clean && npm run setup:ci",
     "setup:ci": "node scripts/check-toolchain.mjs && npm ci && npm run setup:scripts",
     "setup:deps": "npm run setup:ci",
-    "setup:scripts": "allow-scripts run && npm run setup:native",
+    "setup:scripts": "allow-scripts run && npm run setup:electron && npm run setup:native",
+    "setup:electron": "install-electron --no",
     "setup:native": "electron-rebuild --force --only node-hid",
     "setup": "npm run setup:ci && husky install",
     "start": "npm run launch",
@@ -163,7 +164,7 @@
     "@types/ws": "8.5.4",
     "@typescript-eslint/eslint-plugin": "5.54.1",
     "@typescript-eslint/parser": "5.54.1",
-    "electron": "38.8.6",
+    "electron": "43.2.0",
     "electron-builder": "25.1.8",
     "electron-devtools-installer": "4.0.0",
     "eslint": "8.35.0",
@@ -205,7 +206,7 @@
     "url": false
   },
   "engines": {
-    "electron": "38",
+    "electron": "43",
     "node": "24.18.1",
     "npm": "11.12.0"
   },
@@ -313,7 +314,6 @@
       "parcel>@parcel/package-manager>@swc/core": false,
       "@babel/node>core-js#3.40.0": true,
       "@parcel/core>@parcel/cache>lmdb#2.8.5": true,
-      "electron#38.8.6": true,
       "hardhat>keccak#3.0.4": true,
       "hdkey>secp256k1#4.0.4": true
     }

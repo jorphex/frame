@@ -16,6 +16,7 @@ export function createWindow(
   const browserWindow = new BrowserWindow({
     ...opts,
     frame: false,
+    ...(process.platform === 'linux' ? { roundedCorners: false } : {}),
     acceptFirstMouse: true,
     transparent: process.platform === 'darwin',
     show: false,
