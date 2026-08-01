@@ -1086,6 +1086,42 @@ describe('#rejectUnapprovedRequestsForOriginChain', () => {
   })
 })
 
+describe('#signTransactionForAccount', () => {
+  it('signs through the pinned account even when another account is current', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const callback = jest.fn()
+    const sign = jest
+      .spyOn(targetAccount, 'signTransaction')
+      .mockImplementation((_transaction, cb) => cb(null, '0xsigned'))
+    const transaction = { ...request.data, from: account2.address }
+
+    Accounts.signTransactionForAccount(account2.address.toUpperCase(), transaction, callback)
+
+    expect(Accounts.current().id).toBe(account.address)
+    expect(sign).toHaveBeenCalledWith(transaction, callback)
+    expect(callback).toHaveBeenCalledWith(null, '0xsigned')
+    sign.mockRestore()
+  })
+
+  it.each([
+    ['unknown account', '0x3333333333333333333333333333333333333333', account.address, /locate/],
+    ['wrong transaction owner', account2.address, account.address, /does not match/]
+  ])('rejects %s without invoking an account signer', (_label, accountId, from, message) => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const callback = jest.fn()
+    const sign = jest.spyOn(targetAccount, 'signTransaction')
+
+    Accounts.signTransactionForAccount(accountId, { ...request.data, from }, callback)
+
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ message: expect.stringMatching(message) })
+    )
+    expect(sign).not.toHaveBeenCalled()
+    sign.mockRestore()
+  })
+})
+
 describe('#signerCompatibility', () => {
   let activeSigner
 

@@ -706,14 +706,22 @@ export class Accounts extends EventEmitter {
 
     if (!currentAccount) return cb(new Error('No Account Selected'))
 
-    const matchSelected =
-      (rawTx.from || '').toLowerCase() === currentAccount.getSelectedAddress().toLowerCase()
+    return this.signTransactionForAccount(currentAccount.id, rawTx, cb)
+  }
 
-    if (matchSelected) {
-      currentAccount.signTransaction(rawTx, cb)
-    } else {
-      cb(new Error('signMessage: Account does not match currently selected'))
-    }
+  signTransactionForAccount(accountId: string, rawTx: TransactionData, cb: Callback<string>) {
+    if (typeof accountId !== 'string') return cb(new Error('Invalid signing account'))
+
+    const account = this.accounts[accountId.toLowerCase()]
+    if (!account) return cb(new Error('Could not locate signing account'))
+
+    const matchesAccount =
+      typeof rawTx?.from === 'string' &&
+      rawTx.from.toLowerCase() === account.getSelectedAddress().toLowerCase()
+
+    if (!matchesAccount) return cb(new Error('Transaction does not match signing account'))
+
+    account.signTransaction(rawTx, cb)
   }
 
   signerCompatibility(handlerId: string, cb: Callback<SignerCompatibility>) {

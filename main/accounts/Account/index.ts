@@ -1050,7 +1050,7 @@ class FrameAccount {
       const s = signers.get(this.signer)
       if (!s) return cb(new Error(`Cannot find signer for this account`))
       const index = s.addresses.map((a) => a.toLowerCase()).indexOf(this.address)
-      if (index === -1) cb(new Error(`Signer cannot sign for this address`))
+      if (index === -1) return cb(new Error(`Signer cannot sign for this address`))
       s.signMessage(index, message, cb)
     } else {
       cb(new Error('No signer found for this account'))
@@ -1064,7 +1064,7 @@ class FrameAccount {
       const s = signers.get(this.signer)
       if (!s) return cb(new Error(`Cannot find signer for this account`))
       const index = s.addresses.map((a) => a.toLowerCase()).indexOf(this.address)
-      if (index === -1) cb(new Error(`Signer cannot sign for this address`))
+      if (index === -1) return cb(new Error(`Signer cannot sign for this address`))
       s.signTypedData(index, typedMessage, cb)
     } else {
       cb(new Error('No signer found for this account'))
@@ -1080,7 +1080,7 @@ class FrameAccount {
         if (!s) return cb(new Error(`Cannot find signer for this account`))
 
         const index = s.addresses.map((a) => a.toLowerCase()).indexOf(this.address)
-        if (index === -1) cb(new Error(`Signer cannot sign for this address`))
+        if (index === -1) return cb(new Error(`Signer cannot sign for this address`))
         s.signTransaction(index, rawTx, cb)
       } else {
         cb(new Error('No signer found for this account'))
@@ -1090,7 +1090,7 @@ class FrameAccount {
 
   private validateTransaction(rawTx: TransactionData, cb: Callback<void>) {
     // Validate 'from' address
-    if (!rawTx.from) return new Error("Missing 'from' address")
+    if (!rawTx.from) return cb(new Error("Missing 'from' address"))
     if (!isValidAddress(rawTx.from)) return cb(new Error("Invalid 'from' address"))
 
     // Ensure that transaction params are valid hex strings
@@ -1109,9 +1109,7 @@ class FrameAccount {
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i]
       if (enforcedKeys.indexOf(key) > -1 && !this.isValidHexString(rawTx[key] as string)) {
-        // Break on first error
-        cb(new Error(`Transaction parameter '${key}' is not a valid hex string`))
-        break
+        return cb(new Error(`Transaction parameter '${key}' is not a valid hex string`))
       }
     }
     return cb(null)

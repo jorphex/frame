@@ -6,6 +6,7 @@ import { fetchContract } from '../../../../main/contracts'
 import { simulateTransaction, simulateWalletCalls } from '../../../../main/transaction/simulation'
 import { ApprovalType } from '../../../../resources/constants'
 import { GasFeesSource } from '../../../../resources/domain/transaction'
+import signers from '../../../../main/signers'
 
 jest.mock('../../../../main/reveal')
 jest.mock('../../../../main/transaction/simulation', () => ({
@@ -27,7 +28,7 @@ jest.mock('../../../../main/provider', () => ({
   fillTransaction: jest.fn()
 }))
 jest.mock('../../../../main/accounts', () => ({ RequestMode: { Normal: 'normal' } }))
-jest.mock('../../../../main/signers', () => ({}))
+jest.mock('../../../../main/signers', () => ({ get: jest.fn() }))
 jest.mock('../../../../main/windows', () => ({}))
 jest.mock('../../../../main/nebula', () => () => ({
   ready: jest.fn(),
@@ -1199,5 +1200,93 @@ describe('#addRequest', () => {
     await Promise.resolve()
 
     expect(account.requests[request.handlerId]).toBeUndefined()
+  })
+})
+
+describe('#signTransaction', () => {
+  const validTransaction = (overrides = {}) => ({
+    from: accountState.address,
+    chainId: '0x1',
+    nonce: '0x1',
+    type: '0x2',
+    gasLimit: '0x5208',
+    to: tokenContract,
+    data: '0x',
+    value: '0x0',
+    maxFeePerGas: '0x10',
+    maxPriorityFeePerGas: '0x1',
+    gasFeesSource: GasFeesSource.Frame,
+    ...overrides
+  })
+
+  it('signs once with the matching signer address index', () => {
+    const callback = jest.fn()
+    const signer = {
+      addresses: [delegate, accountState.address],
+      signTransaction: jest.fn((_index, _transaction, cb) => cb(null, '0xsigned'))
+    }
+    account.signer = 'signer-id'
+    signers.get.mockReturnValueOnce(signer)
+
+    account.signTransaction(validTransaction(), callback)
+
+    expect(signer.signTransaction).toHaveBeenCalledWith(1, validTransaction(), callback)
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback).toHaveBeenCalledWith(null, '0xsigned')
+  })
+
+  it.each([
+    ['missing from', { from: undefined }, /Missing 'from'/],
+    ['invalid hex', { data: 'not-hex' }, /not a valid hex string/]
+  ])('reports %s exactly once without invoking a signer', (_label, overrides, message) => {
+    const callback = jest.fn()
+    account.signer = 'signer-id'
+
+    account.signTransaction(validTransaction(overrides), callback)
+
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ message: expect.stringMatching(message) })
+    )
+    expect(signers.get).not.toHaveBeenCalled()
+  })
+
+  it('reports a signer-address mismatch once without signing at index -1', () => {
+    const callback = jest.fn()
+    const signer = { addresses: [delegate], signTransaction: jest.fn() }
+    account.signer = 'signer-id'
+    signers.get.mockReturnValueOnce(signer)
+
+    account.signTransaction(validTransaction(), callback)
+
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ message: expect.stringMatching(/cannot sign for this address/i) })
+    )
+    expect(signer.signTransaction).not.toHaveBeenCalled()
+  })
+})
+
+describe('signer address ownership', () => {
+  it.each([
+    ['message', (callback) => account.signMessage('hello', callback), 'signMessage'],
+    [
+      'typed data',
+      (callback) => account.signTypedData({ data: {}, version: 'V4' }, callback),
+      'signTypedData'
+    ]
+  ])('does not sign %s at index -1 after reporting an ownership error', (_label, invoke, method) => {
+    const callback = jest.fn()
+    const signer = { addresses: [delegate], [method]: jest.fn() }
+    account.signer = 'signer-id'
+    signers.get.mockReturnValueOnce(signer)
+
+    invoke(callback)
+
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ message: expect.stringMatching(/cannot sign for this address/i) })
+    )
+    expect(signer[method]).not.toHaveBeenCalled()
   })
 })
