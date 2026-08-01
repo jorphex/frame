@@ -35,6 +35,8 @@ import reveal from '../../reveal'
 import { isTransactionRequest, isTypedMessageSignatureRequest } from '../../../resources/domain/request'
 import Erc20Contract from '../../contracts/erc20'
 import { simulateTransaction, simulateWalletCalls } from '../../transaction/simulation'
+import { snapshotWalletCalls } from '../../provider/walletCallExecution'
+import { prepareWalletCallBatch } from '../../provider/walletCallPreparation'
 
 import type { PermitSignatureRequest, SignatureRequest, SignRequest, TypedMessage } from '../types'
 import type { Permission } from '../../store/state'
@@ -65,6 +67,12 @@ interface AccountOptions {
   options: SignerOptions
 }
 
+type WalletCallsPreparationSnapshot = Readonly<{
+  account: string
+  chainId: string
+  calls: Readonly<ReturnType<typeof snapshotWalletCalls>>
+}>
+
 class FrameAccount {
   id: Address
   address: Address
@@ -80,6 +88,8 @@ class FrameAccount {
   requests: Record<string, AccountRequest> = {}
   private simulationVersions: Record<string, number> = {}
   private simulationTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+  private preparationVersions: Record<string, number> = {}
+  private preparationTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 
   accountObserver: Observer
 
@@ -252,6 +262,9 @@ class FrameAccount {
     delete this.simulationVersions[handlerId]
     clearTimeout(this.simulationTimers[handlerId])
     delete this.simulationTimers[handlerId]
+    delete this.preparationVersions[handlerId]
+    clearTimeout(this.preparationTimers[handlerId])
+    delete this.preparationTimers[handlerId]
     store.navClearReq(handlerId, Object.keys(this.requests).length > 0)
 
     this.update()
@@ -685,6 +698,134 @@ class FrameAccount {
     }, 0)
   }
 
+  private walletCallsPendingNonce(account: string, chainId: string) {
+    return new Promise<string>((resolve, reject) => {
+      provider.getNonce({ from: account, chainId } as TransactionData, (response) => {
+        if (response?.error) {
+          const message =
+            typeof response.error.message === 'string'
+              ? response.error.message
+              : 'Pending nonce request failed'
+          reject(new Error(message))
+        } else if (typeof response?.result !== 'string') {
+          reject(new Error('Pending nonce request returned invalid data'))
+        } else {
+          resolve(response.result)
+        }
+      })
+    })
+  }
+
+  private applyWalletCallsPreparationFailure(req: WalletCallsRequest, error: unknown) {
+    const message = error instanceof Error ? error.message : 'Wallet call preparation failed'
+    req.preparation = {
+      status: 'failed',
+      reason: (message.trim() || 'Wallet call preparation failed').slice(0, 240)
+    }
+    this.update()
+  }
+
+  private walletCallsRequestMatchesSnapshot(
+    req: WalletCallsRequest,
+    snapshot: WalletCallsPreparationSnapshot
+  ) {
+    if (req.account !== snapshot.account || req.chainId !== snapshot.chainId) return false
+
+    try {
+      const calls = snapshotWalletCalls(req.calls)
+      return (
+        calls.length === snapshot.calls.length &&
+        calls.every(
+          (call, index) =>
+            call.to === snapshot.calls[index].to &&
+            call.data === snapshot.calls[index].data &&
+            call.value === snapshot.calls[index].value
+        )
+      )
+    } catch {
+      return false
+    }
+  }
+
+  refreshWalletCallsPreparation(req: WalletCallsRequest, publishPending = true) {
+    if (this.requests[req.handlerId] !== req) return
+
+    const version = (this.preparationVersions[req.handlerId] || 0) + 1
+    this.preparationVersions[req.handlerId] = version
+    req.preparation = { status: 'pending' }
+
+    let snapshot: WalletCallsPreparationSnapshot
+    try {
+      snapshot = Object.freeze({
+        account: req.account,
+        chainId: req.chainId,
+        calls: Object.freeze(snapshotWalletCalls(req.calls))
+      })
+    } catch (error) {
+      if (publishPending) this.applyWalletCallsPreparationFailure(req, error)
+      else {
+        const message = error instanceof Error ? error.message : 'Wallet call preparation failed'
+        req.preparation = {
+          status: 'failed',
+          reason: (message.trim() || 'Wallet call preparation failed').slice(0, 240)
+        }
+      }
+      return
+    }
+
+    if (publishPending) this.update()
+
+    clearTimeout(this.preparationTimers[req.handlerId])
+    this.preparationTimers[req.handlerId] = setTimeout(() => {
+      delete this.preparationTimers[req.handlerId]
+      if (this.requests[req.handlerId] !== req || this.preparationVersions[req.handlerId] !== version) return
+
+      this.walletCallsPendingNonce(snapshot.account, snapshot.chainId)
+        .then((pendingNonce) =>
+          prepareWalletCallBatch(
+            { ...snapshot, pendingNonce },
+            {
+              fillTransaction: (transaction) =>
+                new Promise((resolve, reject) => {
+                  provider.fillTransaction({ ...transaction }, (error, metadata) => {
+                    if (error) reject(error)
+                    else if (!metadata) reject(new Error('Transaction preparation returned no metadata'))
+                    else resolve(metadata)
+                  })
+                })
+            }
+          )
+        )
+        .then((preparation) => {
+          const knownRequest = this.requests[req.handlerId]
+          if (knownRequest !== req || this.preparationVersions[req.handlerId] !== version) return
+          if (!this.walletCallsRequestMatchesSnapshot(req, snapshot)) {
+            this.applyWalletCallsPreparationFailure(
+              req,
+              new Error('Wallet call request changed during preparation')
+            )
+            return
+          }
+
+          req.preparation = { status: 'succeeded', ...preparation }
+          this.update()
+        })
+        .catch((error) => {
+          const knownRequest = this.requests[req.handlerId]
+          if (knownRequest !== req || this.preparationVersions[req.handlerId] !== version) return
+          if (!this.walletCallsRequestMatchesSnapshot(req, snapshot)) {
+            this.applyWalletCallsPreparationFailure(
+              req,
+              new Error('Wallet call request changed during preparation')
+            )
+            return
+          }
+
+          this.applyWalletCallsPreparationFailure(req, error)
+        })
+    }, 0)
+  }
+
   private async decodeTypedMessage(req: SignTypedDataRequest) {
     if (req.type === 'signTypedData') return
 
@@ -730,6 +871,7 @@ class FrameAccount {
 
     if (req.type === 'walletCalls') {
       this.refreshWalletCallsSimulation(req as WalletCallsRequest, false)
+      this.refreshWalletCallsPreparation(req as WalletCallsRequest, false)
       return
     }
 
@@ -739,6 +881,19 @@ class FrameAccount {
   }
 
   addRequest(req: any, res: RPCCallback<any> = () => {}) {
+    if (
+      req?.type === 'walletCalls' &&
+      (typeof req.account !== 'string' || req.account.toLowerCase() !== this.address)
+    ) {
+      const payload = req.payload || {}
+      res({
+        id: payload.id,
+        jsonrpc: payload.jsonrpc,
+        error: { code: 4100, message: 'Wallet-call request is not owned by this account' }
+      })
+      return
+    }
+
     const add = async (r: AccountRequest) => {
       this.requests[r.handlerId] = req
       this.requests[r.handlerId].mode = RequestMode.Normal
@@ -880,6 +1035,11 @@ class FrameAccount {
     this.simulationTimers = {}
     Object.keys(this.simulationVersions).forEach((handlerId) => {
       this.simulationVersions[handlerId] += 1
+    })
+    Object.values(this.preparationTimers).forEach(clearTimeout)
+    this.preparationTimers = {}
+    Object.keys(this.preparationVersions).forEach((handlerId) => {
+      this.preparationVersions[handlerId] += 1
     })
     this.accountObserver.remove()
   }

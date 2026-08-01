@@ -143,6 +143,29 @@ describe('#updatePendingFees', () => {
     expect(request.data.maxFeePerGas).toBe(gweiToHex(9))
     expect(request.data.maxPriorityFeePerGas).toBe(gweiToHex(1))
   })
+
+  it('refreshes pending wallet-call preparation only for the updated chain', () => {
+    const currentAccount = Accounts.current()
+    const refresh = jest.spyOn(currentAccount, 'refreshWalletCallsPreparation').mockImplementation()
+    const matching = {
+      handlerId: 'wallet-calls-mainnet',
+      type: 'walletCalls',
+      account: currentAccount.id,
+      chainId: '0x1',
+      status: undefined
+    }
+    const otherChain = { ...matching, handlerId: 'wallet-calls-other', chainId: '0xa' }
+    const pending = { ...matching, handlerId: 'wallet-calls-sending', status: 'pending' }
+    currentAccount.requests[matching.handlerId] = matching
+    currentAccount.requests[otherChain.handlerId] = otherChain
+    currentAccount.requests[pending.handlerId] = pending
+
+    Accounts.updatePendingFees(1)
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(refresh).toHaveBeenCalledWith(matching)
+    refresh.mockRestore()
+  })
 })
 
 describe('#setBaseFee', () => {
@@ -1013,8 +1036,11 @@ describe('#rejectUnapprovedRequestsForOriginChain', () => {
     Accounts.addRequest(
       requestFor('old-wallet-calls', {
         type: 'walletCalls',
+        account: activeAccount.id,
         chainId: '0x1',
-        calls: [{ data: '0x', value: '0x0' }]
+        calls: [{ data: '0x', value: '0x0' }],
+        preparation: { status: 'pending' },
+        simulation: { status: 'pending', calls: [] }
       }),
       responses.walletCalls
     )

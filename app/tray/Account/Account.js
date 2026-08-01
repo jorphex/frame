@@ -220,9 +220,12 @@ class _AccountBody extends React.Component {
   getChainData(req) {
     if (req.type === 'walletCalls') {
       const chainId = parseInt(req.chainId, 16)
+      const nativeCurrency = this.store('main.networksMeta.ethereum', chainId, 'nativeCurrency') || {}
       return {
         chainId,
-        chainName: this.store('main.networks.ethereum', chainId, 'name') || `Chain ${chainId}`
+        chainName: this.store('main.networks.ethereum', chainId, 'name') || `Chain ${chainId}`,
+        nativeCurrencySymbol: nativeCurrency.symbol || '?',
+        nativeCurrencyDecimals: nativeCurrency.decimals ?? 18
       }
     }
 

@@ -1,4 +1,4 @@
-import { screen, render } from '../../../../../componentSetup'
+import { cleanup, screen, render } from '../../../../../componentSetup'
 import { WalletCallsRequest } from '../../../../../../app/tray/Account/Requests/WalletCallsRequest'
 
 const account = '0x1111111111111111111111111111111111111111'
@@ -12,6 +12,7 @@ function request(calls) {
     chainId: '0x1',
     atomic: false,
     calls,
+    preparation: { status: 'pending' },
     simulation: { status: 'pending', calls: [] }
   }
 }
@@ -39,6 +40,104 @@ it('shows exact parent, chain, sender, call order, value, and calldata', () => {
   expect(screen.getByText('0xabcd')).toBeTruthy()
   expect(screen.getByText('0x6000')).toBeTruthy()
   expect(screen.getAllByText('2 bytes')).toHaveLength(2)
+  expect(screen.getByText('Calculating maximum execution gas fees')).toBeTruthy()
+})
+
+it('renders exact per-call and aggregate maximum execution gas fees in order', () => {
+  const req = request([
+    { to: target, value: '0x0', data: '0x' },
+    { to: target, value: '0x1', data: '0xabcd' }
+  ])
+  req.preparation = {
+    status: 'succeeded',
+    maxFee: '0x29a2241af62c0000',
+    calls: [
+      {
+        transaction: {
+          from: account,
+          chainId: '0x1',
+          nonce: '0x5',
+          to: target,
+          data: '0x',
+          value: '0x0'
+        },
+        maxFee: '0xde0b6b3a7640000'
+      },
+      {
+        transaction: {
+          from: account,
+          chainId: '0x1',
+          nonce: '0x6',
+          to: target,
+          data: '0xabcd',
+          value: '0x1'
+        },
+        maxFee: '0x1bc16d674ec80000'
+      }
+    ]
+  }
+
+  render(
+    <WalletCallsRequest
+      originName='example.test'
+      chainData={{ chainName: 'Ethereum', nativeCurrencySymbol: 'ETH', nativeCurrencyDecimals: 18 }}
+      req={req}
+    />
+  )
+
+  expect(screen.getByText('Maximum execution gas fee')).toBeTruthy()
+  expect(screen.getByText('3 ETH')).toBeTruthy()
+  expect(screen.getByText(/1 ETH.*0xde0b6b3a7640000 raw/)).toBeTruthy()
+  expect(screen.getByText(/2 ETH.*0x1bc16d674ec80000 raw/)).toBeTruthy()
+  expect(screen.getByText(/L2 data fees.*may be additional/i)).toBeTruthy()
+})
+
+it('fails closed for failed, malformed, or mismatched preparation', () => {
+  const failed = request([{ to: target, value: '0x0', data: '0x' }])
+  failed.preparation = { status: 'failed', reason: 'RPC fee lookup failed' }
+  render(<WalletCallsRequest originName='example.test' req={failed} />)
+
+  expect(screen.getByText('Execution gas fee preparation failed')).toBeTruthy()
+  expect(screen.getByText('RPC fee lookup failed')).toBeTruthy()
+  expect(screen.queryByText('Maximum execution gas fee')).toBeNull()
+  cleanup()
+
+  const mismatched = request([
+    { to: target, value: '0x0', data: '0x' },
+    { to: target, value: '0x0', data: '0x' }
+  ])
+  mismatched.preparation = {
+    status: 'succeeded',
+    maxFee: '0x1',
+    calls: [{ transaction: {}, maxFee: '0x1' }]
+  }
+  render(<WalletCallsRequest originName='example.test' req={mismatched} />)
+
+  expect(screen.getByText('Prepared call count does not match the requested batch.')).toBeTruthy()
+  expect(screen.queryByText(/raw base units/i)).toBeNull()
+  cleanup()
+
+  const malformed = request([{ to: target, value: '0x0', data: '0x' }])
+  malformed.preparation = {
+    status: 'succeeded',
+    maxFee: '0x02',
+    calls: [
+      {
+        transaction: {
+          from: account,
+          chainId: '0x1',
+          to: target,
+          data: '0x',
+          value: '0x0'
+        },
+        maxFee: '0x1'
+      }
+    ]
+  }
+  render(<WalletCallsRequest originName='example.test' req={malformed} />)
+
+  expect(screen.getByText('Prepared fee data is invalid.')).toBeTruthy()
+  expect(screen.queryByText(/raw base units/i)).toBeNull()
 })
 
 it('warns about non-atomic partial execution and exposes no approval control', () => {

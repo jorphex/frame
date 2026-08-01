@@ -261,5 +261,18 @@ export interface WalletCallsRequest extends AccountRequest<'walletCalls'> {
     data: string
     value: string
   }>
+  preparation: WalletCallsPreparation
   simulation: WalletCallsSimulation
 }
+
+export type WalletCallsPreparation =
+  | { status: 'pending' }
+  | { status: 'failed'; reason: string }
+  | {
+      status: 'succeeded'
+      calls: readonly Readonly<{
+        transaction: Readonly<TransactionData>
+        maxFee: string
+      }>[]
+      maxFee: string
+    }

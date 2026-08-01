@@ -1,4 +1,5 @@
 import React from 'react'
+import BigNumber from 'bignumber.js'
 import { SimulationAllowance, SimulationEffects } from '../TransactionRequest/ViewData/effects'
 
 const callDestination = (call) => call.to || 'Contract deployment'
@@ -19,6 +20,81 @@ const simulationPresentation = (simulation) => {
   return { label: 'Stateful simulation failed', className: 'walletCallsSimulationBad' }
 }
 
+const QUANTITY = /^0x(?:0|[1-9a-f][0-9a-f]*)$/
+
+const feeQuantity = (value) => {
+  if (typeof value !== 'string' || !QUANTITY.test(value)) return null
+  return BigInt(value)
+}
+
+const preparedCallsMatchRequest = (req, preparedCalls) =>
+  preparedCalls.every(({ transaction }, index) => {
+    const call = req.calls[index]
+    const fromMatches =
+      typeof transaction?.from === 'string' &&
+      typeof req.account === 'string' &&
+      transaction.from.toLowerCase() === req.account.toLowerCase()
+    const toMatches = call.to
+      ? typeof transaction?.to === 'string' && transaction.to.toLowerCase() === call.to.toLowerCase()
+      : transaction?.to === undefined
+
+    return (
+      fromMatches &&
+      transaction.chainId === req.chainId &&
+      toMatches &&
+      transaction.data === call.data &&
+      transaction.value === call.value
+    )
+  })
+
+const maximumFeeDisplay = (value, decimals, symbol) => {
+  if (value === null || !Number.isInteger(decimals) || decimals < 0 || decimals > 255) return null
+  return `${new BigNumber(value.toString()).shiftedBy(-decimals).toFixed()} ${symbol}`
+}
+
+const preparationPresentation = (req, chainData) => {
+  const preparation = req.preparation
+  if (!preparation || preparation.status === 'pending') {
+    return { status: 'pending', label: 'Calculating maximum execution gas fees' }
+  }
+  if (preparation.status === 'failed') {
+    return { status: 'failed', label: 'Execution gas fee preparation failed', reason: preparation.reason }
+  }
+  if (preparation.status !== 'succeeded' || preparation.calls?.length !== req.calls.length) {
+    return {
+      status: 'failed',
+      label: 'Execution gas fee preparation failed',
+      reason: 'Prepared call count does not match the requested batch.'
+    }
+  }
+  if (!preparedCallsMatchRequest(req, preparation.calls)) {
+    return {
+      status: 'failed',
+      label: 'Execution gas fee preparation failed',
+      reason: 'Prepared transactions do not match the requested batch.'
+    }
+  }
+
+  const decimals = chainData?.nativeCurrencyDecimals ?? 18
+  const symbol = chainData?.nativeCurrencySymbol || '?'
+  const aggregateFee = feeQuantity(preparation.maxFee)
+  const callFees = preparation.calls.map((call) => feeQuantity(call.maxFee))
+  const feeSum = callFees.every((fee) => fee !== null)
+    ? callFees.reduce((total, fee) => total + fee, 0n)
+    : null
+  const maximum = maximumFeeDisplay(aggregateFee, decimals, symbol)
+  const calls = callFees.map((fee) => maximumFeeDisplay(fee, decimals, symbol))
+  if (feeSum === null || aggregateFee !== feeSum || !maximum || calls.some((call) => !call)) {
+    return {
+      status: 'failed',
+      label: 'Execution gas fee preparation failed',
+      reason: 'Prepared fee data is invalid.'
+    }
+  }
+
+  return { status: 'succeeded', label: 'Maximum execution gas fee', maximum, calls }
+}
+
 export class WalletCallsRequest extends React.Component {
   render() {
     const { req } = this.props
@@ -26,6 +102,7 @@ export class WalletCallsRequest extends React.Component {
     const chainName = this.props.chainData?.chainName || `Chain ${parseInt(req.chainId, 16)}`
     const callLabel = req.calls.length === 1 ? 'call' : 'calls'
     const simulation = simulationPresentation(req.simulation)
+    const preparation = preparationPresentation(req, this.props.chainData)
 
     return (
       <div key={req.handlerId} className='signerRequest cardShow'>
@@ -62,6 +139,23 @@ export class WalletCallsRequest extends React.Component {
               </div>
             </div>
 
+            <div
+              className={`walletCallsPreparation walletCallsPreparation-${preparation.status}`}
+              role={preparation.status === 'failed' ? 'alert' : 'status'}
+            >
+              <div className='walletCallsPreparationTitle'>{preparation.label}</div>
+              {preparation.maximum && (
+                <>
+                  <div className='walletCallsPreparationMaximum'>{preparation.maximum}</div>
+                  <div className='walletCallsPreparationRaw'>Raw base units: {req.preparation.maxFee}</div>
+                </>
+              )}
+              {preparation.reason && <div className='walletCallsPreparationReason'>{preparation.reason}</div>}
+              <div className='walletCallsPreparationNotice'>
+                Execution gas only. L2 data fees or other network-specific charges may be additional.
+              </div>
+            </div>
+
             <div className='walletCallsList'>
               {req.calls.map((call, index) => {
                 const callSimulation = req.simulation?.calls?.[index]
@@ -81,6 +175,14 @@ export class WalletCallsRequest extends React.Component {
                         <dt>Calldata</dt>
                         <dd>{(call.data.length - 2) / 2} bytes</dd>
                       </div>
+                      {preparation.calls?.[index] && (
+                        <div className='walletCallField'>
+                          <dt>Max exec gas</dt>
+                          <dd>
+                            {preparation.calls[index]} ({req.preparation.calls[index].maxFee} raw)
+                          </dd>
+                        </div>
+                      )}
                     </dl>
                     <div className='walletCallData'>{call.data}</div>
                     {callSimulation && (

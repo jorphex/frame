@@ -1,9 +1,11 @@
 import Account from '../../../../main/accounts/Account'
+import provider from '../../../../main/provider'
 import { utils } from 'ethers'
 import reveal from '../../../../main/reveal'
 import { fetchContract } from '../../../../main/contracts'
 import { simulateTransaction, simulateWalletCalls } from '../../../../main/transaction/simulation'
 import { ApprovalType } from '../../../../resources/constants'
+import { GasFeesSource } from '../../../../resources/domain/transaction'
 
 jest.mock('../../../../main/reveal')
 jest.mock('../../../../main/transaction/simulation', () => ({
@@ -19,7 +21,11 @@ jest.mock('../../../../main/contracts', () => {
   }
 })
 
-jest.mock('../../../../main/provider', () => ({ on: jest.fn() }))
+jest.mock('../../../../main/provider', () => ({
+  on: jest.fn(),
+  getNonce: jest.fn(),
+  fillTransaction: jest.fn()
+}))
 jest.mock('../../../../main/accounts', () => ({ RequestMode: { Normal: 'normal' } }))
 jest.mock('../../../../main/signers', () => ({}))
 jest.mock('../../../../main/windows', () => ({}))
@@ -141,6 +147,7 @@ const walletCallsRequest = (handlerId = 'wallet-calls') => ({
     { to: tokenContract, value: '0x0', data: '0xabcd' },
     { value: '0x2', data: '0x6000' }
   ],
+  preparation: { status: 'pending' },
   simulation: { status: 'pending', calls: [] }
 })
 
@@ -148,6 +155,20 @@ beforeEach(() => {
   jest.clearAllTimers()
   simulateTransaction.mockImplementation(() => new Promise(() => {}))
   simulateWalletCalls.mockImplementation(() => new Promise(() => {}))
+  provider.getNonce.mockImplementation((_transaction, callback) => callback({ result: '0x5' }))
+  provider.fillTransaction.mockImplementation((transaction, callback) =>
+    callback(null, {
+      tx: {
+        ...transaction,
+        type: '0x2',
+        gasLimit: '0x5208',
+        maxFeePerGas: '0x10',
+        maxPriorityFeePerGas: '0x1',
+        gasFeesSource: GasFeesSource.Frame
+      },
+      approvals: []
+    })
+  )
   account = new Account(accountState, accounts)
   fetchContract.mockResolvedValueOnce(undefined)
 })
@@ -258,6 +279,135 @@ describe('#addRequest', () => {
       calls: [],
       reason: 'x'.repeat(240)
     })
+  })
+
+  it('prepares wallet calls with the pinned account, chain, and pending nonce', async () => {
+    const request = walletCallsRequest('prepared-wallet-calls')
+
+    account.addRequest(request)
+    expect(request.preparation).toEqual({ status: 'pending' })
+    await jest.advanceTimersByTimeAsync(1)
+
+    expect(provider.getNonce).toHaveBeenCalledWith(
+      { from: accountState.address, chainId: '0x1' },
+      expect.any(Function)
+    )
+    expect(provider.fillTransaction.mock.calls.map(([transaction]) => transaction)).toEqual([
+      {
+        from: accountState.address.toLowerCase(),
+        chainId: '0x1',
+        nonce: '0x5',
+        to: tokenContract,
+        data: '0xabcd',
+        value: '0x0'
+      },
+      {
+        from: accountState.address.toLowerCase(),
+        chainId: '0x1',
+        nonce: '0x6',
+        data: '0x6000',
+        value: '0x2'
+      }
+    ])
+    expect(request.preparation).toMatchObject({
+      status: 'succeeded',
+      maxFee: '0xa4100',
+      calls: [{ maxFee: '0x52080' }, { maxFee: '0x52080' }]
+    })
+  })
+
+  it('keeps only the newest wallet-call preparation result', async () => {
+    let resolveInitialNonce
+    let resolveUpdatedNonce
+    provider.getNonce
+      .mockImplementationOnce((_transaction, callback) => (resolveInitialNonce = callback))
+      .mockImplementationOnce((_transaction, callback) => (resolveUpdatedNonce = callback))
+    const request = walletCallsRequest('wallet-calls-preparation-version')
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    account.refreshWalletCallsPreparation(request)
+    jest.advanceTimersByTime(1)
+
+    resolveUpdatedNonce({ result: '0x9' })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.preparation.calls[0].transaction.nonce).toBe('0x9')
+
+    resolveInitialNonce({ result: '0x1' })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.preparation.calls[0].transaction.nonce).toBe('0x9')
+  })
+
+  it('fails closed when the wallet-call request changes during preparation', async () => {
+    let resolveNonce
+    provider.getNonce.mockImplementationOnce((_transaction, callback) => (resolveNonce = callback))
+    const request = walletCallsRequest('mutated-wallet-calls-preparation')
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    request.calls[0].data = '0xffff'
+    resolveNonce({ result: '0x5' })
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(request.preparation).toEqual({
+      status: 'failed',
+      reason: 'Wallet call request changed during preparation'
+    })
+  })
+
+  it('rejects a wallet-call request not owned by the account', () => {
+    const response = jest.fn()
+    const request = walletCallsRequest('wrong-wallet-calls-account')
+    request.account = '0x4444444444444444444444444444444444444444'
+
+    account.addRequest(request, response)
+
+    expect(account.requests[request.handlerId]).toBeUndefined()
+    expect(response).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: { code: 4100, message: 'Wallet-call request is not owned by this account' }
+      })
+    )
+    expect(provider.getNonce).not.toHaveBeenCalled()
+  })
+
+  it('does not apply wallet-call preparation after request removal or account close', async () => {
+    let resolveRemovedNonce
+    let resolveClosedNonce
+    provider.getNonce
+      .mockImplementationOnce((_transaction, callback) => (resolveRemovedNonce = callback))
+      .mockImplementationOnce((_transaction, callback) => (resolveClosedNonce = callback))
+
+    const removed = walletCallsRequest('removed-wallet-calls-preparation')
+    account.addRequest(removed)
+    jest.advanceTimersByTime(1)
+    account.clearRequest(removed.handlerId)
+    resolveRemovedNonce({ result: '0x5' })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(account.requests[removed.handlerId]).toBeUndefined()
+    expect(removed.preparation).toEqual({ status: 'pending' })
+
+    const closed = walletCallsRequest('closed-wallet-calls-preparation')
+    account.addRequest(closed)
+    jest.advanceTimersByTime(1)
+    account.accountObserver = { remove: jest.fn() }
+    account.close()
+    resolveClosedNonce({ result: '0x5' })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(closed.preparation).toEqual({ status: 'pending' })
+  })
+
+  it('bounds wallet-call preparation provider failures', async () => {
+    provider.getNonce.mockImplementationOnce((_transaction, callback) =>
+      callback({ error: { message: 'x'.repeat(300) } })
+    )
+    const request = walletCallsRequest('failed-wallet-calls-preparation')
+
+    account.addRequest(request)
+    await jest.advanceTimersByTimeAsync(1)
+
+    expect(request.preparation).toEqual({ status: 'failed', reason: 'x'.repeat(240) })
+    expect(provider.fillTransaction).not.toHaveBeenCalled()
   })
 
   it('requires explicit consent for normalized dangerous message risks', () => {

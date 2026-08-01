@@ -25,7 +25,8 @@ import {
   RequestStatus,
   RequestMode,
   TypedMessage,
-  PermitSignatureRequest
+  PermitSignatureRequest,
+  WalletCallsRequest
 } from './types'
 
 import type { Chain } from '../chains'
@@ -587,6 +588,15 @@ export class Accounts extends EventEmitter {
     if (currentAccount) {
       // If chainId, update pending tx requests from that chain, otherwise update all pending tx requests
       const { l1Transactions, l2Transactions } = toTransactionsByLayer(currentAccount.requests, chainId)
+      const walletCalls = Object.values(currentAccount.requests)
+        .filter((request): request is WalletCallsRequest => request.type === 'walletCalls')
+        .filter(
+          (request) =>
+            request.status === undefined &&
+            (chainId === undefined || parseInt(request.chainId, 16) === chainId)
+        )
+
+      walletCalls.forEach((request) => currentAccount.refreshWalletCallsPreparation(request))
 
       l1Transactions.forEach(([id, req]) => {
         try {
