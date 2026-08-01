@@ -393,6 +393,145 @@ describe('#wallet-call provider boundary', () => {
     expect(walletCallBatchLedger.getStatus(originId, address, admitted.id).status).toBe(400)
     expect(executeWalletCallRuntime).not.toHaveBeenCalled()
   })
+
+  it('returns status only within the authorized origin and account scope', () => {
+    const admitted = provider.sendWalletCalls(payload(), jest.fn())
+    const respond = jest.fn()
+
+    provider.getWalletCallsStatus(
+      {
+        id: 72,
+        jsonrpc: '2.0',
+        method: 'wallet_getCallsStatus',
+        _origin: originId,
+        params: [admitted.id]
+      },
+      respond
+    )
+
+    expect(respond).toHaveBeenCalledWith({
+      id: 72,
+      jsonrpc: '2.0',
+      result: {
+        version: '2.0.0',
+        id: admitted.id,
+        chainId: '0x1',
+        status: 100,
+        atomic: false
+      }
+    })
+  })
+
+  it('does not reveal a known batch to another authorized origin', () => {
+    const admitted = provider.sendWalletCalls(payload(), jest.fn())
+    const otherOrigin = '4db938a0-9935-520b-991d-0a02b8601f36'
+    store.set('main.origins', otherOrigin, {
+      chain: { id: 1, type: 'ethereum' },
+      name: 'other.test'
+    })
+    store.set('main.permissions', address, {
+      [originId]: { handlerId: originId, origin: 'example.test', provider: true },
+      [otherOrigin]: { handlerId: otherOrigin, origin: 'other.test', provider: true }
+    })
+    const respond = jest.fn()
+
+    provider.getWalletCallsStatus(
+      {
+        id: 73,
+        jsonrpc: '2.0',
+        method: 'wallet_getCallsStatus',
+        _origin: otherOrigin,
+        params: [admitted.id]
+      },
+      respond
+    )
+
+    expect(respond).toHaveBeenCalledWith({
+      id: 73,
+      jsonrpc: '2.0',
+      error: { code: 5730, message: 'Unknown bundle id' }
+    })
+  })
+
+  it('requires authorization before looking up even an unknown status id', () => {
+    store.set('main.permissions', {})
+    const respond = jest.fn()
+
+    provider.getWalletCallsStatus(
+      {
+        id: 74,
+        jsonrpc: '2.0',
+        method: 'wallet_getCallsStatus',
+        _origin: originId,
+        params: ['unknown-id']
+      },
+      respond
+    )
+
+    expect(respond.mock.calls[0][0].error.code).toBe(4100)
+  })
+
+  it('reports only conservative capabilities on requested available chains', () => {
+    store.set('main.networks.ethereum', 5, { id: 5, on: true })
+    const respond = jest.fn()
+
+    provider.getWalletCallCapabilities(
+      {
+        id: 75,
+        jsonrpc: '2.0',
+        method: 'wallet_getCapabilities',
+        _origin: originId,
+        params: [address.toUpperCase().replace('0X', '0x'), ['0x5', '0x1', '0xa', '0x5']]
+      },
+      respond
+    )
+
+    expect(respond).toHaveBeenCalledWith({
+      id: 75,
+      jsonrpc: '2.0',
+      result: {
+        '0x1': { atomic: { status: 'unsupported' } },
+        '0x5': { atomic: { status: 'unsupported' } }
+      }
+    })
+  })
+
+  it('derives omitted capability chains and excludes disabled connections', () => {
+    store.set('main.networks.ethereum', 5, { id: 5, on: false })
+    const respond = jest.fn()
+
+    provider.getWalletCallCapabilities(
+      {
+        id: 76,
+        jsonrpc: '2.0',
+        method: 'wallet_getCapabilities',
+        _origin: originId,
+        params: [address]
+      },
+      respond
+    )
+
+    expect(respond.mock.calls[0][0].result).toEqual({
+      '0x1': { atomic: { status: 'unsupported' } }
+    })
+  })
+
+  it('does not disclose capabilities for another account', () => {
+    const respond = jest.fn()
+
+    provider.getWalletCallCapabilities(
+      {
+        id: 77,
+        jsonrpc: '2.0',
+        method: 'wallet_getCapabilities',
+        _origin: originId,
+        params: ['0x3333333333333333333333333333333333333333', ['0x1']]
+      },
+      respond
+    )
+
+    expect(respond.mock.calls[0][0].error.code).toBe(4100)
+  })
 })
 
 describe('#send', () => {

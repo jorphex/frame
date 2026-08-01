@@ -43,7 +43,7 @@ import {
 } from './permissions'
 import Erc20Contract from '../contracts/erc20'
 import { getOriginAccess, requestOriginAccess } from '../api/origins'
-import { parseSendCalls } from './walletCalls'
+import { parseCallsStatus, parseGetCapabilities, parseSendCalls } from './walletCalls'
 import { WalletCallLifecycleController } from './walletCallLifecycle'
 import walletCallBatchLedger from './walletCallLedger'
 import { executeWalletCallRuntime } from './walletCallRuntime'
@@ -574,6 +574,50 @@ export class Provider extends EventEmitter {
       code: 4001,
       message: 'User rejected the wallet-call request'
     })
+  }
+
+  getWalletCallsStatus(payload: RPCRequestPayload, res: RPCRequestCallback) {
+    try {
+      const id = parseCallsStatus(payload.params)
+      const access = getOriginAccess(payload)
+      if (!access?.permission?.provider) {
+        throw { code: 4100, message: 'Origin is not authorized for wallet-call status' }
+      }
+
+      const result = walletCallBatchLedger.getStatus(payload._origin, access.address, id)
+      return res({ id: payload.id, jsonrpc: payload.jsonrpc, result })
+    } catch (error) {
+      return resError(error as EVMError, payload, res)
+    }
+  }
+
+  getWalletCallCapabilities(payload: RPCRequestPayload, res: RPCRequestCallback) {
+    try {
+      const request = parseGetCapabilities(payload.params)
+      const access = getOriginAccess(payload)
+      if (!access?.permission?.provider || request.address.toLowerCase() !== access.address.toLowerCase()) {
+        throw { code: 4100, message: 'Account is not authorized for wallet-call capabilities' }
+      }
+
+      const requestedChains =
+        request.chainIds ||
+        Object.keys(this.connection.connections?.ethereum || {})
+          .map(Number)
+          .filter((id) => Number.isSafeInteger(id) && id > 0)
+          .map((id) => intToHex(id))
+      const result = [...new Set(requestedChains)]
+        .map((chainId) => ({ chainId, numericId: Number(BigInt(chainId)) }))
+        .filter(({ numericId }) => this.walletCallChainAvailable(numericId))
+        .sort((left, right) => left.numericId - right.numericId)
+        .reduce<Record<string, { atomic: { status: 'unsupported' } }>>((capabilities, { numericId }) => {
+          capabilities[intToHex(numericId)] = { atomic: { status: 'unsupported' } }
+          return capabilities
+        }, {})
+
+      return res({ id: payload.id, jsonrpc: payload.jsonrpc, result })
+    } catch (error) {
+      return resError(error as EVMError, payload, res)
+    }
   }
 
   private walletCallOriginAuthorized(originId: string, accountId: string) {
