@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { access, readdir, writeFile } from 'node:fs/promises'
+import { access, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const dist = path.resolve('dist')
@@ -22,6 +23,31 @@ const nativeModules = [
 
 await Promise.all(nativeModules.map((modulePath) => access(modulePath)))
 
+const packagedExecutable = path.join(dist, 'linux-unpacked', 'frame')
+const packagedModuleProbe = `
+const path = require('node:path')
+const modules = ['node-hid', 'usb', '@trezor/transport/node_modules/usb']
+const appModules = path.resolve('dist/linux-unpacked/resources/app.asar/node_modules')
+for (const module of modules) require(path.join(appModules, module))
+process.stdout.write(JSON.stringify({
+  electron: process.versions.electron,
+  abi: process.versions.modules,
+  modules
+}))
+`
+const probe = spawnSync(packagedExecutable, ['-e', packagedModuleProbe], {
+  cwd: process.cwd(),
+  encoding: 'utf8',
+  env: { ...process.env, ELECTRON_RUN_AS_NODE: 'true' }
+})
+
+assert.equal(probe.status, 0, `Packaged native-module probe failed:\n${probe.stderr}`)
+const probeResult = JSON.parse(probe.stdout)
+const packageJson = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
+assert.equal(probeResult.electron, packageJson.devDependencies.electron)
+assert.deepEqual(probeResult.modules, ['node-hid', 'usb', '@trezor/transport/node_modules/usb'])
+assert.match(probeResult.abi, /^\d+$/)
+
 const sha256 = (file) =>
   new Promise((resolve, reject) => {
     const hash = createHash('sha256')
@@ -36,4 +62,6 @@ const checksums = await Promise.all(
 )
 
 await writeFile(path.join(dist, 'SHA256SUMS'), `${checksums.join('\n')}\n`)
-console.log(`Verified ${artifacts.join(' and ')} with required hardware-wallet native modules`)
+console.log(
+  `Verified ${artifacts.join(' and ')} with Electron ${probeResult.electron} ABI ${probeResult.abi} hardware-wallet native modules`
+)
