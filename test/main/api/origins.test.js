@@ -5,6 +5,7 @@ import {
   parseOrigin,
   updateOrigin,
   isTrusted,
+  requestOriginAccess,
   parseFrameExtension,
   isKnownExtension
 } from '../../../main/api/origins'
@@ -23,6 +24,8 @@ afterAll(() => {
 })
 
 beforeEach(() => {
+  accounts.current.mockReset()
+  accounts.addRequest.mockReset()
   store.initOrigin = jest.fn()
   store.addOriginRequest = jest.fn()
 
@@ -348,7 +351,7 @@ describe('#isTrusted', () => {
     const address = '0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5'
     const payload = { method: 'eth_accounts', _origin: frameTestOriginId }
 
-    accounts.current.mockReturnValueOnce({ address })
+    accounts.current.mockReturnValue({ address })
 
     store.set('main.permissions', address, {
       'c004cc87-bfa3-50f5-812f-3d70dd8f82c6': {
@@ -364,7 +367,7 @@ describe('#isTrusted', () => {
     const address = '0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5'
     const payload = { method: 'eth_accounts', _origin: frameTestOriginId }
 
-    accounts.current.mockReturnValueOnce({ address })
+    accounts.current.mockReturnValue({ address })
 
     accounts.addRequest.mockImplementationOnce((request, cb) => {
       expect(request).toStrictEqual({
@@ -387,10 +390,10 @@ describe('#isTrusted', () => {
     return expect(runTest).resolves
   })
 
-  it('sends a response to all permission requests once the user trusts the origin', async () => {
+  it('coalesces explicit and implicit access checks into one prompt', async () => {
     const address = '0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5'
-    const payload1 = { method: 'wallet_getEthereumAccounts', _origin: frameTestOriginId }
-    const payload2 = { method: 'eth_accounts', _origin: frameTestOriginId }
+    const implicitPayload = { method: 'eth_accounts', _origin: frameTestOriginId }
+    const explicitPayload = { method: 'wallet_requestPermissions', _origin: frameTestOriginId }
 
     accounts.current.mockReturnValue({ address })
 
@@ -408,11 +411,11 @@ describe('#isTrusted', () => {
       }, 1000)
     })
 
-    const runTest = Promise.all([isTrusted(payload1), isTrusted(payload2)]).then(
-      ([isPayload1Trusted, isPayload2Trusted]) => {
+    const runTest = Promise.all([isTrusted(implicitPayload), requestOriginAccess(explicitPayload)]).then(
+      ([isImplicitTrusted, isExplicitGranted]) => {
         expect(accounts.addRequest).toHaveBeenCalledTimes(1)
-        expect(isPayload1Trusted).toBe(true)
-        expect(isPayload2Trusted).toBe(true)
+        expect(isImplicitTrusted).toBe(true)
+        expect(isExplicitGranted).toBe(true)
       }
     )
 
@@ -432,7 +435,7 @@ describe('#isTrusted', () => {
       const address = '0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5'
       const payload = { method: 'eth_accounts', _origin: 'bf93061b-3575-40c5-b526-4932b02e1f3f' }
 
-      accounts.current.mockReturnValueOnce({ address })
+      accounts.current.mockReturnValue({ address })
 
       // simulate user acting on request
       accounts.addRequest.mockImplementationOnce((request, cb) => {

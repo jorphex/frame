@@ -33,7 +33,14 @@ import { createObserver as AssetsObserver, loadAssets } from './assets'
 import { getVersionFromTypedData } from './typedData'
 import { parseAddChainRequest, parseChainRequestId } from './chainRequests'
 import { parseWatchAssetRequest } from './watchAsset'
+import {
+  grantedAccountPermission,
+  parseGetPermissions,
+  parseRequestPermissions,
+  requestedAccountPermission
+} from './permissions'
 import Erc20Contract from '../contracts/erc20'
+import { getOriginAccess, requestOriginAccess } from '../api/origins'
 
 import { Subscription, SubscriptionType, hasSubscriptionPermission } from './subscriptions'
 import {
@@ -41,10 +48,8 @@ import {
   ecRecover,
   feeTotalOverMax,
   gasFees,
-  getPermissions,
   getRawTx,
   getSignedAddress,
-  requestPermissions,
   resError,
   decodeMessage
 } from './helpers'
@@ -1027,6 +1032,49 @@ export class Provider extends EventEmitter {
     res({ id: payload.id, jsonrpc: payload.jsonrpc, result: getActiveChains() })
   }
 
+  private getPermissions(payload: RPCRequestPayload, res: RPCRequestCallback) {
+    try {
+      parseGetPermissions(payload.params)
+    } catch (error) {
+      return resError(error as EVMError, payload, res)
+    }
+
+    const access = getOriginAccess(payload)
+    const result = access?.permission?.provider ? [grantedAccountPermission(access.origin)] : []
+    res({ id: payload.id, jsonrpc: '2.0', result })
+  }
+
+  private async requestPermissions(payload: RPCRequestPayload, res: RPCRequestCallback) {
+    try {
+      parseRequestPermissions(payload.params)
+    } catch (error) {
+      return resError(error as EVMError, payload, res)
+    }
+
+    const initialAccess = getOriginAccess(payload)
+    if (!initialAccess) {
+      return resError({ code: 4100, message: 'No account is available to grant permission' }, payload, res)
+    }
+
+    let granted: boolean
+    try {
+      granted = await requestOriginAccess(payload, initialAccess.address)
+    } catch (error) {
+      return resError({ code: -32603, message: (error as Error).message }, payload, res)
+    }
+
+    if (!granted) {
+      const currentAccess = getOriginAccess(payload)
+      if (currentAccess?.address.toLowerCase() !== initialAccess.address.toLowerCase()) {
+        return resError({ code: 4100, message: 'Account changed during permission request' }, payload, res)
+      }
+
+      return resError({ code: 4001, message: 'User rejected the permission request' }, payload, res)
+    }
+
+    res({ id: payload.id, jsonrpc: '2.0', result: [requestedAccountPermission()] })
+  }
+
   private getAssets(
     payload: RPC.GetAssets.Request,
     currentAccount: FrameAccount | null,
@@ -1072,6 +1120,8 @@ export class Provider extends EventEmitter {
     // method handlers that are not chain-specific can go here, before parsing the target chain
     if (method === 'eth_unsubscribe' && this.ifSubRemove(payload.params[0]))
       return res({ id: payload.id, jsonrpc: '2.0', result: true }) // Subscription was ours
+    if (method === 'wallet_getPermissions') return this.getPermissions(payload, res)
+    if (method === 'wallet_requestPermissions') return this.requestPermissions(payload, res)
 
     const targetChain = this.parseTargetChain(payload)
 
@@ -1128,8 +1178,6 @@ export class Provider extends EventEmitter {
 
     if (method === 'wallet_addEthereumChain') return this.addEthereumChain(payload, res)
     if (method === 'wallet_switchEthereumChain') return this.switchEthereumChain(payload, res)
-    if (method === 'wallet_getPermissions') return getPermissions(payload, res)
-    if (method === 'wallet_requestPermissions') return requestPermissions(payload, res)
     if (method === 'wallet_watchAsset') return this.addCustomToken(payload, res, targetChain)
     if (method === 'wallet_getEthereumChains') return this.getChains(payload, res)
     if (method === 'wallet_getAssets')

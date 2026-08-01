@@ -15,13 +15,10 @@ import isUtf8 from 'isutf8'
 import { isHexString } from 'ethers/lib/utils'
 
 import store from '../store'
-import protectedMethods from '../api/protectedMethods'
 import { usesBaseFee, TransactionData, GasFeesSource } from '../../resources/domain/transaction'
 import { getAddress } from '../../resources/utils'
 
 import type { Chain } from '../store/state'
-
-const permission = (date: number, method: string) => ({ parentCapability: method, date })
 
 export function decodeMessage(rawMessage: string) {
   if (isHexString(rawMessage)) {
@@ -144,23 +141,6 @@ export function getSignedAddress(signed: string, message: string, cb: Callback<s
   const hash = hashPersonalMessage(toBuffer(message))
   const verifiedAddress = '0x' + pubToAddress(ecrecover(hash, BigInt(v), r, s)).toString('hex')
   cb(null, verifiedAddress)
-}
-
-export function getPermissions(payload: JSONRPCRequestPayload, res: RPCRequestCallback) {
-  const now = new Date().getTime()
-  const toPermission = permission.bind(null, now)
-  const allowedOperations = protectedMethods.map(toPermission)
-
-  res({ id: payload.id, jsonrpc: '2.0', result: allowedOperations })
-}
-
-export function requestPermissions(payload: JSONRPCRequestPayload, res: RPCRequestCallback) {
-  // we already require the user to grant permission to call this method so
-  // we just need to return permission objects for the requested operations
-  const now = new Date().getTime()
-  const requestedOperations = (payload.params || []).map((param) => permission(now, Object.keys(param)[0]))
-
-  res({ id: payload.id, jsonrpc: '2.0', result: requestedOperations })
 }
 
 export function getActiveChainsFull() {

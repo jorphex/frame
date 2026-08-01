@@ -38,11 +38,6 @@ beforeAll(async () => {
   log.transports.console.level = false
 
   accounts.getAccounts = () => [address]
-  accounts.addRequest = (req, res) => {
-    store.set('main.accounts', req.account, 'requests', { [req.handlerId]: req })
-    accountRequests.push(req)
-    if (res) res()
-  }
 })
 
 afterAll(() => {
@@ -53,6 +48,7 @@ beforeEach(() => {
   store.set('main.colorway', 'light')
   store.set('main.accounts', {})
   store.set('main.origins', {})
+  store.set('main.permissions', {})
 
   provider.handlers = {}
 
@@ -60,6 +56,11 @@ beforeEach(() => {
   eventTypes.forEach((eventType) => (provider.subscriptions[eventType] = []))
 
   accountRequests = []
+  accounts.addRequest = jest.fn((req, res) => {
+    store.set('main.accounts', req.account, 'requests', { [req.handlerId]: req })
+    accountRequests.push(req)
+    if (res) res()
+  })
 
   connection.send = jest.fn()
   connection.connections = {
@@ -384,69 +385,195 @@ describe('#send', () => {
   })
 
   describe('#wallet_getPermissions', () => {
-    it('returns all allowed permissions', (done) => {
-      const request = {
-        method: 'wallet_getPermissions',
-        _origin: '8073729a-5e59-53b7-9e69-5d9bcff94087'
-      }
+    const originId = '8073729a-5e59-53b7-9e69-5d9bcff94087'
+    const request = { method: 'wallet_getPermissions', params: [], _origin: originId }
+
+    beforeEach(() => {
+      store.set('main.origins', originId, { name: 'test.frame', chain: { id: 1, type: 'ethereum' } })
+    })
+
+    it('returns no permissions when provider access is not granted', (done) => {
+      send(request, (response) => {
+        expect(response).toMatchObject({ result: [] })
+        done()
+      })
+    })
+
+    it('does not depend on the origin chain connection', (done) => {
+      store.set('main.origins', originId, { name: 'test.frame', chain: { id: 99, type: 'ethereum' } })
 
       send(request, (response) => {
-        try {
-          expect(response.error).toBe(undefined)
+        expect(response).toMatchObject({ result: [] })
+        done()
+      })
+    })
 
-          const permissions = response.result
-          expect(permissions).toHaveLength(16)
-          expect(permissions.map((p) => p.parentCapability)).toEqual(
-            expect.arrayContaining([
-              'eth_coinbase',
-              'eth_accounts',
-              'eth_requestAccounts',
-              'eth_sendTransaction',
-              'eth_sendRawTransaction',
-              'personal_sign',
-              'personal_ecRecover',
-              'eth_sign',
-              'eth_signTypedData',
-              'eth_signTypedData_v1',
-              'eth_signTypedData_v3',
-              'eth_signTypedData_v4',
-              'wallet_addEthereumChain',
-              'wallet_getEthereumChains',
-              'wallet_getAssets',
-              'wallet_watchAsset'
-            ])
-          )
+    it('returns the current account permission for the invoker', (done) => {
+      store.set('main.permissions', address, {
+        [originId]: { handlerId: originId, origin: 'test.frame', provider: true }
+      })
 
-          done()
-        } catch (e) {
-          done(e)
-        }
+      send(request, (response) => {
+        expect(response.result).toEqual([
+          { invoker: 'test.frame', parentCapability: 'eth_accounts', caveats: [] }
+        ])
+        done()
+      })
+    })
+
+    it('rejects unexpected parameters', (done) => {
+      send({ ...request, params: [{}] }, (response) => {
+        expect(response.error.code).toBe(-32602)
+        done()
       })
     })
   })
 
   describe('#wallet_requestPermissions', () => {
-    it('returns the requested permissions', (done) => {
-      const request = {
-        method: 'wallet_requestPermissions',
-        params: [{ eth_accounts: {} }, { eth_signTransaction: {} }],
-        _origin: '8073729a-5e59-53b7-9e69-5d9bcff94087'
-      }
+    const originId = '8073729a-5e59-53b7-9e69-5d9bcff94087'
+    const request = {
+      method: 'wallet_requestPermissions',
+      params: [{ eth_accounts: {} }],
+      _origin: originId
+    }
+
+    beforeEach(() => {
+      store.set('main.origins', originId, { name: 'test.frame', chain: { id: 1, type: 'ethereum' } })
+    })
+
+    const grantAccess = (req, cb) => {
+      accountRequests.push(req)
+      store.set('main.permissions', address, {
+        [originId]: { handlerId: originId, origin: 'test.frame', provider: true }
+      })
+      cb()
+    }
+
+    it('prompts and returns the requested permission after approval', (done) => {
+      accounts.addRequest.mockImplementationOnce(grantAccess)
 
       send(request, (response) => {
-        try {
-          expect(response.error).toBe(undefined)
+        expect(response.error).toBeUndefined()
+        expect(response.result[0].parentCapability).toBe('eth_accounts')
+        expect(Number.isInteger(response.result[0].date)).toBe(true)
+        expect(accountRequests[0]).toMatchObject({
+          type: 'access',
+          handlerId: originId,
+          origin: originId,
+          account: address
+        })
+        done()
+      })
+    })
 
-          const permissions = response.result
-          expect(permissions).toHaveLength(2)
-          expect(permissions[0].parentCapability).toBe('eth_accounts')
-          expect(Number.isInteger(permissions[0].date)).toBe(true)
-          expect(permissions[1].parentCapability).toBe('eth_signTransaction')
-          expect(Number.isInteger(permissions[1].date)).toBe(true)
-          done()
-        } catch (e) {
-          done(e)
-        }
+    it('returns immediately when access is already granted', (done) => {
+      store.set('main.permissions', address, {
+        [originId]: { handlerId: originId, origin: 'test.frame', provider: true }
+      })
+
+      send(request, (response) => {
+        expect(response.result[0].parentCapability).toBe('eth_accounts')
+        expect(accounts.addRequest).not.toHaveBeenCalled()
+        done()
+      })
+    })
+
+    it('does not depend on the origin chain connection', (done) => {
+      store.set('main.origins', originId, { name: 'test.frame', chain: { id: 99, type: 'ethereum' } })
+      store.set('main.permissions', address, {
+        [originId]: { handlerId: originId, origin: 'test.frame', provider: true }
+      })
+
+      send(request, (response) => {
+        expect(response.result[0].parentCapability).toBe('eth_accounts')
+        done()
+      })
+    })
+
+    it('returns user rejection after the access prompt is declined', (done) => {
+      accounts.addRequest.mockImplementationOnce((req, cb) => {
+        store.set('main.permissions', address, {
+          [originId]: { handlerId: originId, origin: 'test.frame', provider: false }
+        })
+        cb()
+      })
+
+      send(request, (response) => {
+        expect(response.error).toEqual({ code: 4001, message: 'User rejected the permission request' })
+        done()
+      })
+    })
+
+    it('settles without prompting if the selected account changes before queueing', (done) => {
+      accounts.current
+        .mockReturnValueOnce({ id: address })
+        .mockReturnValue({ id: '0x3333333333333333333333333333333333333333' })
+
+      send(request, (response) => {
+        expect(response.error).toEqual({ code: 4100, message: 'Account changed during permission request' })
+        expect(accounts.addRequest).not.toHaveBeenCalled()
+        done()
+      })
+    })
+
+    it('returns unauthorized when no account is selected', (done) => {
+      accounts.current.mockReturnValue(null)
+
+      send(request, (response) => {
+        expect(response.error).toEqual({
+          code: 4100,
+          message: 'No account is available to grant permission'
+        })
+        expect(accounts.addRequest).not.toHaveBeenCalled()
+        done()
+      })
+    })
+
+    it('allows an explicitly denied origin to request access again', (done) => {
+      store.set('main.permissions', address, {
+        [originId]: { handlerId: originId, origin: 'test.frame', provider: false }
+      })
+      accounts.addRequest.mockImplementationOnce(grantAccess)
+
+      send(request, (response) => {
+        expect(response.result[0].parentCapability).toBe('eth_accounts')
+        expect(accounts.addRequest).toHaveBeenCalledTimes(1)
+        done()
+      })
+    })
+
+    it('coalesces concurrent permission prompts and settles both callers', async () => {
+      let resolvePrompt
+      accounts.addRequest.mockImplementationOnce((req, cb) => {
+        accountRequests.push(req)
+        resolvePrompt = cb
+      })
+
+      const first = new Promise((resolve) => send(request, resolve))
+      const second = new Promise((resolve) => send({ ...request, id: 11 }, resolve))
+
+      expect(accounts.addRequest).toHaveBeenCalledTimes(1)
+      store.set('main.permissions', address, {
+        [originId]: { handlerId: originId, origin: 'test.frame', provider: true }
+      })
+      resolvePrompt()
+
+      await expect(Promise.all([first, second])).resolves.toEqual([
+        expect.objectContaining({ result: [expect.objectContaining({ parentCapability: 'eth_accounts' })] }),
+        expect.objectContaining({ result: [expect.objectContaining({ parentCapability: 'eth_accounts' })] })
+      ])
+    })
+
+    it.each([
+      ['missing params', undefined],
+      ['multiple request objects', [{ eth_accounts: {} }, { eth_accounts: {} }]],
+      ['an unsupported capability', [{ eth_signTransaction: {} }]],
+      ['an unsupported caveat', [{ eth_accounts: { requiredMethods: ['personal_sign'] } }]]
+    ])('rejects %s before prompting', (_description, params, done) => {
+      send({ ...request, params }, (response) => {
+        expect(response.error.code).toBe(-32602)
+        expect(accounts.addRequest).not.toHaveBeenCalled()
+        done()
       })
     })
   })

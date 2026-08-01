@@ -24,6 +24,12 @@ interface OriginUpdateResult {
   chainId: string
 }
 
+export interface OriginAccess {
+  address: Address
+  origin: string
+  permission?: Permission
+}
+
 type Browser = 'chrome' | 'firefox' | 'safari'
 
 export interface FrameExtension {
@@ -45,6 +51,14 @@ const storeApi = {
   getKnownExtension: (id: string) => store('main.knownExtensions', id) as boolean
 }
 
+const currentAccountAddress = () => {
+  const currentAccount = accounts.current()
+  return currentAccount?.address || currentAccount?.id
+}
+
+const accountIsCurrent = (address: Address) =>
+  currentAccountAddress()?.toLowerCase() === address.toLowerCase()
+
 export function parseOrigin(origin?: string) {
   if (!origin) return 'Unknown'
 
@@ -53,12 +67,6 @@ export function parseOrigin(origin?: string) {
 
 function invalidOrigin(origin: string) {
   return origin !== origin.replace(/[^0-9a-z/:.[\]-]/gi, '')
-}
-
-async function getPermission(address: Address, origin: string, payload: RPCRequestPayload) {
-  const permission = storeApi.getPermission(address, origin)
-
-  return permission || requestPermission(address, payload)
 }
 
 async function requestExtensionPermission(extension: FrameExtension) {
@@ -88,33 +96,69 @@ async function requestExtensionPermission(extension: FrameExtension) {
 
 async function requestPermission(address: Address, fullPayload: RPCRequestPayload) {
   const { _origin: originId, ...payload } = fullPayload
-  const permissionCheckId = `${address}:${originId}`
+  const permissionCheckId = `${address.toLowerCase()}:${originId}`
 
   if (permissionCheckId in activePermissionChecks) {
     return activePermissionChecks[permissionCheckId]
   }
 
+  let settle: (permission?: Permission) => void = () => {}
   const result = new Promise<Permission | undefined>((resolve) => {
-    const request: AccessRequest = {
-      payload,
-      handlerId: originId,
-      type: 'access',
-      origin: originId,
-      account: address
-    }
-
-    accounts.addRequest(request, () => {
-      const { name: originName } = store('main.origins', originId)
-      const permission = storeApi.getPermission(address, originName)
-
-      delete activePermissionChecks[permissionCheckId]
-      resolve(permission)
-    })
+    settle = resolve
   })
-
   activePermissionChecks[permissionCheckId] = result
 
+  const request: AccessRequest = {
+    payload,
+    handlerId: originId,
+    type: 'access',
+    origin: originId,
+    account: address
+  }
+
+  if (!accountIsCurrent(address)) {
+    delete activePermissionChecks[permissionCheckId]
+    settle()
+    return result
+  }
+
+  try {
+    accounts.addRequest(request, () => {
+      const origin = store('main.origins', originId)
+      const permission = origin ? storeApi.getPermission(address, origin.name) : undefined
+
+      delete activePermissionChecks[permissionCheckId]
+      settle(permission)
+    })
+  } catch {
+    delete activePermissionChecks[permissionCheckId]
+    settle()
+  }
+
   return result
+}
+
+export function getOriginAccess(payload: RPCRequestPayload): OriginAccess | undefined {
+  const origin = store('main.origins', payload._origin)
+  const address = currentAccountAddress()
+
+  if (!origin || typeof origin.name !== 'string' || invalidOrigin(origin.name) || !address) return
+
+  return {
+    address,
+    origin: origin.name,
+    permission: storeApi.getPermission(address, origin.name)
+  }
+}
+
+export async function requestOriginAccess(payload: RPCRequestPayload, expectedAddress?: Address) {
+  const access = getOriginAccess(payload)
+  if (!access) return false
+  if (expectedAddress && access.address.toLowerCase() !== expectedAddress.toLowerCase()) return false
+  if (access.permission?.provider) return true
+
+  const permission = await requestPermission(access.address, payload)
+  return accountIsCurrent(access.address) && !!permission?.provider
 }
 
 export function updateOrigin(
@@ -193,18 +237,19 @@ export async function isKnownExtension(extension: FrameExtension) {
 
 export async function isTrusted(payload: RPCRequestPayload) {
   // Permission granted to unknown origins only persist until the Frame is closed, they are not permanent
-  const { name: originName } = store('main.origins', payload._origin) as { name: string }
-  const currentAccount = accounts.current()
+  const origin = store('main.origins', payload._origin)
+  if (!origin) return false
+
+  const originName = origin.name
 
   if (isTrustedOrigin(originName) && isInternalMethod(payload.method)) {
     return true
   }
 
-  if (invalidOrigin(originName) || !currentAccount) {
-    return false
-  }
+  const access = getOriginAccess(payload)
+  if (!access) return false
 
-  const permission = await getPermission(currentAccount.address, originName, payload)
+  const permission = access.permission || (await requestPermission(access.address, payload))
 
-  return !!permission?.provider
+  return accountIsCurrent(access.address) && !!permission?.provider
 }
