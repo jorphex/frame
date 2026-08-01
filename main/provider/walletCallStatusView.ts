@@ -1,0 +1,42 @@
+import store from '../store'
+import windows from '../windows'
+import type { WalletCallStatusViewData } from '../windows/nav/breadcrumb'
+import type { WalletCallsStatus } from './walletCallBatches'
+
+interface ShowWalletCallStatusInput {
+  account: string
+  originName: string
+  status: WalletCallsStatus
+}
+
+export function createWalletCallStatusViewData({
+  account,
+  originName,
+  status
+}: ShowWalletCallStatusInput): WalletCallStatusViewData {
+  const receipts = status.receipts?.map(({ status, blockNumber, gasUsed, transactionHash }) => ({
+    status,
+    blockNumber,
+    gasUsed,
+    transactionHash
+  }))
+
+  return {
+    accountId: account.toLowerCase(),
+    originName,
+    status: {
+      version: status.version,
+      id: status.id,
+      chainId: status.chainId,
+      status: status.status,
+      atomic: false,
+      ...(receipts?.length ? { receipts } : {})
+    }
+  }
+}
+
+export function showWalletCallStatus(input: ShowWalletCallStatusInput) {
+  const data = createWalletCallStatusViewData(input)
+  store.showWalletCallsStatus(data.accountId, data)
+  windows.showTray()
+}

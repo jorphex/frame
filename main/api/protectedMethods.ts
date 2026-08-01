@@ -18,5 +18,6 @@ export default [
   'wallet_watchAsset',
   'wallet_sendCalls',
   'wallet_getCallsStatus',
+  'wallet_showCallsStatus',
   'wallet_getCapabilities'
 ]

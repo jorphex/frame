@@ -762,6 +762,22 @@ module.exports = {
       return newNav
     })
   },
+  showWalletCallsStatus: (u, accountId, data) => {
+    const crumb = {
+      view: 'walletCallsStatus',
+      data: { ...data, accountId }
+    }
+
+    u('selected.current', () => accountId)
+    u('selected.minimized', () => false)
+    u('selected.open', () => true)
+    u('panel.view', () => 'default')
+    u('windows.panel.nav', (nav = []) => [
+      crumb,
+      ...nav.filter((navItem) => navItem?.view !== 'walletCallsStatus')
+    ])
+    u('windows.panel.showing', () => true)
+  },
   navBack: (u, windowId, numSteps = 1) => {
     if (!windowId) return log.warn('Invalid nav back', windowId)
     u('windows', windowId, 'nav', (nav) => {

@@ -24,6 +24,7 @@ import {
   updateAccount as updateAccountAction,
   navClearReq as clearNavRequestAction,
   navClearSigner as clearNavSignerAction,
+  showWalletCallsStatus as showWalletCallsStatusAction,
   updateTypedDataRequest as updateTypedDataAction
 } from '../../../../main/store/actions'
 import { toTokenId } from '../../../../resources/domain/balance'
@@ -1362,6 +1363,39 @@ describe('#navClearReq', () => {
     clearRequest('1c', false)
 
     expect(nav).toStrictEqual([])
+  })
+})
+
+describe('#showWalletCallsStatus', () => {
+  it('opens the account and replaces only prior status crumbs', () => {
+    const existingRequest = { view: 'requestView', data: { requestId: 'request-id' } }
+    let nav = [
+      { view: 'walletCallsStatus', data: { status: { id: 'old-id' } } },
+      existingRequest,
+      { view: 'walletCallsStatus', data: { status: { id: 'older-id' } } }
+    ]
+    const values = {}
+    const update = (...args) => {
+      const updater = args.pop()
+      const path = args.join('.')
+      if (path === 'windows.panel.nav') nav = updater(nav)
+      else values[path] = updater(values[path])
+    }
+    const data = {
+      originName: 'example.test',
+      status: { version: '2.0.0', id: 'new-id', chainId: '0x1', status: 100, atomic: false }
+    }
+
+    showWalletCallsStatusAction(update, owner, data)
+
+    expect(nav).toEqual([{ view: 'walletCallsStatus', data: { ...data, accountId: owner } }, existingRequest])
+    expect(values).toMatchObject({
+      'selected.current': owner,
+      'selected.minimized': false,
+      'selected.open': true,
+      'panel.view': 'default',
+      'windows.panel.showing': true
+    })
   })
 })
 

@@ -17,6 +17,7 @@ import Erc20Contract from '../../../main/contracts/erc20'
 import walletCallBatchLedger from '../../../main/provider/walletCallLedger'
 import { executeWalletCallRuntime } from '../../../main/provider/walletCallRuntime'
 import walletCallEvidenceRuntime from '../../../main/provider/walletCallEvidenceRuntime'
+import { showWalletCallStatus } from '../../../main/provider/walletCallStatusView'
 
 const address = '0x22dd63c3619818fdbc262c78baee43cb61e9cccf'
 
@@ -35,6 +36,7 @@ jest.mock('../../../main/provider/walletCallEvidenceRuntime', () => ({
   __esModule: true,
   default: { wake: jest.fn() }
 }))
+jest.mock('../../../main/provider/walletCallStatusView', () => ({ showWalletCallStatus: jest.fn() }))
 
 jest.mock('../../../main/provider/subscriptions', () => {
   const { SubscriptionType } = jest.requireActual('../../../main/provider/subscriptions')
@@ -61,6 +63,7 @@ beforeEach(() => {
   store.set('main.permissions', {})
   store.set('main.walletCallBatches', {})
   store.setWalletCallBatches = jest.fn((batches) => store.set('main.walletCallBatches', batches))
+  showWalletCallStatus.mockClear()
 
   provider.handlers = {}
 
@@ -285,6 +288,7 @@ describe('#wallet-call provider boundary', () => {
   it.each([
     ['wallet_sendCalls', 'sendWalletCalls'],
     ['wallet_getCallsStatus', 'getWalletCallsStatus'],
+    ['wallet_showCallsStatus', 'showWalletCallsStatus'],
     ['wallet_getCapabilities', 'getWalletCallCapabilities']
   ])('dispatches %s internally instead of forwarding it to a chain RPC', (method, handler) => {
     const response = jest.fn()
@@ -513,6 +517,93 @@ describe('#wallet-call provider boundary', () => {
     )
 
     expect(respond.mock.calls[0][0].error.code).toBe(4100)
+  })
+
+  it('shows a known batch and returns no value', () => {
+    const admitted = provider.sendWalletCalls(payload(), jest.fn())
+    const respond = jest.fn()
+
+    provider.showWalletCallsStatus(
+      {
+        id: 78,
+        jsonrpc: '2.0',
+        method: 'wallet_showCallsStatus',
+        _origin: originId,
+        params: [admitted.id]
+      },
+      respond
+    )
+
+    expect(showWalletCallStatus).toHaveBeenCalledWith({
+      account: address,
+      originName: 'example.test',
+      status: {
+        version: '2.0.0',
+        id: admitted.id,
+        chainId: '0x1',
+        status: 100,
+        atomic: false
+      }
+    })
+    expect(respond).toHaveBeenCalledWith({ id: 78, jsonrpc: '2.0', result: null })
+  })
+
+  it.each([
+    ['unauthorized origin', () => store.set('main.permissions', {}), 'known-id', 4100],
+    ['unknown batch', () => {}, 'unknown-id', 5730]
+  ])('does not open a status view for an %s', (_label, arrange, id, code) => {
+    arrange()
+    const respond = jest.fn()
+
+    provider.showWalletCallsStatus(
+      {
+        id: 79,
+        jsonrpc: '2.0',
+        method: 'wallet_showCallsStatus',
+        _origin: originId,
+        params: [id]
+      },
+      respond
+    )
+
+    expect(showWalletCallStatus).not.toHaveBeenCalled()
+    expect(respond).toHaveBeenCalledWith({
+      id: 79,
+      jsonrpc: '2.0',
+      error: expect.objectContaining({ code })
+    })
+  })
+
+  it('does not show a known batch to another authorized origin', () => {
+    const admitted = provider.sendWalletCalls(payload(), jest.fn())
+    const otherOrigin = '4db938a0-9935-520b-991d-0a02b8601f36'
+    store.set('main.origins', otherOrigin, {
+      chain: { id: 1, type: 'ethereum' },
+      name: 'other.test'
+    })
+    store.set('main.permissions', address, {
+      [originId]: { handlerId: originId, origin: 'example.test', provider: true },
+      [otherOrigin]: { handlerId: otherOrigin, origin: 'other.test', provider: true }
+    })
+    const respond = jest.fn()
+
+    provider.showWalletCallsStatus(
+      {
+        id: 80,
+        jsonrpc: '2.0',
+        method: 'wallet_showCallsStatus',
+        _origin: otherOrigin,
+        params: [admitted.id]
+      },
+      respond
+    )
+
+    expect(showWalletCallStatus).not.toHaveBeenCalled()
+    expect(respond).toHaveBeenCalledWith({
+      id: 80,
+      jsonrpc: '2.0',
+      error: { code: 5730, message: 'Unknown bundle id' }
+    })
   })
 
   it('reports only conservative capabilities on requested available chains', () => {

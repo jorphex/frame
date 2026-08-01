@@ -25,6 +25,7 @@ import AddTokenRequest from './Requests/AddTokenRequest'
 import SignTypedDataRequest from './Requests/SignTypedDataRequest'
 import SignPermitRequest from './Requests/SignPermitRequest'
 import WalletCallsRequest from './Requests/WalletCallsRequest'
+import WalletCallsStatus from './WalletCallsStatus'
 import { isHardwareSigner } from '../../../resources/domain/signer'
 import { accountViewTitles } from '../../../resources/domain/request'
 
@@ -296,6 +297,31 @@ class _AccountBody extends React.Component {
           accountViewTitle={accountViewTitle}
         >
           {req && this.renderRequest(req, crumb.data)}
+        </AccountView>
+      )
+    } else if (crumb.view === 'walletCallsStatus') {
+      const { accountId, originName, status } = crumb.data || {}
+      const validChainId =
+        typeof status?.chainId === 'string' && /^0x(?:0|[1-9a-f][0-9a-f]*)$/.test(status.chainId)
+      if (accountId !== this.props.id || !validChainId) return <AccountMain {...this.props} />
+
+      const chainId = Number(BigInt(status.chainId))
+      const chainName = this.store('main.networks.ethereum', chainId, 'name') || `Chain ${chainId}`
+
+      return (
+        <AccountView
+          back={() => {
+            link.send('nav:back', 'panel')
+          }}
+          {...this.props}
+          accountViewTitle='Batch Status'
+        >
+          <WalletCallsStatus
+            accountId={accountId}
+            chainName={chainName}
+            originName={originName}
+            status={status}
+          />
         </AccountView>
       )
     } else if (crumb.view === 'expandedModule') {

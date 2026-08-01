@@ -1,0 +1,121 @@
+.walletCallsStatus
+  position absolute
+  inset 0
+  color var(--outerspace)
+
+.walletCallsStatusScroll
+  position absolute
+  inset 0
+  overflow-y auto
+  box-sizing border-box
+  padding 64px 16px 32px
+
+.walletCallsStatusHeader,
+.walletCallsStatusSummary,
+.walletCallsStatusMetadata,
+.walletCallsStatusReceipt,
+.walletCallsStatusEmpty
+  margin-bottom 12px
+  padding 14px
+  border-radius 12px
+  background var(--ghostA)
+  box-shadow 0px 3px 5px var(--ghostY)
+
+.walletCallsStatusHeader
+  text-align center
+
+.walletCallsStatusOrigin
+  font-size 20px
+  font-weight 300
+  overflow-wrap anywhere
+
+.walletCallsStatusIntent,
+.walletCallsStatusAtomic,
+.walletCallsStatusSectionTitle
+  margin-top 5px
+  font-size 10px
+  letter-spacing 1px
+  text-transform uppercase
+
+.walletCallsStatusChain
+  margin-top 16px
+  font-size 14px
+  font-weight 500
+
+.walletCallsStatusAccount
+  margin-top 6px
+  font-family 'FiraCode'
+  font-size 10px
+  overflow-wrap anywhere
+  user-select all
+
+.walletCallsStatusSummary
+  border 1px solid var(--outerspace04)
+
+.walletCallsStatusSummary-success
+  border-color var(--good)
+
+.walletCallsStatusSummary-failure
+  border-color var(--bad)
+
+.walletCallsStatusSummary-warning
+  border-color var(--warning)
+
+.walletCallsStatusLabel
+  font-size 13px
+  font-weight 500
+  letter-spacing 1px
+  text-transform uppercase
+
+.walletCallsStatusDetail
+  margin-top 6px
+  font-size 11px
+  line-height 1.5
+
+.walletCallsStatusAtomic
+  margin-top 10px
+  color var(--outerspace08)
+
+.walletCallsStatusMetadata,
+.walletCallsStatusReceipt dl
+  margin-top 0
+
+  div
+    display grid
+    grid-template-columns 72px minmax(0, 1fr)
+    gap 8px
+    margin-top 6px
+    font-family 'FiraCode'
+    font-size 10px
+
+  dt
+    color var(--outerspace08)
+
+  dd
+    margin 0
+    overflow-wrap anywhere
+    user-select all
+
+.walletCallsStatusSectionTitle
+  margin 18px 2px 10px
+  color var(--outerspace08)
+
+.walletCallsStatusReceiptHeader
+  display flex
+  justify-content space-between
+  gap 12px
+  font-size 11px
+  font-weight 500
+  letter-spacing 0.5px
+  text-transform uppercase
+
+.walletCallsStatusReceiptGood
+  color var(--good)
+
+.walletCallsStatusReceiptBad
+  color var(--bad)
+
+.walletCallsStatusEmpty
+  color var(--outerspace08)
+  font-size 11px
+  line-height 1.5

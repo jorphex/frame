@@ -43,11 +43,12 @@ import {
 } from './permissions'
 import Erc20Contract from '../contracts/erc20'
 import { getOriginAccess, requestOriginAccess } from '../api/origins'
-import { parseCallsStatus, parseGetCapabilities, parseSendCalls } from './walletCalls'
+import { parseCallsStatus, parseGetCapabilities, parseSendCalls, parseShowCallsStatus } from './walletCalls'
 import { WalletCallLifecycleController } from './walletCallLifecycle'
 import walletCallBatchLedger from './walletCallLedger'
 import { executeWalletCallRuntime } from './walletCallRuntime'
 import walletCallEvidenceRuntime from './walletCallEvidenceRuntime'
+import { showWalletCallStatus } from './walletCallStatusView'
 
 import { Subscription, SubscriptionType, hasSubscriptionPermission } from './subscriptions'
 import {
@@ -588,6 +589,22 @@ export class Provider extends EventEmitter {
 
       const result = walletCallBatchLedger.getStatus(payload._origin, access.address, id)
       return res({ id: payload.id, jsonrpc: payload.jsonrpc, result })
+    } catch (error) {
+      return resError(error as EVMError, payload, res)
+    }
+  }
+
+  showWalletCallsStatus(payload: RPCRequestPayload, res: RPCRequestCallback) {
+    try {
+      const id = parseShowCallsStatus(payload.params)
+      const access = getOriginAccess(payload)
+      if (!access?.permission?.provider) {
+        throw { code: 4100, message: 'Origin is not authorized for wallet-call status' }
+      }
+
+      const status = walletCallBatchLedger.getStatus(payload._origin, access.address, id)
+      showWalletCallStatus({ account: access.address, originName: access.origin, status })
+      return res({ id: payload.id, jsonrpc: payload.jsonrpc, result: null })
     } catch (error) {
       return resError(error as EVMError, payload, res)
     }
@@ -1391,6 +1408,7 @@ export class Provider extends EventEmitter {
     if (method === 'wallet_switchEthereumChain') return this.switchEthereumChain(payload, res)
     if (method === 'wallet_sendCalls') return this.sendWalletCalls(payload, res)
     if (method === 'wallet_getCallsStatus') return this.getWalletCallsStatus(payload, res)
+    if (method === 'wallet_showCallsStatus') return this.showWalletCallsStatus(payload, res)
     if (method === 'wallet_getCapabilities') return this.getWalletCallCapabilities(payload, res)
 
     const targetChain = this.parseTargetChain(payload)
