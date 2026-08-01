@@ -162,9 +162,33 @@ describe('#send', () => {
       store.set('main.networks.ethereum', 5, { id: 5, on: false })
 
       send({ method: 'eth_chainId', chainId: '0x5' }, (response) => {
-        expect(response.error.message).toBe('not connected')
+        expect(response.error).toEqual({ message: 'Frame is not connected to chain 5', code: 4901 })
         expect(response.result).toBeUndefined()
       })
+    })
+  })
+
+  describe('#net_version', () => {
+    it('returns the decimal target chain id', () => {
+      store.set('main.networks.ethereum', 5, { id: 5, on: true })
+
+      send({ method: 'net_version', chainId: '0x5' }, (response) => {
+        expect(response.result).toBe('5')
+      })
+    })
+
+    it('returns a chain-disconnected error exactly once for a disabled chain', () => {
+      store.set('main.networks.ethereum', 5, { id: 5, on: false })
+      const response = jest.fn()
+
+      send({ method: 'net_version', chainId: '0x5' }, response)
+
+      expect(response).toHaveBeenCalledTimes(1)
+      expect(response).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: { message: 'Frame is not connected to chain 5', code: 4901 }
+        })
+      )
     })
   })
 
@@ -1815,7 +1839,7 @@ describe('#send', () => {
 
       send({ method: 'eth_signTypedData_v3', params }, (err) => {
         expect(err.error.message).toBe('Unknown account: 0xa4581bfe76201f3aa147cce8e360140582260441')
-        expect(err.error.code).toBe(-1)
+        expect(err.error.code).toBe(-32603)
         done()
       })
     })
@@ -1826,7 +1850,7 @@ describe('#send', () => {
 
       send({ method: 'eth_signTypedData_v3', params }, (err) => {
         expect(err.error.message).toBe('Sign request is not from currently selected account')
-        expect(err.error.code).toBe(-1)
+        expect(err.error.code).toBe(-32603)
         done()
       })
     })
@@ -1856,7 +1880,7 @@ describe('#send', () => {
 
         send({ method: 'eth_signTypedData_v3', params }, (err) => {
           expect(err.error.message).toMatch(new RegExp(signerType, 'i'))
-          expect(err.error.code).toBe(-1)
+          expect(err.error.code).toBe(-32603)
           done()
         })
       })

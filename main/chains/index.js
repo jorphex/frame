@@ -25,12 +25,19 @@ const { chainUsesOptimismFees } = require('../../resources/utils/chains')
 // https://support.arbitrum.io/hc/en-us/articles/4415963644955-How-the-fees-are-calculated-on-Arbitrum
 const legacyChains = [250, 4002, 42161]
 
-const resError = (error, payload, res) =>
-  res({
-    id: payload.id,
-    jsonrpc: payload.jsonrpc,
-    error: typeof error === 'string' ? { message: error, code: -1 } : error
-  })
+const resError = (errorData, payload, res) => {
+  const error =
+    typeof errorData === 'string'
+      ? { message: errorData, code: -32603 }
+      : {
+          message: errorData.message || 'Internal error',
+          code: typeof errorData.code === 'number' ? errorData.code : -32603
+        }
+
+  if (typeof errorData !== 'string' && 'data' in errorData) error.data = errorData.data
+
+  res({ id: payload.id, jsonrpc: payload.jsonrpc, error })
+}
 
 function txEstimate(gasCost, nativeUSD) {
   const usd = gasCost.shiftedBy(-18).multipliedBy(nativeUSD).toNumber()
@@ -539,7 +546,7 @@ class ChainConnection extends EventEmitter {
         res(result)
       })
     } else {
-      resError('Not connected to Ethereum network', payload, res)
+      resError({ message: `Frame is not connected to chain ${this.chainId}`, code: 4901 }, payload, res)
     }
   }
 }
@@ -623,18 +630,15 @@ class Chains extends EventEmitter {
 
   send(payload, res, targetChain) {
     if (!targetChain) {
-      resError({ message: `Target chain did not exist for send`, code: -32601 }, payload, res)
+      return resError({ message: `Target chain did not exist for send`, code: -32603 }, payload, res)
     }
+
     const { type, id } = targetChain
     if (!this.connections[type] || !this.connections[type][id]) {
-      resError(
-        { message: `Connection for ${type} chain with chainId ${id} did not exist for send`, code: -32601 },
-        payload,
-        res
-      )
-    } else {
-      this.connections[type][id].send(payload, res)
+      return resError({ message: `Frame is not connected to ${type} chain ${id}`, code: 4901 }, payload, res)
     }
+
+    this.connections[type][id].send(payload, res)
   }
 }
 

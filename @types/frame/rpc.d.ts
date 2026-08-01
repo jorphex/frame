@@ -45,6 +45,7 @@ interface JSONRPCErrorResponsePayload extends RPCId {
 interface EVMError {
   message: string
   code?: number
+  data?: unknown
 }
 
 type RPCRequestPayload = JSONRPCRequestPayload & InternalPayload

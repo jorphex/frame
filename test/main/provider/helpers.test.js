@@ -1,6 +1,6 @@
 import log from 'electron-log'
 import { fromUtf8 } from '@ethereumjs/util'
-import { getRawTx, getSignedAddress } from '../../../main/provider/helpers'
+import { getRawTx, getSignedAddress, resError } from '../../../main/provider/helpers'
 
 jest.mock('../../../main/store')
 
@@ -76,6 +76,40 @@ describe('#getRawTx', () => {
     it(`should reject a ${description} nonce`, () => {
       expect(() => getRawTx({ nonce })).toThrowError('Invalid nonce')
     })
+  })
+})
+
+describe('#resError', () => {
+  const request = { id: 7, jsonrpc: '2.0' }
+
+  it('uses the JSON-RPC internal error code for generated string failures', () => {
+    const res = jest.fn()
+
+    resError('failed locally', request, res)
+
+    expect(res).toHaveBeenCalledTimes(1)
+    expect(res).toHaveBeenCalledWith({
+      ...request,
+      error: { message: 'failed locally', code: -32603 }
+    })
+  })
+
+  it('preserves supplied error codes and data', () => {
+    const res = jest.fn()
+    const error = { message: 'upstream failure', code: -32042, data: { reason: 'reverted' } }
+
+    resError(error, request, res)
+
+    expect(res).toHaveBeenCalledTimes(1)
+    expect(res).toHaveBeenCalledWith({ ...request, error })
+  })
+
+  it('preserves a supplied zero code instead of replacing it', () => {
+    const res = jest.fn()
+
+    resError({ message: 'zero', code: 0 }, request, res)
+
+    expect(res).toHaveBeenCalledWith({ ...request, error: { message: 'zero', code: 0 } })
   })
 })
 

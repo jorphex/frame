@@ -121,11 +121,16 @@ export function gasFees(rawTx: TransactionData) {
   return store('main.networksMeta', 'ethereum', parseInt(rawTx.chainId, 16), 'gas')
 }
 
-export function resError(errorData: string | EVMError, request: RPCId, res: RPCErrorCallback) {
-  const error =
+export function resError(errorData: string | Error | EVMError, request: RPCId, res: RPCErrorCallback) {
+  const error: EVMError =
     typeof errorData === 'string'
-      ? { message: errorData, code: -1 }
-      : { message: errorData.message, code: errorData.code || -1 }
+      ? { message: errorData, code: -32603 }
+      : {
+          message: errorData.message || 'Internal error',
+          code: 'code' in errorData && typeof errorData.code === 'number' ? errorData.code : -32603
+        }
+
+  if (typeof errorData !== 'string' && 'data' in errorData) error.data = errorData.data
 
   log.warn(error)
   res({ id: request.id, jsonrpc: request.jsonrpc, error })

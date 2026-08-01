@@ -202,6 +202,8 @@ afterEach((done) => {
 
   const activeConnection = Object.values(mockConnections).find((conn) => conn.connection.connected)
 
+  if (!activeConnection) return done()
+
   chains.once('close', ({ id }) => {
     if (id === activeConnection.id) {
       done()
@@ -211,6 +213,69 @@ afterEach((done) => {
   })
 
   store.toggleConnection('ethereum', activeConnection.id, 'primary', false)
+})
+
+describe('#send', () => {
+  const payload = { id: 7, jsonrpc: '2.0', method: 'eth_testFrame' }
+
+  it('returns one internal error and stops when no target chain is supplied', () => {
+    const res = jest.fn()
+
+    expect(() => chains.send(payload, res)).not.toThrow()
+
+    expect(res).toHaveBeenCalledTimes(1)
+    expect(res).toHaveBeenCalledWith({
+      id: payload.id,
+      jsonrpc: payload.jsonrpc,
+      error: { message: 'Target chain did not exist for send', code: -32603 }
+    })
+  })
+
+  it('returns one chain-disconnected error when the target has no connection', () => {
+    const res = jest.fn()
+
+    chains.send(payload, res, { type: 'ethereum', id: 999 })
+
+    expect(res).toHaveBeenCalledTimes(1)
+    expect(res).toHaveBeenCalledWith({
+      id: payload.id,
+      jsonrpc: payload.jsonrpc,
+      error: { message: 'Frame is not connected to ethereum chain 999', code: 4901 }
+    })
+  })
+
+  it('returns one chain-disconnected error when no provider is active', () => {
+    const res = jest.fn()
+
+    chains.send(payload, res, { type: 'ethereum', id: 137 })
+
+    expect(res).toHaveBeenCalledTimes(1)
+    expect(res).toHaveBeenCalledWith({
+      id: payload.id,
+      jsonrpc: payload.jsonrpc,
+      error: { message: 'Frame is not connected to chain 137', code: 4901 }
+    })
+  })
+
+  it('preserves an upstream error code, message, and data', () => {
+    const chain = chains.connections.ethereum[137]
+    const primary = chain.primary
+    const error = { message: 'execution reverted', code: -32042, data: { reason: 'denied' } }
+    chain.primary = {
+      connected: true,
+      provider: { sendAsync: (_request, cb) => cb(error) }
+    }
+    const res = jest.fn()
+
+    try {
+      chains.send(payload, res, { type: 'ethereum', id: 137 })
+    } finally {
+      chain.primary = primary
+    }
+
+    expect(res).toHaveBeenCalledTimes(1)
+    expect(res).toHaveBeenCalledWith({ id: payload.id, jsonrpc: payload.jsonrpc, error })
+  })
 })
 
 Object.values(mockConnections).forEach((chain) => {

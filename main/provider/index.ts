@@ -229,20 +229,28 @@ export class Provider extends EventEmitter {
 
   getNetVersion(payload: RPCRequestPayload, res: RPCRequestCallback, targetChain: Chain) {
     const chain = store('main.networks.ethereum', targetChain.id)
-    const response = chain?.on
-      ? { result: targetChain.id }
-      : { error: { message: 'not connected', code: -1 } }
+    if (!chain?.on) {
+      return resError(
+        { message: `Frame is not connected to chain ${targetChain.id}`, code: 4901 },
+        payload,
+        res
+      )
+    }
 
-    res({ id: payload.id, jsonrpc: payload.jsonrpc, ...response })
+    res({ id: payload.id, jsonrpc: payload.jsonrpc, result: targetChain.id.toString() })
   }
 
-  getChainId(payload: RPCRequestPayload, res: RPCSuccessCallback, targetChain: Chain) {
+  getChainId(payload: RPCRequestPayload, res: RPCRequestCallback, targetChain: Chain) {
     const chain = store('main.networks.ethereum', targetChain.id)
-    const response = chain?.on
-      ? { result: intToHex(targetChain.id) }
-      : { error: { message: 'not connected', code: -1 } }
+    if (!chain?.on) {
+      return resError(
+        { message: `Frame is not connected to chain ${targetChain.id}`, code: 4901 },
+        payload,
+        res
+      )
+    }
 
-    res({ id: payload.id, jsonrpc: payload.jsonrpc, ...response })
+    res({ id: payload.id, jsonrpc: payload.jsonrpc, result: intToHex(targetChain.id) })
   }
 
   declineRequest(req: AccountRequest) {
