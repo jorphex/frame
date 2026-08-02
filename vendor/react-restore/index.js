@@ -1,7 +1,7 @@
 /* global require, exports */
 
 const React = require('react')
-const legacy = require('react-restore-core')
+const { create } = require('./core')
 
 const RestoreContext = React.createContext(null)
 
@@ -59,8 +59,11 @@ const connect = (Origin, explicitStore) => {
   return Connected
 }
 
-const create = legacy.create
-const DevTools = legacy.DevTools
+const DevTools = () => {
+  throw new Error(
+    '<Restore.DevTools /> is now a standalone module, https://github.com/floating/restore-devtools (npm install restore-devtools)'
+  )
+}
 const Restore = { create, connect, DevTools }
 
 exports.create = create

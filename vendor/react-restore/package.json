@@ -1,13 +1,10 @@
 {
   "name": "react-restore",
-  "version": "0.6.2-frame.1",
-  "description": "Frame compatibility layer for react-restore with modern React context",
+  "version": "0.6.2-frame.2",
+  "description": "Frame-owned react-restore store and modern React context connector",
   "main": "index.js",
   "license": "MIT",
   "private": true,
-  "dependencies": {
-    "react-restore-core": "npm:react-restore@0.6.2"
-  },
   "peerDependencies": {
     "react": ">=18.3.1"
   }
