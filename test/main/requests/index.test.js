@@ -60,6 +60,23 @@ describe('#mapRequest', () => {
       expect(mapRequest(req).chainId).toBe('0xa')
     })
 
+    it('allows a nested request with no params', () => {
+      const { params, ...payload } = request.params.request
+      const req = {
+        ...request,
+        params: { ...request.params, request: payload }
+      }
+
+      expect(mapRequest(req)).toStrictEqual({
+        jsonrpc: '2.0',
+        id: 8,
+        method: 'personal_sign',
+        params: undefined,
+        chainId: '0x1',
+        _origin: 'frame.eth'
+      })
+    })
+
     it('does not map a request with a non-CAIP-2 compliant chain param', () => {
       const { session, request: payload } = request.params
 
@@ -173,6 +190,23 @@ describe('#mapRequest', () => {
           '0x68656c6c6f20776f726c642c207369676e2074657374206d65737361676521',
           '0xa89Df33a6f26c29ea23A9Ff582E865C03132b140'
         ],
+        chainId: '0xaa36a7',
+        _origin: 'frame.eth'
+      })
+    })
+
+    it('allows a nested request with no params', () => {
+      const { params, ...payload } = request.params.request
+      const req = {
+        ...request,
+        params: { ...request.params, request: payload }
+      }
+
+      expect(mapRequest(req)).toStrictEqual({
+        jsonrpc: '2.0',
+        id: 8,
+        method: 'personal_sign',
+        params: undefined,
         chainId: '0xaa36a7',
         _origin: 'frame.eth'
       })

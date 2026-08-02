@@ -47,6 +47,16 @@ function parseSchema<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data
 }
 
+function singleParamError(issue: { input?: unknown }) {
+  if (issue.input === undefined) return 'Required'
+  if (Array.isArray(issue.input) && issue.input.length < 1) {
+    return 'Array must contain at least 1 element(s)'
+  }
+  if (Array.isArray(issue.input) && issue.input.length > 1) {
+    return 'Array must contain at most 1 element(s)'
+  }
+}
+
 const addressSchema = z
   .string()
   .regex(ADDRESS, 'address must be a 20-byte 0x-prefixed hex value')
@@ -90,21 +100,24 @@ const callSchema = z
   })
   .strict()
 
-const sendCallsSchema = z.tuple([
-  z
-    .object({
-      version: z.literal(WALLET_CALLS_VERSION),
-      id: batchIdSchema.optional(),
-      from: addressSchema.optional(),
-      chainId: chainIdSchema,
-      atomicRequired: z.boolean(),
-      calls: z.array(callSchema).min(1, 'calls must contain at least one call'),
-      capabilities: capabilitiesSchema.optional()
-    })
-    .strict()
-])
+const sendCallsSchema = z.tuple(
+  [
+    z
+      .object({
+        version: z.literal(WALLET_CALLS_VERSION, { error: 'Invalid literal value' }),
+        id: batchIdSchema.optional(),
+        from: addressSchema.optional(),
+        chainId: chainIdSchema,
+        atomicRequired: z.boolean({ error: 'Expected boolean' }),
+        calls: z.array(callSchema).min(1, 'calls must contain at least one call'),
+        capabilities: capabilitiesSchema.optional()
+      })
+      .strict()
+  ],
+  { error: singleParamError }
+)
 
-const batchIdParamsSchema = z.tuple([batchIdSchema])
+const batchIdParamsSchema = z.tuple([batchIdSchema], { error: singleParamError })
 const capabilityChainIdsSchema = z.array(chainIdSchema)
 
 function assertBoundedId(id: string | undefined) {

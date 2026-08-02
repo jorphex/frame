@@ -64,7 +64,7 @@ export const MainSchema = z.object({
   accountsMeta: z.record(z.string(), AccountMetadataSchema),
   balances: z.record(z.string().describe('Address'), z.array(BalanceSchema)),
   dapps: z.record(z.string(), DappSchema),
-  mute: z.record(notificationTypes, z.boolean()),
+  mute: z.partialRecord(notificationTypes, z.boolean()),
   colorway: z.enum(['light', 'dark']),
   colorwayPrimary: ColorwayPrimarySchema,
   shortcuts: ShortcutsSchema,

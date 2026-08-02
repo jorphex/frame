@@ -9,7 +9,7 @@ export const DappSchema = z.object({
   status: z.enum(['initial', 'loading', 'updating', 'ready', 'failed']),
   config: z.record(z.string(), z.string()),
   content: z.string().optional(),
-  manifest: ManifestSchema,
+  manifest: ManifestSchema.optional(),
   openWhenReady: z.boolean(),
   checkStatusRetryCount: z.number().gte(0).default(0)
 })

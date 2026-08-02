@@ -5,7 +5,7 @@ const v38MuteSchema = z
     migrateToPylon: z.boolean().default(true)
   })
   .passthrough()
-  .default({})
+  .prefault({})
 
 const v38ConnectionSchema = z
   .object({

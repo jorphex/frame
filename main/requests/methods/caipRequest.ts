@@ -18,7 +18,7 @@ const caipRequestParams = z.object({
   session: sessionMatcher,
   request: z.object({
     method: z.string(),
-    params: z.any()
+    params: z.any().optional()
   })
 })
 
@@ -44,5 +44,5 @@ export default function (rpcRequest: RPCRequestPayload) {
     }
   }
 
-  throw generateError(result.error)
+  throw generateError(result.error, rpcRequest)
 }

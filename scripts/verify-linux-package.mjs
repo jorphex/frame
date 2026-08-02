@@ -65,6 +65,7 @@ const sigUtil = require(path.join(appModules, '@metamask/eth-sig-util'))
 const tarFs = require(path.join(appModules, 'tar-fs'))
 const tarStream = require(path.join(appModules, 'tar-stream'))
 const electronLog = require(path.join(appModules, 'electron-log'))
+const { z } = require(path.join(appModules, 'zod'))
 const siwe = new SiweMessage(\`example.com wants you to sign in with your Ethereum account:
 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
@@ -123,6 +124,9 @@ try {
 } catch {
   signerTamperingRejected = true
 }
+const zodPartialRecord = z.partialRecord(z.enum(['existing', 'future']), z.boolean()).parse({ existing: true })
+const zodPrefault = z.object({ enabled: z.boolean().default(true) }).prefault({}).parse(undefined)
+const zodUnsafeInteger = z.number().int().safeParse(Number.MAX_SAFE_INTEGER + 1)
 Promise.all([
   Promise.all([modernModules.loadKuboModule(), modernModules.loadUnixFsModule()]),
   fetchUtils.readJsonWithLimit(new Response('{"runtime":"native"}'), 64)
@@ -150,6 +154,12 @@ Promise.all([
       typeof electronLog.transports.file,
       typeof electronLog.transports.file.resolvePathFn
     ],
+    zodVersion: require(path.join(appModules, 'zod/package.json')).version,
+    zodProbe: {
+      partialRecord: zodPartialRecord,
+      prefault: zodPrefault,
+      unsafeIntegerAccepted: zodUnsafeInteger.success
+    },
     signature,
     signatureHash,
     recoveredSignatureAddress,
@@ -198,6 +208,12 @@ assert.deepEqual(probeResult.archiveVersions, {
 assert.deepEqual(probeResult.archiveApis, ['function', 'function'])
 assert.equal(probeResult.electronLogVersion, packageJson.dependencies['electron-log'])
 assert.deepEqual(probeResult.electronLogApis, Array(5).fill('function'))
+assert.equal(probeResult.zodVersion, packageJson.dependencies.zod)
+assert.deepEqual(probeResult.zodProbe, {
+  partialRecord: { existing: true },
+  prefault: { enabled: true },
+  unsafeIntegerAccepted: false
+})
 assert.equal(probeResult.signatureHash, 'd07e8b0969c3d3ba7934bcf9134d586ce1c14c96c4396824a3c6b0137c1e4943')
 assert.equal(
   probeResult.signature,
@@ -233,5 +249,5 @@ console.log(
     probeResult.abi
   } hardware-wallet native, Ledger ${
     probeResult.ledgerVersions['@ledgerhq/hw-app-eth']
-  }, SIWE, EIP-712, electron-log 5, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
+  }, SIWE, EIP-712, Zod 4, electron-log 5, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )
