@@ -1,5 +1,5 @@
 /* globals task */
-const { ethers, utils } = require('ethers')
+const { Interface, encodeBytes32String, parseEther, parseUnits, toBeHex } = require('ethers')
 const ethProvider = require('eth-provider')
 
 function taskWithDefaultParams(taskName, taskDescription) {
@@ -31,7 +31,7 @@ taskWithDefaultParams('send-tx', 'send a test transaction')
         })
 
         const tx = {
-          value: utils.parseEther(amount || '.0002').toHexString(),
+          value: toBeHex(parseEther(amount || '.0002')),
           from: accounts[0],
           to,
           data: '0x'
@@ -78,9 +78,9 @@ taskWithDefaultParams('send-token-approval', 'approve token contract for spendin
         const eth = ethProvider(provider === 'hardhat' ? 'http://127.0.0.1:8545' : provider, {
           origin: 'frame-hardhat-worker'
         })
-        const abi = new utils.Interface(['function approve(address spender, uint256 value)'])
+        const abi = new Interface(['function approve(address spender, uint256 value)'])
 
-        const bnAmount = ethers.BigNumber.from(amount).mul(ethers.BigNumber.from(10).pow(parseInt(decimals)))
+        const bnAmount = parseUnits(amount.toString(), parseInt(decimals))
 
         eth
           .request({ method: 'eth_accounts', params: [], id: 2, chainId, jsonrpc: '2.0' })
@@ -105,16 +105,14 @@ taskWithDefaultParams('send-token-approval', 'approve token contract for spendin
   )
 
 const ensAbis = require('./compiled/main/contracts/deployments/ens/abi.js')
-const registrarContract = new utils.Interface(ensAbis.registrar)
-const registrarControllerContract = new utils.Interface(ensAbis.registrarController)
+const registrarContract = new Interface(ensAbis.registrar)
+const registrarControllerContract = new Interface(ensAbis.registrarController)
 
 const ensActions = {
   commit: () => {
     return {
       to: '0x283Af0B28c62C092C9727F1Ee09c02CA627EB7F5',
-      data: registrarControllerContract.encodeFunctionData('commit', [
-        utils.formatBytes32String('testing-frame')
-      ])
+      data: registrarControllerContract.encodeFunctionData('commit', [encodeBytes32String('testing-frame')])
     }
   },
   register: ({ name, account, duration = 31536000 }) => {
@@ -124,7 +122,7 @@ const ensActions = {
         name,
         account,
         duration,
-        utils.formatBytes32String('asupersecret')
+        encodeBytes32String('asupersecret')
       ])
     }
   },

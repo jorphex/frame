@@ -3,6 +3,7 @@ import log from 'electron-log'
 import { Notification } from 'electron'
 import { addHexPrefix, intToHex } from '@ethereumjs/util'
 import { v5 as uuidv5 } from 'uuid'
+import { toBeHex } from 'ethers'
 
 import provider from '../provider'
 import store from '../store'
@@ -623,7 +624,7 @@ export class Accounts extends EventEmitter {
         l2Transactions.forEach(async ([_id, req]) => {
           let estimate = ''
           try {
-            estimate = (await provider.getL1GasCost(req.data)).toHexString()
+            estimate = toBeHex(await provider.getL1GasCost(req.data))
           } catch (e) {
             log.error('Error estimating L1 gas cost', e)
           }

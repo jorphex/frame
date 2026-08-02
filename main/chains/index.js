@@ -3,7 +3,6 @@ const { powerMonitor } = require('electron')
 const EventEmitter = require('events')
 const { addHexPrefix } = require('@ethereumjs/util')
 const { Hardfork } = require('@ethereumjs/common')
-const { Web3Provider } = require('@ethersproject/providers')
 const BigNumber = require('bignumber.js')
 const provider = require('eth-provider')
 const log = require('electron-log')
@@ -13,7 +12,7 @@ const { default: BlockMonitor } = require('./blocks')
 const { default: chainConfig } = require('./config')
 const { default: GasMonitor } = require('../transaction/gasMonitor')
 const { createGasCalculator } = require('./gas')
-const { estimateL1GasCost } = require('./optimism')
+const { createRpcProvider, estimateL1GasCost } = require('./optimism')
 const { NETWORK_PRESETS } = require('../../resources/constants')
 const { chainUsesOptimismFees } = require('../../resources/utils/chains')
 
@@ -149,7 +148,7 @@ class ChainConnection extends EventEmitter {
           }
 
           try {
-            const l1GasCost = BigNumber((await estimateL1GasCost(provider, tx)).toHexString())
+            const l1GasCost = BigNumber((await estimateL1GasCost(createRpcProvider(provider), tx)).toString())
             const l2GasCost = BigNumber(tx.gasLimit).multipliedBy(gasPrice)
             const estimatedGas = l1GasCost.plus(l2GasCost)
 
@@ -240,7 +239,7 @@ class ChainConnection extends EventEmitter {
             ? BigNumber(feeMarket.nextBaseFee).plus(BigNumber(feeMarket.maxPriorityFeePerGas))
             : BigNumber(gasPrice)
 
-          this.feeEstimatesUSD(parseInt(this.chainId), estimatedGasPrice, new Web3Provider(provider)).then(
+          this.feeEstimatesUSD(parseInt(this.chainId), estimatedGasPrice, createRpcProvider(provider)).then(
             (samples) => {
               store.addSampleGasCosts(this.type, this.chainId, samples)
             }

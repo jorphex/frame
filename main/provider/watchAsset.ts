@@ -1,4 +1,4 @@
-import { getAddress } from '@ethersproject/address'
+import { getAddress } from 'ethers'
 import { z } from 'zod'
 
 const MAX_CHAIN_ID = Number.MAX_SAFE_INTEGER

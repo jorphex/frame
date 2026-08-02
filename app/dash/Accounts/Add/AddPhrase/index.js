@@ -1,8 +1,8 @@
 import { AddHotAccount } from '../Components'
-import { utils } from 'ethers'
+import { validateMnemonic as isValidMnemonic } from 'bip39'
 
 const validateMnemonic = (mnemonic) => {
-  if (!utils.isValidMnemonic(mnemonic)) return 'INVALID SEED PHRASE'
+  if (!isValidMnemonic(mnemonic)) return 'INVALID SEED PHRASE'
   if (mnemonic.split(' ').length < 12) return 'SEED PHRASE TOO SHORT'
 }
 

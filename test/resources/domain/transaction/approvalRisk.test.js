@@ -1,4 +1,4 @@
-import { utils } from 'ethers'
+import { Interface } from 'ethers'
 
 import {
   effectReportsBroadTokenAuthorityIntent,
@@ -9,7 +9,7 @@ const account = '0x1111111111111111111111111111111111111111'
 const contract = '0x2222222222222222222222222222222222222222'
 const delegate = '0x3333333333333333333333333333333333333333'
 const max = 2n ** 256n - 1n
-const tokenInterface = new utils.Interface([
+const tokenInterface = new Interface([
   'function approve(address spender, uint256 amount)',
   'function setApprovalForAll(address operator, bool approved)'
 ])

@@ -1,5 +1,4 @@
-import { BigNumber, utils } from 'ethers'
-import { Interface } from 'ethers/lib/utils'
+import { Interface, encodeBytes32String } from 'ethers'
 
 import store from '../../../../../main/store'
 import ensContracts from '../../../../../main/contracts/deployments/ens'
@@ -28,7 +27,7 @@ describe('registrar', () => {
 
     supportedFunctions.forEach((fn) => {
       it(`recognizes a call to ${fn} for a name with an unknown token id`, () => {
-        const calldata = registrarInterface.encodeFunctionData(fn, [from, to, BigNumber.from(tokenId)])
+        const calldata = registrarInterface.encodeFunctionData(fn, [from, to, BigInt(tokenId)])
         const action = registrar.decode(calldata)
 
         expect(action).toStrictEqual({
@@ -45,7 +44,7 @@ describe('registrar', () => {
 
         store.set('main.inventory', from, 'ens.items', { someId: asset })
 
-        const calldata = registrarInterface.encodeFunctionData(fn, [from, to, BigNumber.from(tokenId)])
+        const calldata = registrarInterface.encodeFunctionData(fn, [from, to, BigInt(tokenId)])
         const action = registrar.decode(calldata, { account: from })
 
         expect(action).toStrictEqual({
@@ -58,7 +57,7 @@ describe('registrar', () => {
 
   describe('approvals', () => {
     it('recognizes a call to approve for a name with an unknown token id', () => {
-      const calldata = registrarInterface.encodeFunctionData('approve', [to, BigNumber.from(tokenId)])
+      const calldata = registrarInterface.encodeFunctionData('approve', [to, BigInt(tokenId)])
       const action = registrar.decode(calldata)
 
       expect(action).toStrictEqual({
@@ -75,7 +74,7 @@ describe('registrar', () => {
 
       store.set('main.inventory', from, 'ens.items', { someId: asset })
 
-      const calldata = registrarInterface.encodeFunctionData('approve', [to, BigNumber.from(tokenId)])
+      const calldata = registrarInterface.encodeFunctionData('approve', [to, BigInt(tokenId)])
       const action = registrar.decode(calldata, { account: from })
 
       expect(action).toStrictEqual({
@@ -98,7 +97,7 @@ describe('registrar controller', () => {
 
   it('recognizes a call for a pre-commitment to registering an ENS name', () => {
     const calldata = registrarControllerInterface.encodeFunctionData('commit', [
-      utils.formatBytes32String('asecretphrase')
+      encodeBytes32String('asecretphrase')
     ])
     const action = registrarController.decode(calldata)
 
@@ -114,7 +113,7 @@ describe('registrar controller', () => {
       it(`recognizes a call to ${fn} in order to register an ENS name`, () => {
         const duration = 60 * 60 * 24 * 365 // 1 year, in seconds
 
-        const functionParams = ['frame.eth', to, duration, utils.formatBytes32String('asecretphrase')].concat(
+        const functionParams = ['frame.eth', to, duration, encodeBytes32String('asecretphrase')].concat(
           fn.toLowerCase().includes('config') ? [from, from] : []
         )
         const calldata = registrarControllerInterface.encodeFunctionData(fn, functionParams)
@@ -132,7 +131,7 @@ describe('registrar controller', () => {
         'frame',
         to,
         31536000,
-        utils.formatBytes32String('asecretphrase')
+        encodeBytes32String('asecretphrase')
       ])
       const action = registrarController.decode(calldata)
 

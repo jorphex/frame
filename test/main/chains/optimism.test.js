@@ -1,8 +1,8 @@
-import { utils } from 'ethers'
+import { AbiCoder } from 'ethers'
 
-import { estimateL1GasCost, GAS_PRICE_ORACLE_ADDRESS } from '../../../main/chains/optimism'
+import { createRpcProvider, estimateL1GasCost, GAS_PRICE_ORACLE_ADDRESS } from '../../../main/chains/optimism'
 
-const encodedFee = utils.defaultAbiCoder.encode(['uint256'], ['123456789'])
+const encodedFee = AbiCoder.defaultAbiCoder().encode(['uint256'], ['123456789'])
 
 function createProvider() {
   return {
@@ -95,6 +95,45 @@ const fixtures = [
 ]
 
 describe('OP Stack L1 fee estimation', () => {
+  it('adapts callback JSON-RPC providers without changing payloads', async () => {
+    const callbackProvider = {
+      sendAsync: jest.fn((payload, callback) => {
+        const result = payload.method === 'eth_call' ? encodedFee : '0x7'
+        callback(null, { result })
+      })
+    }
+    const provider = createRpcProvider(callbackProvider)
+    const call = { to: GAS_PRICE_ORACLE_ADDRESS, data: '0x1234' }
+
+    await expect(provider.call(call)).resolves.toBe(encodedFee)
+    await expect(provider.getTransactionCount('0x3333333333333333333333333333333333333333')).resolves.toBe(7)
+    expect(callbackProvider.sendAsync.mock.calls.map(([payload]) => payload)).toEqual([
+      { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [call, 'latest'] },
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_getTransactionCount',
+        params: ['0x3333333333333333333333333333333333333333', 'latest']
+      }
+    ])
+  })
+
+  it('rejects callback transport and JSON-RPC errors', async () => {
+    const transportFailure = createRpcProvider({
+      sendAsync: (_payload, callback) => callback(new Error('transport unavailable'))
+    })
+    const rpcFailure = createRpcProvider({
+      sendAsync: (_payload, callback) => callback(null, { error: { message: 'execution reverted' } })
+    })
+
+    await expect(transportFailure.call({ to: GAS_PRICE_ORACLE_ADDRESS, data: '0x' })).rejects.toThrow(
+      'transport unavailable'
+    )
+    await expect(rpcFailure.call({ to: GAS_PRICE_ORACLE_ADDRESS, data: '0x' })).rejects.toThrow(
+      'execution reverted'
+    )
+  })
+
   it.each(fixtures)('encodes $name', async ({ tx, calldata }) => {
     const provider = createProvider()
 

@@ -1,4 +1,6 @@
-import { ethers } from 'ethers'
+import { BrowserProvider } from 'ethers'
+
+import type { Eip1193Provider } from 'ethers'
 
 type EthereumProvider = {
   connected?: boolean
@@ -56,10 +58,7 @@ async function withTimeout<T>(operation: Promise<T>, milliseconds: number) {
 
 export default function createEns(
   provider: EthereumProvider,
-  web3Provider: Web3Provider = new ethers.providers.Web3Provider(
-    provider as ethers.providers.ExternalProvider,
-    'any'
-  )
+  web3Provider: Web3Provider = new BrowserProvider(provider as Eip1193Provider, 'any')
 ) {
   const resolve = async (name: string, options: { timeout?: number } = {}) => {
     const operation = async () => {

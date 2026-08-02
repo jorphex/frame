@@ -2,7 +2,6 @@ import balanceLoader from '../../../../main/externalData/balances/scan'
 import multicall, { supportsChain } from '../../../../main/multicall'
 
 import log from 'electron-log'
-import { ethers } from 'ethers'
 import { addHexPrefix, padToEven } from '@ethereumjs/util'
 import ethProvider from 'eth-provider'
 import BigNumber from 'bignumber.js'
@@ -78,7 +77,7 @@ describe('#getTokenBalances', () => {
         return {
           batchCall: async function (tokenCalls) {
             return tokenCalls.map((tc) => {
-              expect(tc.call[0]).toBe('function balanceOf(address address) returns (uint256 value)')
+              expect(tc.call[0]).toBe('function balanceOf(address owner) returns (uint256 value)')
               expect(tc.call[1]).toBe(ownerAddress)
 
               const token = knownTokens.find(
@@ -88,9 +87,7 @@ describe('#getTokenBalances', () => {
               if (token) {
                 return {
                   success: true,
-                  returnValues: [
-                    tc.returns[0](ethers.BigNumber.from(onChainBalances[token.address].toString()))
-                  ]
+                  returnValues: [tc.returns[0](BigInt(onChainBalances[token.address].toString()))]
                 }
               }
 

@@ -1,8 +1,8 @@
-import { Interface } from '@ethersproject/abi'
+import { Interface } from 'ethers'
 import { addHexPrefix } from '@ethereumjs/util'
 import log from 'electron-log'
 
-import type { BytesLike } from '@ethersproject/bytes'
+import type { BytesLike } from 'ethers'
 import type EthereumProvider from 'ethereum-provider'
 
 import {
@@ -61,7 +61,7 @@ function getResultData(results: any, call: string[], target: string) {
     return callInterface.decodeFunctionResult(fnName, results)
   } catch (e) {
     log.warn(`Failed to decode ${fnName},`, { target, results })
-    const outputs = callInterface.getFunction(fnName).outputs || []
+    const outputs = callInterface.getFunction(fnName)?.outputs || []
     return outputs.map(() => null)
   }
 }

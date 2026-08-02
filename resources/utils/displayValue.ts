@@ -1,5 +1,5 @@
 import BigNumber from 'bignumber.js'
-import { isHexString } from 'ethers/lib/utils'
+import { isHexString } from 'ethers'
 
 import type { Rate } from '../../main/store/state'
 

@@ -1,5 +1,5 @@
 import log from 'electron-log'
-import { Interface } from '@ethersproject/abi'
+import { Interface } from 'ethers'
 import { fetchSourcifyContract } from './sources/sourcify'
 import { fetchEtherscanContract } from './sources/etherscan'
 
@@ -43,6 +43,7 @@ export function decodeCallData(calldata: string, abi: string) {
 
     try {
       const abiMethod = contractInterface.getFunction(sighash)
+      if (!abiMethod) throw new Error(`Unknown ABI method ${sighash}`)
       const decoded = contractInterface.decodeFunctionData(sighash, calldata)
 
       return {

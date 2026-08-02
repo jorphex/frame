@@ -1,6 +1,5 @@
 import BigNumber from 'bignumber.js'
-import { BigNumber as EthersBigNumber } from '@ethersproject/bignumber'
-import { Interface } from '@ethersproject/abi'
+import { Interface, toBeHex } from 'ethers'
 import { addHexPrefix } from '@ethereumjs/util'
 import log from 'electron-log'
 
@@ -8,7 +7,7 @@ import multicall, { Call, supportsChain as multicallSupportsChain } from '../../
 import erc20TokenAbi from './erc-20-abi'
 import { groupByChain, TokensByChain } from './reducers'
 
-import type { BytesLike } from '@ethersproject/bytes'
+import type { BytesLike } from 'ethers'
 import type EthereumProvider from 'ethereum-provider'
 import type { Balance, Token } from '../../store/state'
 
@@ -42,13 +41,13 @@ function createBalance(rawBalance: string, decimals: number): ExternalBalance {
 }
 
 export default function (eth: EthereumProvider) {
-  function balanceCalls(owner: string, tokens: TokenDefinition[]): Call<EthersBigNumber, ExternalBalance>[] {
+  function balanceCalls(owner: string, tokens: TokenDefinition[]): Call<bigint, ExternalBalance>[] {
     return tokens.map((token) => ({
       target: token.address,
-      call: ['function balanceOf(address address) returns (uint256 value)', owner],
+      call: ['function balanceOf(address owner) returns (uint256 value)', owner],
       returns: [
-        (bn?: EthersBigNumber) => {
-          const hexString = bn ? bn.toHexString() : '0x00'
+        (bn?: bigint) => {
+          const hexString = bn !== undefined ? toBeHex(bn) : '0x00'
           return createBalance(hexString, token.decimals)
         }
       ]
@@ -82,7 +81,7 @@ export default function (eth: EthereumProvider) {
 
     const result = erc20Interface.decodeFunctionResult('balanceOf', response)
 
-    return result.balance.toHexString()
+    return toBeHex(result.balance)
   }
 
   async function getTokenBalancesFromContracts(owner: string, tokens: TokenDefinition[]) {

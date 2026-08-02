@@ -1,5 +1,5 @@
 const { HDKey } = require('@scure/bip32')
-const { computeAddress } = require('ethers').utils
+const { computeAddress, hexlify } = require('ethers')
 const HotSignerWorker = require('../HotSigner/worker')
 const { decryptSecret } = require('../crypto')
 
@@ -22,7 +22,7 @@ class SeedSignerWorker extends HotSignerWorker {
         return (
           publicKey &&
           typeof address === 'string' &&
-          computeAddress(publicKey).toLowerCase() === address.toLowerCase()
+          computeAddress(hexlify(publicKey)).toLowerCase() === address.toLowerCase()
         )
       })
       if (!addressesMatch) throw new Error('Seed does not match addresses')

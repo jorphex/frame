@@ -1,6 +1,6 @@
 import Account from '../../../../main/accounts/Account'
 import provider from '../../../../main/provider'
-import { utils } from 'ethers'
+import { Interface } from 'ethers'
 import reveal from '../../../../main/reveal'
 import { fetchContract } from '../../../../main/contracts'
 import { simulateTransaction, simulateWalletCalls } from '../../../../main/transaction/simulation'
@@ -61,7 +61,7 @@ const accountState = {
   name: 'Test Account'
 }
 
-const tokenInterface = new utils.Interface([
+const tokenInterface = new Interface([
   'function approve(address spender, uint256 amount)',
   'function setApprovalForAll(address operator, bool approved)'
 ])

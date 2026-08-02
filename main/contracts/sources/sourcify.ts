@@ -3,7 +3,7 @@ import log from 'electron-log'
 import { fetchWithTimeout } from '../../../resources/utils/fetch'
 
 import type { Response } from 'node-fetch'
-import type { JsonFragment } from '@ethersproject/abi'
+import type { JsonFragment } from 'ethers'
 import type { ContractSource } from '..'
 
 interface SourcifySourceCodeResponse {

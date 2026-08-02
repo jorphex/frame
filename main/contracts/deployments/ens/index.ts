@@ -1,5 +1,4 @@
-import { BigNumber } from 'ethers'
-import { Fragment, Interface } from 'ethers/lib/utils'
+import { Fragment, Interface, toNumber } from 'ethers'
 
 import { registrar as registrarAbi, registrarController as registrarControllerAbi } from './abi'
 import store from '../../../store'
@@ -11,7 +10,7 @@ import type {
   RenewAction as EnsRenewalAction
 } from '../../../transaction/actions/ens'
 
-import type { JsonFragment } from '@ethersproject/abi'
+import type { JsonFragment } from 'ethers'
 import type { DecodableContract } from '../../../transaction/actions'
 
 // TODO: fix typing on contract types
@@ -21,24 +20,24 @@ declare module ENS {
   export type Register = {
     name: string
     owner: string
-    duration: BigNumber // seconds
+    duration: bigint // seconds
     resolver?: string
   }
 
   export type Renew = {
     name: string
-    duration: BigNumber // seconds
+    duration: bigint // seconds
   }
 
   export type Transfer = {
     from: string
     to: string
-    tokenId: BigNumber
+    tokenId: bigint
   }
 
   export type Approval = {
     to: string
-    tokenId: BigNumber
+    tokenId: bigint
   }
 }
 
@@ -50,7 +49,9 @@ type DeploymentLocation = {
 
 function decode(abi: ReadonlyArray<Fragment | JsonFragment | string>, calldata: string) {
   const contractApi = new Interface(abi)
-  return contractApi.parseTransaction({ data: calldata })
+  const decoded = contractApi.parseTransaction({ data: calldata })
+  if (!decoded) throw new Error('Unable to decode ENS transaction')
+  return decoded
 }
 
 function getNameForTokenId(account: string, tokenId: string) {
@@ -128,7 +129,7 @@ const registarController = ({
 
         return {
           id: 'ens:register',
-          data: { address: owner, name: ethName(name), duration: duration.toNumber() }
+          data: { address: owner, name: ethName(name), duration: toNumber(duration) }
         } as EnsRegistrationAction
       }
 
@@ -137,7 +138,7 @@ const registarController = ({
 
         return {
           id: 'ens:renew',
-          data: { name: ethName(name), duration: duration.toNumber() }
+          data: { name: ethName(name), duration: toNumber(duration) }
         } as EnsRenewalAction
       }
     }

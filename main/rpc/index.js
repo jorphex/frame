@@ -2,7 +2,7 @@ const fs = require('fs')
 const { ipcMain } = require('electron')
 const log = require('electron-log')
 const { randomBytes } = require('crypto')
-import { isAddress } from '@ethersproject/address'
+import { isAddress } from 'ethers'
 import { openFileDialog } from '../windows/dialog'
 import { openBlockExplorer } from '../windows/window'
 import { routeWalletCallRequest } from './walletCalls'

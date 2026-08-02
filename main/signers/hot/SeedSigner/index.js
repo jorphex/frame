@@ -2,7 +2,7 @@ const path = require('path')
 const HotSigner = require('../HotSigner')
 const bip39 = require('bip39')
 const { HDKey } = require('@scure/bip32')
-const { computeAddress } = require('ethers').utils
+const { computeAddress, hexlify } = require('ethers')
 
 const WORKER_PATH = path.resolve(__dirname, 'worker.js')
 
@@ -27,7 +27,7 @@ class SeedSigner extends HotSigner {
         addresses = Array.from({ length: 100 }, (_, index) => {
           const publicKey = wallet.derive(`m/44'/60'/0'/0/${index}`).publicKey
           if (!publicKey) throw new Error(`Unable to derive public key at index ${index}`)
-          return computeAddress(publicKey)
+          return computeAddress(hexlify(publicKey))
         })
       } catch (error) {
         return cb(error)

@@ -1,6 +1,6 @@
 import { randomInt } from 'crypto'
 import { addHexPrefix, intToHex, stripHexPrefix } from '@ethereumjs/util'
-import { getAddress as getChecksumAddress } from '@ethersproject/address'
+import { getAddress as getChecksumAddress } from 'ethers'
 
 const weiToGwei = (wei: number) => wei / 1e9
 const weiToHex = (wei: number) => addHexPrefix(wei.toString(16))

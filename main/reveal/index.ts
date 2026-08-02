@@ -3,6 +3,7 @@
 import log from 'electron-log'
 import EthereumProvider from 'ethereum-provider'
 import { addHexPrefix } from '@ethereumjs/util'
+import { toBeHex } from 'ethers'
 
 import proxyConnection from '../provider/proxy'
 import nebulaApi from '../nebula'
@@ -80,7 +81,7 @@ async function recogErc20(
       const { decimals, name, symbol } = await contract.getTokenData()
       if (Erc20Contract.isApproval(decoded)) {
         const spenderAddress = decoded.args[0].toLowerCase()
-        const amount = decoded.args[1].toHexString()
+        const amount = toBeHex(decoded.args[1])
 
         const [spenderIdentity, contractIdentity] = await Promise.all([
           surface.identity(spenderAddress, chainId),
@@ -110,7 +111,7 @@ async function recogErc20(
         } as Erc20Approval
       } else if (Erc20Contract.isTransfer(decoded)) {
         const recipient = decoded.args[0].toLowerCase()
-        const amount = decoded.args[1].toHexString()
+        const amount = toBeHex(decoded.args[1])
         const identity = await surface.identity(recipient, chainId)
         return {
           id: 'erc20:transfer',

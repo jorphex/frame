@@ -12,7 +12,7 @@ import {
 import log from 'electron-log'
 import BN from 'bignumber.js'
 import isUtf8 from 'isutf8'
-import { isHexString } from 'ethers/lib/utils'
+import { isHexString } from 'ethers'
 
 import store from '../store'
 import { usesBaseFee, TransactionData, GasFeesSource } from '../../resources/domain/transaction'
