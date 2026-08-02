@@ -105,6 +105,7 @@ const recoveredSignatureAddress = sigUtil.recoverTypedSignature({
   version: sigUtil.SignTypedDataVersion.V4
 })
 const modernModules = require(path.join(appRoot, 'compiled/main/nebula/modules.js'))
+const fetchUtils = require(path.join(appRoot, 'compiled/resources/utils/fetch.js'))
 const signerCrypto = require(path.join(appRoot, 'compiled/main/signers/hot/crypto.js'))
 const { Wallet } = require(path.join(appModules, '@ethereumjs/wallet'))
 const walletAddress = Wallet.fromPrivateKey(Buffer.from('46'.repeat(32), 'hex')).getAddressString()
@@ -119,8 +120,11 @@ try {
 } catch {
   signerTamperingRejected = true
 }
-Promise.all([modernModules.loadKuboModule(), modernModules.loadUnixFsModule()])
-  .then((loaded) => process.stdout.write(JSON.stringify({
+Promise.all([
+  Promise.all([modernModules.loadKuboModule(), modernModules.loadUnixFsModule()]),
+  fetchUtils.readJsonWithLimit(new Response('{"runtime":"native"}'), 64)
+])
+  .then(([loaded, fetchProbe]) => process.stdout.write(JSON.stringify({
     electron: process.versions.electron,
     abi: process.versions.modules,
     modules,
@@ -137,6 +141,8 @@ Promise.all([modernModules.loadKuboModule(), modernModules.loadUnixFsModule()])
     signerEncryptionVersion: encryptedSignerSecret.version,
     signerSecretRoundTrip: decryptedSignerSecret.plaintext === signerSecret,
     signerTamperingRejected,
+    fetchType: typeof fetch,
+    fetchProbe,
     esmModules: loaded.map((module) => Object.keys(module).length)
   })))
   .catch((error) => {
@@ -179,6 +185,8 @@ assert.equal(probeResult.walletAddress, '0x9d8a62f656a8d1615c1294fd71e9cfb3e4855
 assert.equal(probeResult.signerEncryptionVersion, 2)
 assert.equal(probeResult.signerSecretRoundTrip, true)
 assert.equal(probeResult.signerTamperingRejected, true)
+assert.equal(probeResult.fetchType, 'function')
+assert.deepEqual(probeResult.fetchProbe, { runtime: 'native' })
 assert.equal(probeResult.esmModules.length, 2)
 assert.ok(probeResult.esmModules.every((exports) => exports > 0))
 assert.match(probeResult.abi, /^\d+$/)
@@ -202,5 +210,5 @@ console.log(
     probeResult.abi
   } hardware-wallet native, Ledger ${
     probeResult.ledgerVersions['@ledgerhq/hw-app-eth']
-  }, SIWE, EIP-712, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
+  }, SIWE, EIP-712, native fetch, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )

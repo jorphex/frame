@@ -2,7 +2,6 @@ import log from 'electron-log'
 
 import { fetchWithTimeout } from '../../../resources/utils/fetch'
 
-import type { Response } from 'node-fetch'
 import type { ContractSource } from '..'
 
 interface EtherscanSourceCodeResponse {
@@ -48,7 +47,7 @@ async function parseResponse<T>(response: Response): Promise<T | undefined> {
 async function fetchSourceCode(endpointUrl: string): Promise<ContractSourceCodeResult[] | undefined> {
   try {
     const res = await fetchWithTimeout(endpointUrl, {}, 4000)
-    const parsedResponse = await parseResponse<EtherscanSourceCodeResponse>(res as Response)
+    const parsedResponse = await parseResponse<EtherscanSourceCodeResponse>(res)
 
     return parsedResponse?.message === 'OK' ? parsedResponse.result : undefined
   } catch (e) {

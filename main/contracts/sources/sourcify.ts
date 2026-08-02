@@ -2,7 +2,6 @@ import log from 'electron-log'
 
 import { fetchWithTimeout } from '../../../resources/utils/fetch'
 
-import type { Response } from 'node-fetch'
 import type { JsonFragment } from 'ethers'
 import type { ContractSource } from '..'
 
@@ -66,7 +65,7 @@ async function fetchSourceCode(
 
   try {
     const res = await fetchWithTimeout(endpointUrl, {}, 4000)
-    const parsedResponse = await parseResponse<SourcifySourceCodeResponse>(res as Response)
+    const parsedResponse = await parseResponse<SourcifySourceCodeResponse>(res)
 
     return parsedResponse && ['partial', 'full'].includes(parsedResponse.status)
       ? JSON.parse(parsedResponse.files[0].content)

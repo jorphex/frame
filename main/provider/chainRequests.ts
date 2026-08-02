@@ -1,8 +1,9 @@
 import { z } from 'zod'
 
-import { fetchWithTimeout } from '../../resources/utils/fetch'
+import { fetchWithTimeout, readJsonWithLimit } from '../../resources/utils/fetch'
 
 const MAX_CHAIN_ID = BigInt(Number.MAX_SAFE_INTEGER)
+const MAX_RPC_RESPONSE_BYTES = 64 * 1024
 const chainIdSchema = z.string().regex(/^0x[1-9a-fA-F][0-9a-fA-F]*$/, 'must be a canonical hex quantity')
 
 const httpsUrlSchema = z
@@ -112,15 +113,14 @@ export async function verifyRpcChainId(
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
-          redirect: 'error',
-          size: 64 * 1024
+          redirect: 'error'
         },
         timeout
       )
 
       if (!response.ok) continue
 
-      const body = (await response.json()) as { result?: unknown }
+      const body = await readJsonWithLimit<{ result?: unknown }>(response, MAX_RPC_RESPONSE_BYTES)
       const reportedChainId = parseChainId(body.result)
 
       if (reportedChainId === expectedChainId) return url

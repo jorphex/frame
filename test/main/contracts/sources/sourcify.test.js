@@ -1,7 +1,8 @@
 import log from 'electron-log'
-import nock from 'nock'
 
 import { fetchSourcifyContract } from '../../../../main/contracts/sources/sourcify'
+
+let fetchMock
 
 function mockApiResponse(
   domain,
@@ -11,7 +12,30 @@ function mockApiResponse(
   timeout = 0,
   headers = { 'content-type': 'application/json' }
 ) {
-  nock(`https://${domain}`).get(path).delay(timeout).reply(status, body, headers)
+  const endpoint = `https://${domain}${path}`
+
+  if (timeout) {
+    fetchMock.mockImplementationOnce((url, { signal }) => {
+      if (url !== endpoint) return Promise.reject(new Error(`Unexpected URL: ${url}`))
+
+      return new Promise((resolve, reject) => {
+        signal.addEventListener(
+          'abort',
+          () => reject(new DOMException('This operation was aborted', 'AbortError')),
+          { once: true }
+        )
+      })
+    })
+    return
+  }
+
+  fetchMock.mockImplementationOnce((url) => {
+    if (url !== endpoint) return Promise.reject(new Error(`Unexpected URL: ${url}`))
+
+    return Promise.resolve(
+      new Response(body === undefined ? null : JSON.stringify(body), { status, headers })
+    )
+  })
 }
 
 const mockAbi = [
@@ -53,18 +77,19 @@ const sourcifyNotFoundResponse = {
 
 beforeAll(() => {
   jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] })
-  nock.disableNetConnect()
   log.transports.console.level = false
 })
 
+beforeEach(() => {
+  fetchMock = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('Unexpected fetch request'))
+})
+
 afterAll(() => {
-  nock.cleanAll()
-  nock.enableNetConnect()
   log.transports.console.level = 'debug'
 })
 
 afterEach(() => {
-  nock.abortPendingRequests()
+  fetchMock.mockRestore()
 })
 
 describe('#fetchSourcifyContract', () => {

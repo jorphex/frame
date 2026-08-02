@@ -1,5 +1,3 @@
-import nock from 'nock'
-
 import {
   parseAddChainRequest,
   parseChainId,
@@ -18,18 +16,25 @@ const validRequest = {
   iconUrls: ['https://assets.example/polygon.svg']
 }
 
-beforeAll(() => {
-  jest.useRealTimers()
-  nock.disableNetConnect()
+let fetchMock
+
+beforeEach(() => {
+  fetchMock = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('Unexpected fetch request'))
 })
 
 afterEach(() => {
-  nock.cleanAll()
+  fetchMock.mockRestore()
 })
 
-afterAll(() => {
-  nock.enableNetConnect()
-})
+function mockJsonResponse(body, init = {}) {
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      ...init
+    })
+  )
+}
 
 describe('chain request parsing', () => {
   it('parses canonical chain IDs within Frame safe storage range', () => {
@@ -82,32 +87,64 @@ describe('RPC chain identity verification', () => {
   const rpcRequest = { jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }
 
   it('accepts the first endpoint that reports the requested chain', async () => {
-    nock('https://wrong.example').post('/', rpcRequest).reply(200, { jsonrpc: '2.0', id: 1, result: '0x1' })
-    nock('https://right.example').post('/', rpcRequest).reply(200, { jsonrpc: '2.0', id: 1, result: '0x89' })
+    mockJsonResponse({ jsonrpc: '2.0', id: 1, result: '0x1' })
+    mockJsonResponse({ jsonrpc: '2.0', id: 1, result: '0x89' })
 
     await expect(verifyRpcChainId(['https://wrong.example', 'https://right.example'], 137)).resolves.toBe(
       'https://right.example'
     )
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://wrong.example',
+      expect.objectContaining({ body: JSON.stringify(rpcRequest), redirect: 'error' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://right.example',
+      expect.objectContaining({ body: JSON.stringify(rpcRequest), redirect: 'error' })
+    )
   })
 
   it('rejects when an endpoint reports a different chain', async () => {
-    nock('https://wrong.example').post('/', rpcRequest).reply(200, { jsonrpc: '2.0', id: 1, result: '0x1' })
+    mockJsonResponse({ jsonrpc: '2.0', id: 1, result: '0x1' })
 
     await expect(verifyRpcChainId(['https://wrong.example'], 137)).rejects.toThrow(/different chain ID/)
   })
 
   it('rejects unavailable and malformed endpoints', async () => {
-    nock('https://broken.example').post('/', rpcRequest).reply(200, { jsonrpc: '2.0', id: 1, result: '137' })
+    mockJsonResponse({ jsonrpc: '2.0', id: 1, result: '137' })
 
     await expect(verifyRpcChainId(['https://broken.example'], 137)).rejects.toThrow(/Could not verify/)
   })
 
   it('does not follow RPC redirects', async () => {
-    nock('https://redirect.example').post('/', rpcRequest).reply(302, undefined, {
-      location: 'http://127.0.0.1:8545'
-    })
+    fetchMock.mockRejectedValueOnce(new TypeError('fetch failed because redirect mode is error'))
 
     await expect(verifyRpcChainId(['https://redirect.example'], 137)).rejects.toThrow(/Could not verify/)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://redirect.example',
+      expect.objectContaining({ redirect: 'error' })
+    )
+  })
+
+  it('skips RPC responses larger than 64 KiB', async () => {
+    mockJsonResponse({ result: `0x89${'0'.repeat(64 * 1024)}` })
+    mockJsonResponse({ result: '0x89' })
+
+    await expect(verifyRpcChainId(['https://large.example', 'https://right.example'], 137)).resolves.toBe(
+      'https://right.example'
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects responses whose content length exceeds 64 KiB', async () => {
+    mockJsonResponse(
+      { result: '0x89' },
+      { headers: { 'content-type': 'application/json', 'content-length': `${64 * 1024 + 1}` } }
+    )
+
+    await expect(verifyRpcChainId(['https://large.example'], 137)).rejects.toThrow(/Could not verify/)
   })
 
   it('rejects endpoints that are not HTTPS before making a request', async () => {
