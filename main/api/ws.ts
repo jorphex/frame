@@ -41,8 +41,8 @@ interface Subscription {
 
 interface FrameWebSocket extends WebSocket {
   id: string
-  origin?: string
-  frameExtension?: FrameExtension
+  origin: string | undefined
+  frameExtension: FrameExtension | undefined
 }
 
 interface ExtensionPayload extends JSONRPCRequestPayload {

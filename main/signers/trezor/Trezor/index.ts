@@ -48,9 +48,9 @@ function createError(message: string, code: string, cause: string = '') {
 export default class Trezor extends Signer {
   readonly path: string
 
-  device?: TrezorDevice
+  device: TrezorDevice | undefined
   derivation: Derivation | undefined
-  pairing?: TrezorPairing
+  pairing: TrezorPairing | undefined
 
   constructor(path: string) {
     super()
@@ -71,7 +71,7 @@ export default class Trezor extends Signer {
     this.emit('update')
 
     try {
-      const features = await TrezorBridge.getFeatures({ device })
+      const features = await TrezorBridge.getFeatures(device)
 
       const defaultVersion = features?.model === 'T' ? defaultTrezorTVersion : defaultTrezorOneVersion
       const { major_version: major, minor_version: minor, patch_version: patch } = features || defaultVersion

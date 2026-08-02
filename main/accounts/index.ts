@@ -796,11 +796,8 @@ export class Accounts extends EventEmitter {
     }
 
     const previousState = {
-      hadStatus: Object.prototype.hasOwnProperty.call(request, 'status'),
       status: request.status,
-      hadNotice: Object.prototype.hasOwnProperty.call(request, 'notice'),
       notice: request.notice,
-      hadMode: Object.prototype.hasOwnProperty.call(request, 'mode'),
       mode: request.mode
     }
     request.status = error ? RequestStatus.Error : RequestStatus.Success
@@ -811,11 +808,11 @@ export class Accounts extends EventEmitter {
     try {
       account.update()
     } catch (updateError) {
-      if (previousState.hadStatus) request.status = previousState.status
+      if (previousState.status !== undefined) request.status = previousState.status
       else delete request.status
-      if (previousState.hadNotice) request.notice = previousState.notice
+      if (previousState.notice !== undefined) request.notice = previousState.notice
       else delete request.notice
-      if (previousState.hadMode) request.mode = previousState.mode
+      if (previousState.mode !== undefined) request.mode = previousState.mode
       else delete request.mode
       throw updateError
     }

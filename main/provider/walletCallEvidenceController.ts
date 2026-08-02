@@ -85,8 +85,8 @@ export class WalletCallEvidenceController {
   private readonly cancelTimer: typeof clearTimeout
   private active = false
   private rerun = false
-  private timer?: ReturnType<typeof setTimeout>
-  private inFlight?: Promise<void>
+  private timer: ReturnType<typeof setTimeout> | undefined
+  private inFlight: Promise<void> | undefined
   private lastDiagnostic = ''
 
   constructor(dependencies: WalletCallEvidenceControllerDependencies) {

@@ -98,7 +98,7 @@ export default class Erc20Contract {
     ])
 
     return {
-      decimals: calls[0],
+      ...(calls[0] !== undefined && { decimals: calls[0] }),
       name: calls[1],
       symbol: calls[2],
       totalSupply: calls[3]

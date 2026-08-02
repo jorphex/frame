@@ -25,6 +25,10 @@ export class DeviceError extends Error {
 
 type TrezorPairingResponse =
   { tag: string } | { selectedMethod: ThpPairingMethod | keyof typeof ThpPairingMethod }
+type DeviceReference = {
+  path: Device['path']
+  state?: Device['state'] | undefined
+}
 
 const manifest = { email: 'dev@frame.sh', appName: 'Frame', appUrl: 'https://frame.sh' }
 
@@ -34,6 +38,13 @@ const config = {
   debug: false,
   lazyLoad: false,
   transports: ['NodeUsbTransport' as const]
+}
+
+function deviceSelector(device: DeviceReference): NonNullable<CommonParams['device']> {
+  return {
+    path: device.path,
+    ...(device.state !== undefined && { state: device.state })
+  }
 }
 
 async function handleResponse<T>(p: Response<T>) {
@@ -69,22 +80,24 @@ class TrezorBridge extends EventEmitter {
   }
 
   // methods to send requests from the application to a Trezor device
-  async getFeatures(params: CommonParams) {
-    return this.makeRequest(() => TrezorConnect.getFeatures(params))
+  async getFeatures(device: DeviceReference) {
+    return this.makeRequest(() => TrezorConnect.getFeatures({ device: deviceSelector(device) }))
   }
 
-  async getAccountInfo(device: Device, path: string) {
-    return this.makeRequest(() => TrezorConnect.getAccountInfo({ device, path, coin: 'eth' }))
+  async getAccountInfo(device: DeviceReference, path: string) {
+    return this.makeRequest(() =>
+      TrezorConnect.getAccountInfo({ device: deviceSelector(device), path, coin: 'eth' })
+    )
   }
 
-  async getPublicKey(device: Device, path: string) {
-    return this.makeRequest(() => TrezorConnect.getPublicKey({ device, path }))
+  async getPublicKey(device: DeviceReference, path: string) {
+    return this.makeRequest(() => TrezorConnect.getPublicKey({ device: deviceSelector(device), path }))
   }
 
-  async getAddress(device: Device, path: string, display = false) {
+  async getAddress(device: DeviceReference, path: string, display = false) {
     const result = await this.makeRequest(() =>
       TrezorConnect.ethereumGetAddress({
-        device,
+        device: deviceSelector(device),
         path,
         showOnTrezor: display
       })
@@ -93,10 +106,10 @@ class TrezorBridge extends EventEmitter {
     return (result.address || '').toLowerCase()
   }
 
-  async signMessage(device: Device, path: string, message: string) {
+  async signMessage(device: DeviceReference, path: string, message: string) {
     const result = await this.makeRequest(() =>
       TrezorConnect.ethereumSignMessage({
-        device,
+        device: deviceSelector(device),
         path,
         message,
         hex: true
@@ -106,10 +119,10 @@ class TrezorBridge extends EventEmitter {
     return result.signature
   }
 
-  async signTypedData(device: Device, path: string, data: any) {
+  async signTypedData(device: DeviceReference, path: string, data: any) {
     const result = await this.makeRequest(() =>
       TrezorConnect.ethereumSignTypedData({
-        device,
+        device: deviceSelector(device),
         path,
         data,
         metamask_v4_compat: true
@@ -120,7 +133,7 @@ class TrezorBridge extends EventEmitter {
   }
 
   async signTypedHash(
-    device: Device,
+    device: DeviceReference,
     path: string,
     data: any,
     domainSeparatorHash: string,
@@ -128,7 +141,7 @@ class TrezorBridge extends EventEmitter {
   ) {
     const result = await this.makeRequest(() =>
       TrezorConnect.ethereumSignTypedData({
-        device,
+        device: deviceSelector(device),
         path,
         data,
         domain_separator_hash: domainSeparatorHash,
@@ -140,10 +153,10 @@ class TrezorBridge extends EventEmitter {
     return result.signature
   }
 
-  async signTransaction(device: Device, path: string, tx: any) {
+  async signTransaction(device: DeviceReference, path: string, tx: any) {
     const result = await this.makeRequest(() =>
       TrezorConnect.ethereumSignTransaction({
-        device,
+        device: deviceSelector(device),
         path,
         transaction: tx
       })

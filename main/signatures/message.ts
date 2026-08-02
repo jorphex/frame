@@ -99,19 +99,19 @@ function parseSiwe(
     if (!chainId) throw new Error('SIWE parser did not return an exact chain ID')
 
     const siwe: SiweMessageData = {
-      scheme: parsed.scheme,
+      ...(parsed.scheme !== undefined && { scheme: parsed.scheme }),
       domain: parsed.domain,
       address: parsed.address,
-      statement: parsed.statement,
+      ...(parsed.statement !== undefined && { statement: parsed.statement }),
       uri: parsed.uri,
       version: parsed.version,
       chainId,
       nonce: parsed.nonce,
-      issuedAt: parsed.issuedAt,
-      expirationTime: parsed.expirationTime,
-      notBefore: parsed.notBefore,
-      requestId: parsed.requestId,
-      resources: parsed.resources
+      ...(parsed.issuedAt !== undefined && { issuedAt: parsed.issuedAt }),
+      ...(parsed.expirationTime !== undefined && { expirationTime: parsed.expirationTime }),
+      ...(parsed.notBefore !== undefined && { notBefore: parsed.notBefore }),
+      ...(parsed.requestId !== undefined && { requestId: parsed.requestId }),
+      ...(parsed.resources !== undefined && { resources: parsed.resources })
     }
 
     risks.push('siwe-origin-unverified')
@@ -164,7 +164,7 @@ export function parseMessageRequest(
       encoding: normalizedMessage.encoding,
       byteLength: normalizedMessage.byteLength,
       risks,
-      siwe
+      ...(siwe !== undefined && { siwe })
     }
   }
 }

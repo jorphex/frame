@@ -244,6 +244,16 @@ describe('#getRawTx', () => {
     const tx = getRawTx({ nonce: undefined })
 
     expect(tx.nonce).toBeUndefined()
+    expect(tx).not.toHaveProperty('nonce')
+    expect(tx).not.toHaveProperty('gasLimit')
+  })
+
+  it('omits undefined and unknown dapp fields from the normalized transaction', () => {
+    const tx = getRawTx({ chainId: '0x1', gasPrice: undefined, unexpected: 'value' })
+
+    expect(tx.chainId).toBe('0x1')
+    expect(tx).not.toHaveProperty('gasPrice')
+    expect(tx).not.toHaveProperty('unexpected')
   })
 
   it('normalizes a valid access list without changing its order or duplicates', () => {

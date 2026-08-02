@@ -82,7 +82,7 @@ class FrameAccount {
   id: Address
   address: Address
   name: string
-  ensName?: string
+  ensName: string | undefined
   created: string
 
   lastSignerType: SignerType
@@ -887,11 +887,8 @@ class FrameAccount {
     })
 
     const previousState = {
-      hadLocked: Object.prototype.hasOwnProperty.call(walletCalls, 'locked'),
       locked: walletCalls.locked,
-      hadStatus: Object.prototype.hasOwnProperty.call(walletCalls, 'status'),
       status: walletCalls.status,
-      hadNotice: Object.prototype.hasOwnProperty.call(walletCalls, 'notice'),
       notice: walletCalls.notice
     }
     walletCalls.locked = true
@@ -901,11 +898,11 @@ class FrameAccount {
     try {
       this.update()
     } catch (error) {
-      if (previousState.hadLocked) walletCalls.locked = previousState.locked
+      if (previousState.locked !== undefined) walletCalls.locked = previousState.locked
       else delete walletCalls.locked
-      if (previousState.hadStatus) walletCalls.status = previousState.status
+      if (previousState.status !== undefined) walletCalls.status = previousState.status
       else delete walletCalls.status
-      if (previousState.hadNotice) walletCalls.notice = previousState.notice
+      if (previousState.notice !== undefined) walletCalls.notice = previousState.notice
       else delete walletCalls.notice
       throw error
     }

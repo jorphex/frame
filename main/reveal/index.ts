@@ -90,7 +90,7 @@ async function recogErc20(
 
         const data = {
           amount,
-          decimals,
+          ...(decimals !== undefined && { decimals }),
           name,
           symbol,
           spender: {

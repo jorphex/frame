@@ -19,7 +19,7 @@ interface KnownSigners {
 export default class TrezorSignerAdapter extends SignerAdapter {
   private knownSigners: KnownSigners = {}
   private pendingSessionProbes: { [id: string]: boolean } = {}
-  private observer?: Observer
+  private observer: Observer | undefined
 
   constructor() {
     super('trezor')
@@ -234,7 +234,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
 
     log.info(`probing Trezor ${id} session`)
 
-    TrezorBridge.getFeatures({ device: { path: signer.path as DeviceUniquePath } })
+    TrezorBridge.getFeatures({ path: signer.path as DeviceUniquePath })
       .catch((err) => {
         log.debug(`initial Trezor session probe finished with error for ${id}`, err)
       })
@@ -276,7 +276,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
     } else {
       // this Trezor is not open because it was never connected,
       // attempt to force a reload by calling this method
-      TrezorBridge.getFeatures({ device: { path: trezor.path as DeviceUniquePath } })
+      TrezorBridge.getFeatures({ path: trezor.path as DeviceUniquePath })
     }
   }
 

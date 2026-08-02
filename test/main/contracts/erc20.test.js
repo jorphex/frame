@@ -46,5 +46,6 @@ it('does not represent a failed decimals call as zero', async () => {
   const token = await mockContractReads(new Error('call failed')).getTokenData()
 
   expect(token.decimals).toBeUndefined()
+  expect(token).not.toHaveProperty('decimals')
   expect(token.name).toBe('Zero Token')
 })

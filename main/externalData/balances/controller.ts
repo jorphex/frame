@@ -35,8 +35,8 @@ interface ChainBalanceMessage extends Omit<WorkerMessage, 'type'> {
 export default class BalancesWorkerController extends EventEmitter {
   private readonly worker: ChildProcess
 
-  private bootstrapTimeout?: NodeJS.Timeout
-  private heartbeat?: NodeJS.Timeout
+  private bootstrapTimeout: NodeJS.Timeout | undefined
+  private heartbeat: NodeJS.Timeout | undefined
 
   constructor() {
     super()

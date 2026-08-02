@@ -111,7 +111,6 @@ describe('#parseMessageRequest', () => {
 
     expect(result.context.risks).toEqual(['siwe-origin-unverified'])
     expect(result.context.siwe).toEqual({
-      scheme: undefined,
       domain: 'example.com',
       address: account,
       statement: 'I accept the ExampleOrg Terms of Service: https://example.com/tos',
@@ -119,11 +118,7 @@ describe('#parseMessageRequest', () => {
       version: '1',
       chainId: '1',
       nonce: '32891756',
-      issuedAt: '2021-09-30T16:25:24Z',
-      expirationTime: undefined,
-      notBefore: undefined,
-      requestId: undefined,
-      resources: undefined
+      issuedAt: '2021-09-30T16:25:24Z'
     })
   })
 
@@ -165,6 +160,7 @@ describe('#parseMessageRequest', () => {
     )
 
     expect(result.context.siwe).toBeUndefined()
+    expect(result.context).not.toHaveProperty('siwe')
     expect(result.context.risks).toEqual(['siwe-malformed'])
   })
 })

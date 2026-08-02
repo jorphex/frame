@@ -131,8 +131,8 @@ function normalizeRpcError(value: unknown): EVMError | undefined {
 
   return {
     message: value.message,
-    code: typeof value.code === 'number' ? value.code : undefined,
-    data: value.data
+    ...(typeof value.code === 'number' && { code: value.code }),
+    ...(value.data !== undefined && { data: value.data })
   }
 }
 

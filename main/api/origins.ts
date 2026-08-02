@@ -144,11 +144,8 @@ export function getOriginAccess(payload: RPCRequestPayload): OriginAccess | unde
 
   if (!origin || typeof origin.name !== 'string' || invalidOrigin(origin.name) || !address) return
 
-  return {
-    address,
-    origin: origin.name,
-    permission: storeApi.getPermission(address, origin.name)
-  }
+  const permission = storeApi.getPermission(address, origin.name)
+  return { address, origin: origin.name, ...(permission !== undefined && { permission }) }
 }
 
 export async function requestOriginAccess(payload: RPCRequestPayload, expectedAddress?: Address) {

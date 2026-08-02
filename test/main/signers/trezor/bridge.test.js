@@ -163,11 +163,15 @@ describe('requests', () => {
     const features = { vendor: 'trezor.io', device_id: 'G89EDFE91829DACC6B43' }
 
     TrezorConnect.getFeatures.mockImplementation(async (params) => {
-      expect(params.device.path).toBe('41')
+      expect(params.device).toEqual({ path: '41' })
       return { id: 1, success: true, payload: features }
     })
 
-    const loadedFeatures = await TrezorBridge.getFeatures({ device: { path: '41' } })
+    const loadedFeatures = await TrezorBridge.getFeatures({
+      path: '41',
+      state: undefined,
+      mutableEventField: 'not-a-command-parameter'
+    })
 
     expect(loadedFeatures).toEqual(features)
   })
@@ -176,12 +180,15 @@ describe('requests', () => {
     const key = { chainCode: 'eth', fingerprint: 19912902490 }
 
     TrezorConnect.getPublicKey.mockImplementation(async (params) => {
-      expect(params.device.path).toBe('4')
+      expect(params.device).toEqual({ path: '4', state: 'session@device:1' })
       expect(params.path).toBe("m/44'/60'/0/1/0")
       return { id: 1, success: true, payload: key }
     })
 
-    const publicKey = await TrezorBridge.getPublicKey({ path: '4' }, "m/44'/60'/0/1/0")
+    const publicKey = await TrezorBridge.getPublicKey(
+      { path: '4', state: 'session@device:1' },
+      "m/44'/60'/0/1/0"
+    )
 
     expect(publicKey).toEqual(key)
   })

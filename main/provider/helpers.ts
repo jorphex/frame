@@ -126,32 +126,50 @@ function parseValue(value = '') {
 }
 
 export function getRawTx(newTx: RPC.SendTransaction.TxParams): TransactionData {
-  const { gas, gasLimit, data, value, type, from, to, accessList, ...rawTx } = newTx
+  const {
+    nonce: rawNonce,
+    gasPrice,
+    gas,
+    maxPriorityFeePerGas,
+    maxFeePerGas,
+    gasLimit,
+    from,
+    to,
+    data,
+    value,
+    chainId,
+    accessList
+  } = newTx
   const getNonce = () => {
     // pass through hex string or undefined
-    if (rawTx.nonce === undefined || isHexString(rawTx.nonce)) {
-      return rawTx.nonce
+    if (rawNonce === undefined || isHexString(rawNonce)) {
+      return rawNonce
     }
 
     // convert positive integer strings to hex, reject everything else
-    const nonceBN = new BN(rawTx.nonce)
+    const nonceBN = new BN(rawNonce)
     if (nonceBN.isNaN() || !nonceBN.isInteger() || nonceBN.isNegative()) {
       throw new Error('Invalid nonce')
     }
     return addHexPrefix(nonceBN.toString(16))
   }
+  const nonce = getNonce()
+  const normalizedAccessList = normalizeAccessList(accessList)
+  const normalizedGasLimit = gasLimit || gas
 
   const tx: TransactionData = {
-    ...rawTx,
+    ...(gasPrice !== undefined && { gasPrice }),
+    ...(maxPriorityFeePerGas !== undefined && { maxPriorityFeePerGas }),
+    ...(maxFeePerGas !== undefined && { maxFeePerGas }),
     ...(from && { from: getAddress(from) }),
     ...(to && { to: getAddress(to) }),
     type: '0x0',
     value: parseValue(value),
     data: addHexPrefix(padToEven(stripHexPrefix(data || '0x'))),
-    ...(accessList !== undefined && { accessList: normalizeAccessList(accessList) }),
-    gasLimit: gasLimit || gas,
-    chainId: rawTx.chainId,
-    nonce: getNonce(),
+    ...(normalizedAccessList !== undefined && { accessList: normalizedAccessList }),
+    ...(normalizedGasLimit !== undefined && { gasLimit: normalizedGasLimit }),
+    chainId,
+    ...(nonce !== undefined && { nonce }),
     gasFeesSource: GasFeesSource.Dapp
   }
 

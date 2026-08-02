@@ -24,7 +24,7 @@ export default class AutoUpdater extends EventEmitter {
   private readonly electronAutoUpdater: AppUpdater
   private readonly domain: Domain
 
-  private downloadCancellationToken?: CancellationToken
+  private downloadCancellationToken: CancellationToken | undefined
 
   constructor() {
     super()

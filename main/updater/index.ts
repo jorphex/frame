@@ -17,15 +17,15 @@ const UPDATE_INTERVAL = parseInt(process.env.UPDATE_INTERVAL || '') || 60 * 60_0
 const useAutoUpdater = isMac || isWindows
 
 class Updater {
-  private autoUpdater?: AutoUpdater
+  private autoUpdater: AutoUpdater | undefined
 
   // this will only be set if an upgrade-eligible version is found
   private availableUpdate = ''
   private availableVersion = ''
   private installerReady = false
 
-  private setupCheck?: NodeJS.Timeout
-  private pendingCheck?: NodeJS.Timeout
+  private setupCheck: NodeJS.Timeout | undefined
+  private pendingCheck: NodeJS.Timeout | undefined
   private notified: Record<string, boolean> = {}
 
   start() {

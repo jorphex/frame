@@ -216,7 +216,7 @@ export default class Lattice extends Signer {
     log.info(`deriving addresses for Lattice ${(this.connection as Client).getAppName()}`)
 
     try {
-      await this.derive({ derivation, retries })
+      await this.derive({ ...(derivation !== undefined && { derivation }), retries })
     } catch (e) {
       this.emit('error', e)
     }
@@ -428,7 +428,7 @@ export default class Lattice extends Signer {
         hashType: Constants.SIGNING.HASHES.KECCAK256,
         encodingType: Constants.SIGNING.ENCODINGS.EVM,
         signerPath: unsignedTx.signerPath,
-        decoder: callDataDecoder ? Buffer.from(callDataDecoder.def) : undefined
+        ...(callDataDecoder && { decoder: Buffer.from(callDataDecoder.def) })
       }
 
       return { data, currency: unsignedTx.currency }

@@ -89,7 +89,15 @@ function parseTransfer(token: string, topics: string[], words: string[]): Simula
   if (!from || !to) return
 
   if (topics.length === 3 && words.length === 1) {
-    return { type: 'transfer', standard: 'erc20', token, from, to, amount: parseWord(words[0]) }
+    const amount = parseWord(words[0])
+    return {
+      type: 'transfer',
+      standard: 'erc20',
+      token,
+      from,
+      to,
+      ...(amount !== undefined && { amount })
+    }
   }
   if (topics.length === 4 && words.length === 0) {
     const tokenId = parseWord(topics[3].slice(2))
@@ -105,7 +113,15 @@ function parseApproval(token: string, topics: string[], words: string[]): Simula
   if (!owner || !spender) return
 
   if (topics.length === 3 && words.length === 1) {
-    return { type: 'approval', standard: 'erc20', token, owner, spender, amount: parseWord(words[0]) }
+    const amount = parseWord(words[0])
+    return {
+      type: 'approval',
+      standard: 'erc20',
+      token,
+      owner,
+      spender,
+      ...(amount !== undefined && { amount })
+    }
   }
   if (topics.length === 4 && words.length === 0) {
     const tokenId = parseWord(topics[3].slice(2))
@@ -175,14 +191,16 @@ function parseTransferBatch(
   const decodedCount = Math.min(count, MAX_BATCH_ITEMS)
   const effects: SimulationEffect[] = []
   for (let index = 0; index < decodedCount; index += 1) {
+    const tokenId = parseWord(words[3 + index])
+    const amount = parseWord(words[4 + count + index])
     effects.push({
       type: 'transfer',
       standard: 'erc1155',
       token,
       from,
       to,
-      tokenId: parseWord(words[3 + index]),
-      amount: parseWord(words[4 + count + index])
+      ...(tokenId !== undefined && { tokenId }),
+      ...(amount !== undefined && { amount })
     })
   }
 

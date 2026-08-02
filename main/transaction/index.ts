@@ -73,7 +73,7 @@ function londonToLegacy(txData: TransactionData): TransactionData {
 
     const { type, maxFeePerGas, maxPriorityFeePerGas, ...tx } = txData
 
-    return { ...tx, type: '0x0', gasPrice: maxFeePerGas }
+    return { ...tx, type: '0x0', ...(maxFeePerGas !== undefined && { gasPrice: maxFeePerGas }) }
   }
 
   return txData
@@ -155,15 +155,14 @@ function populate(rawTx: TransactionData, chainConfig: Common, gas: Gas): Transa
       : (rawTx.maxPriorityFeePerGas as string)
 
   // if no valid dapp-supplied value for maxFeePerGas we calculate it
-  txData.maxFeePerGas =
-    useFrameMaxFeePerGas && gas.price.fees.maxBaseFeePerGas
-      ? calculateMaxFeePerGas(gas.price.fees.maxBaseFeePerGas, maxPriorityFee)
-      : txData.maxFeePerGas
+  if (useFrameMaxFeePerGas && gas.price.fees.maxBaseFeePerGas) {
+    txData.maxFeePerGas = calculateMaxFeePerGas(gas.price.fees.maxBaseFeePerGas, maxPriorityFee)
+  }
 
   // if no valid dapp-supplied value for maxPriorityFeePerGas we use the Frame-supplied value
-  txData.maxPriorityFeePerGas = useFrameMaxPriorityFeePerGas
-    ? addHexPrefix(BigNumber(maxPriorityFee).toString(16))
-    : txData.maxPriorityFeePerGas
+  if (useFrameMaxPriorityFeePerGas) {
+    txData.maxPriorityFeePerGas = addHexPrefix(BigNumber(maxPriorityFee).toString(16))
+  }
 
   return txData
 }

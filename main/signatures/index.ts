@@ -2,7 +2,6 @@ import signatureTypes from './types'
 import { SignTypedDataVersion, MessageTypeProperty } from '@metamask/eth-sig-util'
 
 import type { TypedMessage, TypedSignatureRequestType } from '../accounts/types'
-import type { EIP712MessageDomain } from '@ledgerhq/types-live'
 
 const matchesMsgType = (properties: MessageTypeProperty[], required: MessageTypeProperty[]) =>
   properties.length === required.length &&
@@ -13,7 +12,7 @@ const matchesMsgType = (properties: MessageTypeProperty[], required: MessageType
 const matchesMessage = (message: Record<string, unknown>, required: MessageTypeProperty[]) =>
   required.every(({ name }) => message[name] !== undefined)
 
-const matchesDomainFilter = (domain: EIP712MessageDomain, domainFilter: string[]) =>
+const matchesDomainFilter = (domain: object, domainFilter: string[]) =>
   domainFilter.every((property) => property in domain)
 
 export const identify = ({ data }: TypedMessage<SignTypedDataVersion>): TypedSignatureRequestType => {
@@ -25,7 +24,7 @@ export const identify = ({ data }: TypedMessage<SignTypedDataVersion>): TypedSig
         data.types[name] &&
         matchesMsgType(data.types[name], properties) &&
         matchesMessage(data.message, properties) &&
-        matchesDomainFilter(data.domain as EIP712MessageDomain, domainFilter)
+        matchesDomainFilter(data.domain, domainFilter)
     )
   })
 
