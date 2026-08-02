@@ -108,8 +108,25 @@ export function openExternal(url = '') {
 }
 
 export function openBlockExplorer({ id, type }: ChainId, hash?: string, account?: string) {
-  // remove trailing slashes from the base url
-  const explorer = (store('main.networks', type, id, 'explorer') || '').replace(/\/+$/, '')
+  const configuredExplorer = store('main.networks', type, id, 'explorer')
+  if (typeof configuredExplorer !== 'string') return
+
+  let explorerUrl: URL
+  try {
+    explorerUrl = new URL(configuredExplorer)
+  } catch {
+    return
+  }
+  if (
+    (explorerUrl.protocol !== 'https:' && explorerUrl.protocol !== 'http:') ||
+    explorerUrl.username ||
+    explorerUrl.password
+  ) {
+    return
+  }
+
+  // Remove trailing slashes while preserving an explicitly configured base path.
+  const explorer = configuredExplorer.replace(/\/+$/, '')
 
   if (explorer) {
     if (hash) {

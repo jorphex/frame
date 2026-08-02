@@ -167,6 +167,11 @@ explanatory and do not prove contract behavior. Users must verify chain,
 recipient, value, calldata, and signing details on the hardware device whenever
 possible.
 
+Renderer-requested external links use a fixed allowlist. User-configured block
+explorers bypass that fixed host list by design, but the final OS-launch sink
+accepts only credential-free HTTP(S) URLs; file, script, custom-protocol, and
+credential-bearing values are rejected.
+
 Frame recognizes the exact EIP-7702 delegation indicator returned by
 `eth_getCode`, requires an additional approval for ordinary transactions from a
 reported delegated account, and blocks sequential wallet-call batches from one.

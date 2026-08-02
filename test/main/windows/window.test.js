@@ -1,6 +1,12 @@
 import { BrowserWindow, shell, WebContentsView } from 'electron'
 
-import { createViewInstance, createWindow, openExternal } from '../../../main/windows/window'
+import {
+  createViewInstance,
+  createWindow,
+  openBlockExplorer,
+  openExternal
+} from '../../../main/windows/window'
+import store from '../../../main/store'
 
 const mockWindow = {
   webContents: {
@@ -118,5 +124,33 @@ describe('openExternal', () => {
     expect(shell.openExternal).toHaveBeenCalledWith(
       'https://github.com/jorphex/frame-extension/releases/tag/v0.12.1'
     )
+  })
+})
+
+describe('openBlockExplorer', () => {
+  beforeEach(() => {
+    shell.openExternal.mockClear()
+    store.mockReset()
+  })
+
+  it('opens a configured HTTP(S) explorer path', () => {
+    store.mockReturnValue('https://explorer.example/base/')
+
+    openBlockExplorer({ id: 1, type: 'ethereum' }, '0x1234')
+
+    expect(shell.openExternal).toHaveBeenCalledWith('https://explorer.example/base/tx/0x1234')
+  })
+
+  it.each([
+    'file:///tmp/frame-wallet',
+    'javascript:alert(1)',
+    'https://user:password@explorer.example',
+    'not a URL'
+  ])('rejects an unsafe configured explorer URL: %s', (explorer) => {
+    store.mockReturnValue(explorer)
+
+    openBlockExplorer({ id: 1, type: 'ethereum' }, '0x1234')
+
+    expect(shell.openExternal).not.toHaveBeenCalled()
   })
 })
