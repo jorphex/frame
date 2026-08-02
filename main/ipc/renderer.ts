@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import log from 'electron-log'
 
 import { BridgeMethod, RendererRole, hasRendererCapability } from '../../resources/bridge/roles'
+import { encodeRendererRpcValues, parseRendererRpcId, parseRendererRpcRequest } from './rpcSchemas'
 import { assertRendererIpcSchema, parseRendererIpcArgs } from './schemas'
 
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
@@ -65,13 +66,18 @@ export const handleRenderer = (channel: string, listener: RendererHandler) => {
 
 export const onRendererRpc = (listener: RendererListener) => {
   ipcMain.on('main:rpc', (event, ...args) => {
-    let method
-    try {
-      method = typeof args[1] === 'string' ? JSON.parse(args[1]) : undefined
-    } catch {
+    const parsed = parseRendererRpcRequest(args)
+    if (!parsed.success) {
+      const id = parsed.id || parseRendererRpcId(args[0])
+      log.warn('Rejected invalid renderer RPC payload')
+      if (id) event.sender.send('main:rpc', id, ...encodeRendererRpcValues(['Invalid renderer RPC payload']))
       return
     }
-    if (typeof method !== 'string' || !authorize(event, 'rpc', method, [])) return
-    listener(event, ...args)
+    const { id, method, args: methodArgs } = parsed.data
+    if (!authorize(event, 'rpc', method, [])) {
+      event.sender.send('main:rpc', id, ...encodeRendererRpcValues(['Unauthorized renderer RPC']))
+      return
+    }
+    listener(event, id, method, ...methodArgs)
   })
 }

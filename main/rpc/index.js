@@ -8,10 +8,8 @@ import { routeWalletCallRequest } from './walletCalls'
 
 const accounts = require('../accounts').default
 const signers = require('../signers').default
-const launch = require('../launch')
 const provider = require('../provider').default
 const store = require('../store').default
-const dapps = require('../dapps')
 const nebulaApi = require('../nebula').default
 
 const { arraysEqual, randomLetters } = require('../../resources/utils')
@@ -19,6 +17,7 @@ const { isSignatureRequest } = require('../signatures')
 const { default: TrezorBridge } = require('../../main/signers/trezor/bridge')
 const { createAccountCodeReader } = require('../accounts/accountCode')
 const { onRendererRpc } = require('../ipc/renderer')
+const { encodeRendererRpcValues, parseRendererRpcResponse } = require('../ipc/rpcSchemas')
 
 const accountCodeReader = createAccountCodeReader(provider.connection)
 
@@ -42,10 +41,6 @@ const rpc = {
       cb(new Error('No frameId set for this window'))
     }
   },
-  signTransaction: accounts.signTransaction,
-  signMessage: accounts.signMessage,
-  getAccounts: accounts.getAccounts,
-  getCoinbase: accounts.getCoinbase,
   getAccountCodeClassification(address, chainId, cb) {
     accountCodeReader.read(address, chainId).then((result) => cb(null, result), cb)
   },
@@ -118,41 +113,22 @@ const rpc = {
   async latticePair(id, pin, cb) {
     const signer = signers.get(id)
 
-    if (signer && signer.pair) {
-      try {
-        const hasActiveWallet = await signer.pair(pin)
-        cb(null, hasActiveWallet)
-      } catch (e) {
-        cb(e.message)
-      }
+    if (!signer || !signer.pair) return cb(new Error('Lattice signer is unavailable'))
+    try {
+      const hasActiveWallet = await signer.pair(pin)
+      cb(null, hasActiveWallet)
+    } catch (e) {
+      cb(e.message)
     }
   },
-  launchStatus: launch.status,
-  providerSend: (payload, cb) => provider.send(payload, cb),
-  connectionStatus: (cb) => {
-    cb(null, {
-      primary: {
-        status: provider.connection.primary.status,
-        network: provider.connection.primary.network,
-        type: provider.connection.primary.type,
-        connected: provider.connection.primary.connected
-      },
-      secondary: {
-        status: provider.connection.secondary.status,
-        network: provider.connection.secondary.network,
-        type: provider.connection.secondary.type,
-        connected: provider.connection.secondary.connected
-      }
-    })
-  },
-  confirmRequestApproval(req, approvalType, approvalData) {
-    accounts.confirmRequestApproval(req.handlerId, approvalType, approvalData)
+  confirmRequestApproval(req, approvalType, approvalData, cb) {
+    callbackWhenDone(() => accounts.confirmRequestApproval(req.handlerId, approvalType, approvalData), cb)
   },
   respondToExtensionRequest(id, approved, cb) {
     callbackWhenDone(() => store.trustExtension(id, approved), cb)
   },
-  updateRequest(reqId, data, actionId) {
-    accounts.updateRequest(reqId, data, actionId)
+  updateRequest(reqId, data, actionId, cb) {
+    callbackWhenDone(() => accounts.updateRequest(reqId, data, actionId), cb)
   },
   approveRequest(req, cb = () => {}) {
     if (
@@ -161,14 +137,21 @@ const rpc = {
           .approveWalletCallsRequest(walletCallsRequest.account, walletCallsRequest.handlerId)
           .catch((error) => log.warn('Wallet-call approval failed', error))
       })
-    )
+    ) {
+      cb(null)
       return
-    if (!req || typeof req.handlerId !== 'string') return
+    }
 
-    const storedRequest = accounts.current()?.getRequest(req.handlerId)
-    if (!storedRequest) return
+    const currentAccount = accounts.current()
+    if (!currentAccount || currentAccount.address.toLowerCase() !== req.account.toLowerCase()) {
+      return cb(new Error('Request account is no longer selected'))
+    }
+    const storedRequest = currentAccount.getRequest(req.handlerId)
+    if (!storedRequest) return cb(new Error('Request is no longer pending'))
     req = storedRequest
-    if ((req.approvals || []).some((approval) => !approval.approved)) return
+    if ((req.approvals || []).some((approval) => !approval.approved)) {
+      return cb(new Error('Request approvals are incomplete'))
+    }
 
     try {
       accounts.setRequestPending(req)
@@ -195,24 +178,31 @@ const rpc = {
         if (err) accounts.setRequestError(req.handlerId, err)
       })
     }
+    cb(null)
   },
-  declineRequest(req) {
+  declineRequest(req, cb) {
     if (
       routeWalletCallRequest(req, accounts, (walletCallsRequest) =>
         provider.declineWalletCallsRequest(walletCallsRequest.account, walletCallsRequest.handlerId)
       )
-    )
+    ) {
+      cb(null)
       return
-    if (!req || typeof req.handlerId !== 'string') return
+    }
 
-    const storedRequest = accounts.current()?.getRequest(req.handlerId)
-    if (!storedRequest) return
+    const currentAccount = accounts.current()
+    if (!currentAccount || currentAccount.address.toLowerCase() !== req.account.toLowerCase()) {
+      return cb(new Error('Request account is no longer selected'))
+    }
+    const storedRequest = currentAccount.getRequest(req.handlerId)
+    if (!storedRequest) return cb(new Error('Request is no longer pending'))
     req = storedRequest
 
     if (req.type === 'transaction' || isSignatureRequest(req)) {
       accounts.declineRequest(req.handlerId)
       provider.declineRequest(req)
     }
+    cb(null)
   },
   createFromAddress(address, name, cb) {
     if (!isAddress(address)) return cb(new Error('Invalid Address'))
@@ -260,23 +250,15 @@ const rpc = {
   createFromPrivateKey(privateKey, password, cb) {
     signers.createFromPrivateKey(privateKey, password, cb)
   },
-  addPrivateKey(id, privateKey, password, cb) {
-    signers.addPrivateKey(id, privateKey, password, cb)
-  },
-  removePrivateKey(id, index, password, cb) {
-    signers.removePrivateKey(id, index, password, cb)
-  },
-  addKeystore(id, keystore, keystorePassword, password, cb) {
-    signers.addKeystore(id, keystore, keystorePassword, password, cb)
-  },
   unlockSigner(id, password, cb) {
+    const signer = signers.get(id)
+    if (!signer || typeof signer.unlock !== 'function') return cb(new Error('Signer is unavailable'))
     signers.unlock(id, password, cb)
   },
   lockSigner(id, cb) {
+    const signer = signers.get(id)
+    if (!signer || typeof signer.lock !== 'function') return cb(new Error('Signer is unavailable'))
     signers.lock(id, cb)
-  },
-  remove(id) {
-    signers.remove(id)
   },
   async resolveEnsName(name, cb) {
     log.debug('Resolving ENS name', { name })
@@ -294,6 +276,7 @@ const rpc = {
     }
   },
   verifyAddress(cb) {
+    if (!accounts.current()) return cb(new Error('No account selected'))
     const res = (err, data) => cb(err, data || false)
     accounts.verifyAddress(true, res)
   },
@@ -315,78 +298,43 @@ const rpc = {
   signerCompatibility(handlerId, cb) {
     accounts.signerCompatibility(handlerId, cb)
   },
-  // flow
-  async flowCommand(command) {
-    // console.log('flowCommand', command, cb)
-    await dapps.add(command.input, {}, (err, res) => {
-      if (err || res) console.log(err, res)
-    })
-    await dapps.launch(command.input, (err, res) => {
-      if (err || res) console.log(err, res)
-    })
-  },
-  addDapp(domain, options, cb) {
-    if (!(domain.endsWith('.eth') || domain.endsWith('.xyz'))) domain += '.eth'
-    // console.log('addDapp', domain, options, cb)
-    dapps.add(domain, options, cb)
-  },
-  removeDapp(domain, cb) {
-    dapps.remove(domain, cb)
-  },
-  moveDapp(fromArea, fromIndex, toArea, toIndex, cb) {
-    dapps.move(fromArea, fromIndex, toArea, toIndex, cb)
-  },
-  launchDapp(domain, cb) {
-    dapps.launch(domain, cb)
-  },
-  openDapp(domain, options, cb) {
-    if (domain.endsWith('.eth')) {
-      // console.log(' RPC openDapp ', domain, options, cb)
-      dapps.add(domain, options, cb)
-    } else {
-      console.log('input needs to be ens name')
-    }
-  },
-  openExplorer(chain) {
+  openExplorer(chain, cb) {
     if (store('main.mute.explorerWarning')) {
       openBlockExplorer(chain)
     } else {
       store.notify('openExplorer', { chain })
     }
+    cb(null)
   }
 }
 
-const unwrap = (v) => (v !== undefined && v !== null ? JSON.parse(v) : v)
-const wrap = (v) => (v !== undefined && v !== null ? JSON.stringify(v) : v)
-
 onRendererRpc((event, id, method, ...args) => {
-  id = unwrap(id)
-  method = unwrap(method)
-  args = args.map((arg) => unwrap(arg))
-  if (rpc[method]) {
-    if (method === 'getFrameId') {
-      rpc[method](event.sender.getOwnerBrowserWindow(), ...args, (...args) => {
-        event.sender.send(
-          'main:rpc',
-          id,
-          ...args.map((arg) => (arg instanceof Error ? wrap(arg.message) : wrap(arg)))
-        )
-      })
-    } else {
-      rpc[method](...args, (...args) => {
-        event.sender.send(
-          'main:rpc',
-          id,
-          ...args.map((arg) => (arg instanceof Error ? wrap(arg.message) : wrap(arg)))
-        )
-      })
+  const handler = rpc[method]
+  let responded = false
+  const respond = (...responseArgs) => {
+    if (responded) return
+    responded = true
+    const parsed = parseRendererRpcResponse(method, responseArgs)
+    if (!parsed.success) {
+      log.warn('Rejected invalid renderer RPC response', { method })
+      event.sender.send('main:rpc', id, ...encodeRendererRpcValues(['Invalid renderer RPC response']))
+      return
     }
-  } else {
-    const args = [new Error('Unknown RPC method: ' + method)]
-    event.sender.send(
-      'main:rpc',
-      id,
-      ...args.map((arg) => (arg instanceof Error ? wrap(arg.message) : wrap(arg)))
-    )
+    try {
+      event.sender.send('main:rpc', id, ...encodeRendererRpcValues(parsed.data))
+    } catch {
+      log.warn('Could not encode renderer RPC response', { method })
+      event.sender.send('main:rpc', id, ...encodeRendererRpcValues(['Invalid renderer RPC response']))
+    }
+  }
+
+  try {
+    if (method === 'getFrameId') {
+      handler(event.sender.getOwnerBrowserWindow(), ...args, respond)
+    } else {
+      handler(...args, respond)
+    }
+  } catch (error) {
+    respond(error)
   }
 })

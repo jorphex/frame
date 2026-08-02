@@ -17,7 +17,7 @@ const { handleRenderer, onRenderer, onRendererRpc, onceRenderer, registerRendere
 )
 
 const sender = (role) => {
-  const webContents = {}
+  const webContents = { send: jest.fn() }
   registerRendererRole(webContents, role)
   return { sender: webContents }
 }
@@ -146,5 +146,7 @@ test('authorizes decoded RPC methods and ignores malformed method values', () =>
   dispatch(notify, '1', '"getState"')
 
   expect(listener).toHaveBeenCalledTimes(1)
-  expect(listener).toHaveBeenCalledWith(notify, '1', '"getState"')
+  expect(listener).toHaveBeenCalledWith(notify, 1, 'getState')
+  expect(notify.sender.send).toHaveBeenCalledTimes(2)
+  expect(notify.sender.send).toHaveBeenCalledWith('main:rpc', 1, '"Invalid renderer RPC payload"')
 })

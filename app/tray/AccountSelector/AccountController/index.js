@@ -198,18 +198,6 @@ class Account extends React.Component {
     if (this.store('selected.showAccounts')) this.store.toggleShowAccounts(false)
   }
 
-  setSignerIndex(index) {
-    this.locked = true
-    link.rpc('setSignerIndex', index, (err) => {
-      this.setState({ accountHighlight: 'inactive', highlightIndex: 0 })
-      this.store.toggleShowAccounts(false)
-      setTimeout(() => {
-        this.locked = false
-      }, 1000)
-      if (err) return console.log(err)
-    })
-  }
-
   getAddressSize() {
     const ensName = this.store('main.accounts', this.props.id, 'ensName')
     if (ensName) {

@@ -3,6 +3,7 @@ import path from 'path'
 import { parse } from '@babel/parser'
 
 import { rendererActionNames, rendererIpcChannels } from '../../../main/ipc/schemas'
+import { rendererRpcMethods } from '../../../main/ipc/rpcSchemas'
 import { requestEventChannels, requestInvokeChannels } from '../../../resources/bridge/protocol'
 
 type Node = { type?: string; [key: string]: unknown }
@@ -124,4 +125,63 @@ test('every static renderer event, invoke, and store action has a schema', () =>
     [...rendererActionNames].sort()
   )
   expect(dynamicActions).toEqual(['app/dash/Chains/Chain/Connection/index.js:Identifier'])
+})
+
+test('renderer RPC callsites, handlers, and schemas have an exact inventory match', () => {
+  const calls = callsIn([path.join(root, 'app'), path.join(root, 'resources')])
+  const rpcCalls = calls.filter((call) => memberCall(call, 'link', 'rpc'))
+  const staticMethods = rpcCalls
+    .map((call) => staticString(call.args[0]))
+    .filter((method): method is string => Boolean(method))
+  const dynamicMethods = rpcCalls
+    .filter((call) => !staticString(call.args[0]))
+    .map(({ args, file }) => `${file}:${args[0]?.type}`)
+  const accountSources = sourceFiles(path.join(root, 'app/dash/Accounts/Add'))
+    .map((file) => fs.readFileSync(file, 'utf8'))
+    .join('\n')
+  const signerCreationMethods = [
+    ...accountSources.matchAll(/createSignerMethod\s*(?::|=)\s*['"]([^'"]+)['"]/g)
+  ].map((match) => match[1])
+  const feeMethods = calls
+    .filter(
+      (call) =>
+        call.callee.type === 'Identifier' &&
+        call.callee.name === 'receiveValueHandler' &&
+        Boolean(staticString(call.args[1]))
+    )
+    .map((call) => {
+      const name = staticString(call.args[1]) as string
+      return `set${name.charAt(0).toUpperCase()}${name.slice(1)}`
+    })
+  const resolvedDynamicMethods = [...signerCreationMethods, ...feeMethods]
+
+  expect(dynamicMethods).toEqual([
+    'app/dash/Accounts/Add/Components/index.js:Identifier',
+    'app/tray/Account/Requests/TransactionRequest/AdjustFee/index.js:TemplateLiteral'
+  ])
+  expect([...new Set([...staticMethods, ...resolvedDynamicMethods])].sort()).toEqual(
+    [...rendererRpcMethods].sort()
+  )
+
+  const source = fs.readFileSync(path.join(root, 'main/rpc/index.js'), 'utf8')
+  const ast = parse(source, { sourceType: 'unambiguous' })
+  let handlerNames: string[] = []
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== 'object') return
+    if (Array.isArray(value)) return value.forEach(visit)
+    const node = value as Node
+    if (node.type === 'VariableDeclarator' && (node.id as Node)?.name === 'rpc') {
+      const init = node.init as Node
+      handlerNames = (init.properties as Node[]).map((property) => {
+        const key = property.key as Node
+        return (key.name || key.value) as string
+      })
+    }
+    Object.entries(node).forEach(([key, child]) => {
+      if (!['loc', 'start', 'end'].includes(key)) visit(child)
+    })
+  }
+  visit(ast)
+
+  expect(handlerNames.sort()).toEqual([...rendererRpcMethods].sort())
 })
