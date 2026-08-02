@@ -3,8 +3,8 @@
 ## Current Release Boundary
 
 This fork currently produces Linux x64 AppImage and deb artifacts. The automated
-workflow is manual-only and creates or updates a GitHub **draft** release. It does
-not publish a release automatically. Linux artifacts are currently unsigned;
+workflow is manual-only and creates a new GitHub **draft** release. It never
+updates or publishes a release automatically. Linux artifacts are currently unsigned;
 macOS notarization and Windows signing are not configured for this fork.
 
 Dependency locking makes installation deterministic, but byte-for-byte
@@ -13,7 +13,8 @@ reproducible artifacts have not yet been demonstrated.
 ## Prepare
 
 1. Choose a clean, reviewed commit on the default branch. Never release from a
-   dirty worktree.
+   dirty worktree. For a preview release, dispatch the workflow from the exact
+   reviewed `modernization-preview` commit.
 2. Set a unique SemVer-compatible version in `package.json` and regenerate
    `package-lock.json` using the pinned Node/npm toolchain. Do not reuse a tag from
    a published release.
@@ -36,6 +37,7 @@ reproducible artifacts have not yet been demonstrated.
    npm run package:linux:x64
    npm run package:verify:linux
    npm run sbom:linux
+   npm run sbom:verify:linux
    ```
 
 5. Inspect the final diff, dependency graph, test output, package names,
@@ -45,15 +47,21 @@ reproducible artifacts have not yet been demonstrated.
 ## Build The Draft
 
 Run the **Build a draft Linux release** workflow from GitHub Actions against the
-reviewed commit. The optional tag defaults to `v<package version>` and accepts
-only letters, digits, `.`, `_`, and `-`.
+reviewed commit. The optional tag defaults to `v<package version>` and, when
+provided, must match that value exactly.
 
 The workflow performs the full quality gate, verifies required hardware native
 modules, generates SHA-256 checksums and a CycloneDX SBOM, creates build and SBOM
 attestations, and uploads the files to a draft release. It refuses to replace
-assets on an already published release.
+or add assets to an existing release, rejects tags bound to another commit, and
+records the workflow's exact source SHA as the draft target. GitHub creates a
+missing tag from that target when the draft is published.
 
 Pull-request workflows have read-only repository access and cannot publish.
+CodeQL runs on pushes to `modernization-preview`; GitHub will not use this
+revision for scheduled runs until the workflow file is also present on the
+repository default branch. Until then, run CodeQL manually against the reviewed
+preview commit before release.
 
 ## Review The Draft
 

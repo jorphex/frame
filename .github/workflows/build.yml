@@ -36,9 +36,10 @@ jobs:
           REQUESTED_TAG: ${{ inputs.tag }}
         run: |
           version=$(node --print "require('./package.json').version")
-          tag="${REQUESTED_TAG:-v${version}}"
-          if [[ ! "$tag" =~ ^[A-Za-z0-9._-]+$ ]]; then
-            echo "Release tag contains unsupported characters" >&2
+          expected_tag="v${version}"
+          tag="${REQUESTED_TAG:-$expected_tag}"
+          if [[ "$tag" != "$expected_tag" ]]; then
+            echo "Release tag must exactly match package version: $expected_tag" >&2
             exit 1
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
@@ -58,6 +59,8 @@ jobs:
       - run: npm run package:verify:linux
       - name: Generate CycloneDX SBOM
         run: npm run sbom:linux
+      - name: Verify production SBOM
+        run: npm run sbom:verify:linux
       - name: Attest build provenance
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
@@ -77,12 +80,14 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
-              echo "Refusing to replace assets on published release $RELEASE_TAG" >&2
-              exit 1
-            fi
-          else
-            gh release create "$RELEASE_TAG" --draft --title "$RELEASE_VERSION" --notes "Automated Linux draft build."
+          remote_tag=$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}")
+          tag_commit=$(printf '%s\n' "$remote_tag" | awk '/\^\{\}$/ { print $1; found=1 } END { if (!found && NR == 1) print first } NR == 1 { first=$1 }')
+          if [[ -n "$tag_commit" && "$tag_commit" != "$GITHUB_SHA" ]]; then
+            echo "Refusing release: $RELEASE_TAG points to $tag_commit, not $GITHUB_SHA" >&2
+            exit 1
           fi
-          gh release upload "$RELEASE_TAG" dist/*.AppImage dist/*_amd64.deb dist/SHA256SUMS dist/frame.cdx.json --clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Refusing to modify existing release $RELEASE_TAG; delete a failed draft or use a new version" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" dist/*.AppImage dist/*_amd64.deb dist/SHA256SUMS dist/frame.cdx.json --target "$GITHUB_SHA" --draft --title "$RELEASE_VERSION" --notes "Automated Linux draft build from $GITHUB_SHA."
