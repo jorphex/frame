@@ -156,7 +156,7 @@ class ChainConnection extends EventEmitter {
               label,
               gasCost: estimatedGas
             }
-          } catch (e) {
+          } catch {
             return {
               label,
               gasCost: BigNumber('')
@@ -211,9 +211,8 @@ class ChainConnection extends EventEmitter {
             // must be at least London
             this.chainConfig.setHardfork(Hardfork.London)
           }
-        } catch (e) {
+        } catch {
           feeMarket = null
-          // log.error(`could not load EIP-1559 fee market for chain ${this.chainId}`, e)
         }
       }
 

@@ -159,7 +159,7 @@ export class ViewData extends React.Component {
         try {
           // convert these keys to ints
           decodeTx[key] = parseInt(tx[key], 16)
-        } catch (e) {
+        } catch {
           decodeTx[key] = tx[key]
         }
       } else {

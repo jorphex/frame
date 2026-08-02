@@ -189,7 +189,8 @@ export default [
       'testing-library': testingLibrary
     },
     rules: {
-      ...testingLibrary.configs.react.rules
+      ...testingLibrary.configs['flat/react'].rules,
+      'testing-library/no-debugging-utils': 'error'
     }
   },
   // ensure all rules work with prettier

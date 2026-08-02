@@ -34,7 +34,7 @@ const isChainFilled = (chain) => {
 const getUrl = (urlStr) => {
   try {
     return new URL(urlStr)
-  } catch (e) {
+  } catch {
     // ignore errors
   }
 }

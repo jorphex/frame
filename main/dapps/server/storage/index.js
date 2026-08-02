@@ -5,7 +5,7 @@ module.exports = {
   update: (hash, state) => {
     try {
       state = JSON.parse(state)
-    } catch (e) {
+    } catch {
       state = ''
     }
     store.setDappStorage(hash, state)
