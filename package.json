@@ -298,7 +298,8 @@
     },
     "usb@2.18.0": {
       "node-addon-api": "8.5.0"
-    }
+    },
+    "elliptic@<=6.6.0": "6.6.1"
   },
   "lavamoat": {
     "allowScripts": {
