@@ -101,7 +101,7 @@ export default function createEns(
 
   const verifyAddress = async (name: string, address: string) => {
     const [registeredName] = await reverseLookup(address)
-    return registeredName.toLowerCase() === name.toLowerCase()
+    return typeof registeredName === 'string' && registeredName.toLowerCase() === name.toLowerCase()
   }
 
   return { resolve, reverseLookup, verifyAddress }

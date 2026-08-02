@@ -22,9 +22,8 @@ const migrate = (initial: unknown) => {
     const state = v38StateSchema.parse(initial)
     const gnosisChainPresent = '100' in state.main.networks.ethereum
 
-    if (gnosisChainPresent) {
-      const gnosisChain = state.main.networks.ethereum[100]
-
+    const gnosisChain = state.main.networks.ethereum[100]
+    if (gnosisChainPresent && gnosisChain) {
       state.main.networks.ethereum[100] = {
         ...gnosisChain,
         connection: {

@@ -137,5 +137,7 @@ process.on('message', (message: ExternalDataWorkerMessage) => {
   log.debug(`received message: ${message.command} [${message.args}]`)
 
   const args = message.args || []
-  messageHandler[message.command](...args)
+  const handler = messageHandler[message.command]
+  if (handler) handler(...args)
+  else log.warn(`received unexpected balance worker command: ${message.command}`)
 })

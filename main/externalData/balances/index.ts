@@ -6,6 +6,7 @@ import BalancesWorkerController from './controller'
 import { CurrencyBalance, TokenBalance } from './scan'
 
 import type { Balance, Chain, Token, WithTokenId } from '../../store/state'
+import { requireStoreActionFrom } from '../../store/actionFrom'
 
 const RESTART_WAIT = 5 // seconds
 
@@ -216,7 +217,7 @@ export default function (store: Store) {
           (currentChainBalances.find((b) => b.chainId === balance.chainId) || {}).balance !== balance.balance
       )
       .forEach((balance) => {
-        store.setBalance(address, {
+        requireStoreActionFrom(store, 'setBalance')(address, {
           ...balance,
           symbol: storeApi.getNativeCurrencySymbol(balance.chainId),
           address: NATIVE_CURRENCY
@@ -243,7 +244,7 @@ export default function (store: Store) {
     })
 
     if (changedBalances.length > 0) {
-      store.setBalances(address, changedBalances)
+      requireStoreActionFrom(store, 'setBalances')(address, changedBalances)
 
       const knownTokens = new Set(storeApi.getKnownTokens(address).map(toTokenId))
       const isKnown = (balance: TokenBalance) => knownTokens.has(toTokenId(balance))
@@ -252,7 +253,7 @@ export default function (store: Store) {
       const unknownBalances = changedBalances.filter((b) => parseInt(b.balance) > 0 && !isKnown(b))
 
       if (unknownBalances.length > 0) {
-        store.addKnownTokens(address, unknownBalances)
+        requireStoreActionFrom(store, 'addKnownTokens')(address, unknownBalances)
       }
 
       // remove zero balances from the list of known tokens
@@ -265,11 +266,11 @@ export default function (store: Store) {
       }, new Set<string>())
 
       if (zeroBalances.size) {
-        store.removeKnownTokens(address, zeroBalances)
+        requireStoreActionFrom(store, 'removeKnownTokens')(address, zeroBalances)
       }
     }
 
-    store.accountTokensUpdated(address)
+    requireStoreActionFrom(store, 'accountTokensUpdated')(address)
   }
 
   function handleTokenBlacklistUpdate(tokensToRemove: Set<string>) {
@@ -281,13 +282,13 @@ export default function (store: Store) {
 
     Object.entries(balances).forEach(([accountAddress, balances]) => {
       if (includesBlacklistedTokens(balances)) {
-        store.removeBalances(accountAddress, tokensToRemove)
+        requireStoreActionFrom(store, 'removeBalances')(accountAddress, tokensToRemove)
       }
     })
 
     Object.entries(knownTokens).forEach(([accountAddress, tokens]) => {
       if (includesBlacklistedTokens(tokens)) {
-        store.removeKnownTokens(accountAddress, tokensToRemove)
+        requireStoreActionFrom(store, 'removeKnownTokens')(accountAddress, tokensToRemove)
       }
     })
   }

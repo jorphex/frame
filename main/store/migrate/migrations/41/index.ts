@@ -180,9 +180,8 @@ const migrate = (initial: unknown) => {
 
     const goerliChainPresent = '5' in state.main.networks.ethereum
 
-    if (goerliChainPresent) {
-      const goerliChain = state.main.networks.ethereum[5]
-
+    const goerliChain = state.main.networks.ethereum[5]
+    if (goerliChainPresent && goerliChain) {
       state.main.networks.ethereum[5] = {
         ...goerliChain,
         connection: {
@@ -194,9 +193,8 @@ const migrate = (initial: unknown) => {
 
     const baseGoerliChainPresent = '84531' in state.main.networks.ethereum
 
-    if (baseGoerliChainPresent) {
-      const baseGoerliChain = state.main.networks.ethereum[84531]
-
+    const baseGoerliChain = state.main.networks.ethereum[84531]
+    if (baseGoerliChainPresent && baseGoerliChain) {
       state.main.networks.ethereum[84531] = {
         ...baseGoerliChain,
         connection: {

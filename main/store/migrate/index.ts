@@ -21,7 +21,9 @@ const migrations: Migration[] = [
 ].sort((m1, m2) => m1.version - m2.version)
 
 // Version number of latest known migration
-const latest = migrations[migrations.length - 1].version
+const latestMigration = migrations[migrations.length - 1]
+if (!latestMigration) throw new Error('No state migrations are registered')
+const latest = latestMigration.version
 
 export default {
   // Apply migrations to current state

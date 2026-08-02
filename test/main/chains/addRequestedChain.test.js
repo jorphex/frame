@@ -66,6 +66,14 @@ it('rejects a missing pending request before endpoint verification', async () =>
   expect(store.addNetwork).not.toHaveBeenCalled()
 })
 
+it('rejects a missing request account before endpoint verification', async () => {
+  accounts.accounts = {}
+
+  await expect(addRequestedChain(chain, reference)).rejects.toThrow(/no longer pending/)
+  expect(verifyRpcChainId).not.toHaveBeenCalled()
+  expect(store.addNetwork).not.toHaveBeenCalled()
+})
+
 it('does not allow the requested chain ID to change in the editor', async () => {
   await expect(addRequestedChain({ ...chain, id: 1 }, reference)).rejects.toThrow(/cannot be changed/)
   expect(verifyRpcChainId).not.toHaveBeenCalled()

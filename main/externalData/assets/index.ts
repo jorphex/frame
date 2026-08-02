@@ -5,6 +5,7 @@ import Pylon, { AssetType } from '@framelabs/pylon-client'
 import type { AssetId } from '@framelabs/pylon-client/dist/assetId'
 import type { UsdRate } from '../../provider/assets'
 import type { NativeCurrency, Rate, Token } from '../../store/state'
+import { requireStoreActionFrom } from '../../store/actionFrom'
 
 interface RateUpdate {
   id: AssetId
@@ -20,10 +21,10 @@ export default function rates(pylon: Pylon, store: Store) {
       ((address && store('main.tokens.known', address)) || []) as Token[],
     getCustomTokens: () => (store('main.tokens.custom') || []) as Token[],
     setNativeCurrencyData: (chainId: number, currencyData: NativeCurrency) =>
-      store.setNativeCurrencyData('ethereum', chainId, currencyData),
+      requireStoreActionFrom(store, 'setNativeCurrencyData')('ethereum', chainId, currencyData),
     setNativeCurrencyRate: (chainId: number, rate: Rate) =>
-      store.setNativeCurrencyData('ethereum', chainId, { usd: rate }),
-    setTokenRates: (rates: Record<Address, UsdRate>) => store.setRates(rates)
+      requireStoreActionFrom(store, 'setNativeCurrencyData')('ethereum', chainId, { usd: rate }),
+    setTokenRates: (rates: Record<Address, UsdRate>) => requireStoreActionFrom(store, 'setRates')(rates)
   }
 
   function handleRatesUpdates(updates: RateUpdate[]) {

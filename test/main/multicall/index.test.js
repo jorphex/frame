@@ -21,6 +21,20 @@ beforeEach(() => {
   eth.request = jest.fn()
 })
 
+it('rejects unsupported chains before making a request', () => {
+  expect(() => multicall(999999, eth)).toThrow(/not supported on chain 999999/)
+  expect(eth.request).not.toHaveBeenCalled()
+})
+
+it('rejects calls without a function signature', async () => {
+  const caller = multicall(1, eth)
+
+  await expect(caller.call([{ target: '0x1', call: [], returns: [] }])).rejects.toThrow(
+    /function signature is required/
+  )
+  expect(eth.request).not.toHaveBeenCalled()
+})
+
 it('encodes aggregated calls correctly', async () => {
   eth.request.mockImplementationOnce(async (payload) => {
     expect(payload.method).toBe('eth_call')

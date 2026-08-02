@@ -1,5 +1,6 @@
 import log from 'electron-log'
 import Pylon from '@framelabs/pylon-client'
+import { requireStoreActionFrom } from '../../store/actionFrom'
 
 export default function inventory(pylon: Pylon, store: Store) {
   function handleUpdates(updates: any[]) {
@@ -8,7 +9,7 @@ export default function inventory(pylon: Pylon, store: Store) {
     log.debug(`got inventory updates for ${updates.map((u) => u.id)}`)
 
     updates.forEach((update) => {
-      store.setInventory(update.id, update.data.inventory)
+      requireStoreActionFrom(store, 'setInventory')(update.id, update.data.inventory)
     })
   }
 

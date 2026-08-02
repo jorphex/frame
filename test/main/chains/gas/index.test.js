@@ -6,6 +6,12 @@ describe('#createGasCalculator', () => {
   describe('default gas calculator', () => {
     const gasCalculator = createGasCalculator()
 
+    it('rejects fee history without a completed block', () => {
+      expect(() => gasCalculator.calculateGas([{ baseFee: 182, rewards: [] }])).toThrow(
+        /at least one completed block/
+      )
+    })
+
     it('calculates the base fee for the next block', async () => {
       const feeHistory = [
         { baseFee: 8, gasUsedRatio: 0, rewards: [0] },

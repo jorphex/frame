@@ -21,9 +21,11 @@ const multicallInterface = new Interface(abi)
 const memoizedInterfaces: Record<string, Interface> = {}
 
 function chainConfig(chainId: number, eth: EthereumProvider): MulticallConfig {
+  const deployment = multicallAddresses[chainId]
+  if (!deployment) throw new Error(`multicall is not supported on chain ${chainId}`)
   return {
-    address: multicallAddresses[chainId].address,
-    version: multicallAddresses[chainId].version,
+    address: deployment.address,
+    version: deployment.version,
     chainId,
     provider: eth
   }
@@ -44,6 +46,7 @@ async function makeCall(functionName: string, params: any[], config: MulticallCo
 function buildCallData<R, T>(calls: Call<R, T>[]) {
   return calls.map(({ target, call }) => {
     const [fnSignature, ...params] = call
+    if (!fnSignature) throw new Error('multicall function signature is required')
     const fnName = getFunctionNameFromSignature(fnSignature)
 
     const callInterface = getInterface(fnSignature)
@@ -55,7 +58,8 @@ function buildCallData<R, T>(calls: Call<R, T>[]) {
 
 function getResultData(results: any, call: string[], target: string) {
   const [fnSignature] = call
-  const callInterface = memoizedInterfaces[fnSignature]
+  if (!fnSignature) throw new Error('multicall function signature is required')
+  const callInterface = getInterface(fnSignature)
   const fnName = getFunctionNameFromSignature(fnSignature)
   try {
     return callInterface.decodeFunctionResult(fnName, results)
@@ -73,15 +77,17 @@ function getFunctionNameFromSignature(signature: string) {
     throw new Error(`could not parse function name from signature: ${signature}`)
   }
 
-  return (m.groups || {}).signature
+  const name = m.groups?.signature
+  if (!name) throw new Error(`could not parse function name from signature: ${signature}`)
+  return name
 }
 
 function getInterface(functionSignature: string) {
-  if (!(functionSignature in memoizedInterfaces)) {
-    memoizedInterfaces[functionSignature] = new Interface([functionSignature])
-  }
-
-  return memoizedInterfaces[functionSignature]
+  const existing = memoizedInterfaces[functionSignature]
+  if (existing) return existing
+  const created = new Interface([functionSignature])
+  memoizedInterfaces[functionSignature] = created
+  return created
 }
 
 async function aggregate<R, T>(calls: Call<R, T>[], config: MulticallConfig): Promise<CallResult<T>[]> {

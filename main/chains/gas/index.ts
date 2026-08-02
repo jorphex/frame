@@ -71,7 +71,8 @@ function calculateReward(blocks: Block[], opts: CalcOpts = {}) {
   }, [] as Block[])
 
   const rewardAtBand = (block: Block) => block.rewards[Math.min(percentileBand, block.rewards.length - 1)]
-  const lastBlockFee = rewardAtBand(blocks[blocks.length - 1]) ?? 0n
+  const lastBlock = blocks[blocks.length - 1]
+  const lastBlockFee = lastBlock ? (rewardAtBand(lastBlock) ?? 0n) : 0n
   const eligibleRewards = eligibleRewardsBlocks.map(rewardAtBand).filter((reward) => reward !== undefined)
 
   if (eligibleRewards.length === 0) return lastBlockFee
@@ -80,7 +81,9 @@ function calculateReward(blocks: Block[], opts: CalcOpts = {}) {
   }
 
   // Keep the existing upper-median convention for an even number of samples.
-  return eligibleRewards.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[Math.floor(eligibleRewards.length / 2)]
+  const sortedRewards = eligibleRewards.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  const medianReward = sortedRewards[Math.floor(sortedRewards.length / 2)]
+  return medianReward ?? lastBlockFee
 }
 
 function estimateGasFees(blocks: Block[], opts: CalcOpts = {}) {
@@ -93,14 +96,16 @@ function estimateGasFees(blocks: Block[], opts: CalcOpts = {}) {
   }))
 
   // plan for max fee of 2 full blocks, each one increasing the fee by 12.5%
-  const nextBlockFee = normalizedBlocks[normalizedBlocks.length - 1].baseFee // base fee for next block
+  const nextBlock = normalizedBlocks[normalizedBlocks.length - 1]
+  if (!nextBlock) throw new Error('Fee history has no next-block base fee')
+  const nextBlockFee = nextBlock.baseFee // base fee for next block
   const calculatedFee = (nextBlockFee * 81n + 63n) / 64n
 
   // the last block contains only the base fee for the next block but no fee history, so
   // don't use it in the block reward calculation
   const medianBlockReward = calculateReward(normalizedBlocks.slice(0, normalizedBlocks.length - 1), opts)
 
-  const estimatedGasFees = {
+  const estimatedGasFees: RawGasFees = {
     nextBaseFee: nextBlockFee,
     maxBaseFeePerGas: calculatedFee,
     maxPriorityFeePerGas: medianBlockReward,

@@ -123,6 +123,14 @@ describe('#getTokenBalances', () => {
         }
       ])
     })
+
+    it('ignores incomplete multicall results', async () => {
+      multicall.mockImplementation(() => ({
+        batchCall: async () => [{ success: true, returnValues: [] }]
+      }))
+
+      await expect(balancesLoader.getTokenBalances(ownerAddress, [aaveUsdcToken])).resolves.toEqual([])
+    })
   })
 
   describe('using direct contract calls', () => {

@@ -17,6 +17,7 @@ import signers from '../../signers'
 import windows from '../../windows'
 import nav from '../../windows/nav'
 import store from '../../store'
+import { requireStoreAction } from '../../store/action'
 import { TransactionData } from '../../../resources/domain/transaction'
 import { MAX_UINT256 } from '../../../resources/domain/transaction/quantity'
 import { isBroadTokenAuthorityEffect } from '../../../resources/domain/transaction/effects'
@@ -125,7 +126,7 @@ class FrameAccount {
     )
 
     if (!currentSendDappPermission) {
-      store.setPermission(this.address, {
+      requireStoreAction('setPermission')(this.address, {
         handlerId: 'send-dapp-native',
         origin: 'send.frame.eth',
         provider: true
@@ -190,7 +191,7 @@ class FrameAccount {
 
   async lookupAddress() {
     try {
-      this.ensName = (await nebula.ens.reverseLookup(this.address))[0]
+      this.ensName = (await nebula.ens.reverseLookup(this.address))[0] || ''
       this.update()
     } catch (e) {
       log.error('lookupAddress Error:', e)
@@ -222,7 +223,7 @@ class FrameAccount {
     if (account.toLowerCase() === this.address) {
       // Permissions do no live inside the account summary
       const { name } = store('main.origins', origin)
-      store.setPermission(this.address, { handlerId, origin: name, provider: access })
+      requireStoreAction('setPermission')(this.address, { handlerId, origin: name, provider: access })
     }
 
     this.resolveRequest(req)
@@ -270,7 +271,7 @@ class FrameAccount {
     delete this.preparationVersions[handlerId]
     clearTimeout(this.preparationTimers[handlerId])
     delete this.preparationTimers[handlerId]
-    store.navClearReq(handlerId, Object.keys(this.requests).length > 0)
+    requireStoreAction('navClearReq')(handlerId, Object.keys(this.requests).length > 0)
 
     this.update()
   }
@@ -759,12 +760,15 @@ class FrameAccount {
       const calls = snapshotWalletCalls(req.calls)
       return (
         calls.length === snapshot.calls.length &&
-        calls.every(
-          (call, index) =>
-            call.to === snapshot.calls[index].to &&
-            call.data === snapshot.calls[index].data &&
-            call.value === snapshot.calls[index].value
-        )
+        calls.every((call, index) => {
+          const snapshotCall = snapshot.calls[index]
+          return (
+            snapshotCall !== undefined &&
+            call.to === snapshotCall.to &&
+            call.data === snapshotCall.data &&
+            call.value === snapshotCall.value
+          )
+        })
       )
     } catch {
       return false
@@ -986,10 +990,10 @@ class FrameAccount {
     }
 
     const add = (r: AccountRequest) => {
-      this.requests[r.handlerId] = req
-      this.requests[r.handlerId].mode = RequestMode.Normal
-      this.requests[r.handlerId].created = Date.now()
-      this.requests[r.handlerId].res = res
+      r.mode = RequestMode.Normal
+      r.created = Date.now()
+      r.res = res
+      this.requests[r.handlerId] = r
 
       if (['sign', 'signTypedData', 'signErc20Permit'].includes(req.type)) {
         req.approvals = req.approvals || []
@@ -1002,8 +1006,8 @@ class FrameAccount {
       this.revealDetails(req)
 
       this.update()
-      store.setSignerView('default')
-      store.setPanelView('default')
+      requireStoreAction('setSignerView')('default')
+      requireStoreAction('setPanelView')('default')
 
       // Display request
       const { account } = req
@@ -1059,9 +1063,9 @@ class FrameAccount {
   }
 
   verifyAddress(display: boolean, cb: Callback<boolean>) {
-    const signer = signers.get(this.signer) || {}
+    const signer = signers.get(this.signer)
 
-    if (signer.verifyAddress && signer.status === 'ok') {
+    if (signer?.verifyAddress && signer.status === 'ok') {
       const index = signer.addresses.map((a) => a.toLowerCase()).indexOf(this.address)
       if (index > -1) {
         signer.verifyAddress(index, this.address, display, cb)
@@ -1125,12 +1129,14 @@ class FrameAccount {
     Object.values(this.simulationTimers).forEach(clearTimeout)
     this.simulationTimers = {}
     Object.keys(this.simulationVersions).forEach((handlerId) => {
-      this.simulationVersions[handlerId] += 1
+      const version = this.simulationVersions[handlerId]
+      if (version !== undefined) this.simulationVersions[handlerId] = version + 1
     })
     Object.values(this.preparationTimers).forEach(clearTimeout)
     this.preparationTimers = {}
     Object.keys(this.preparationVersions).forEach((handlerId) => {
-      this.preparationVersions[handlerId] += 1
+      const version = this.preparationVersions[handlerId]
+      if (version !== undefined) this.preparationVersions[handlerId] = version + 1
     })
     this.accountObserver.remove()
   }
@@ -1197,8 +1203,7 @@ class FrameAccount {
     ]
     const keys = Object.keys(rawTx) as Array<keyof TransactionData>
 
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i]
+    for (const key of keys) {
       if (enforcedKeys.indexOf(key) > -1 && !this.isValidHexString(rawTx[key] as string)) {
         return cb(new Error(`Transaction parameter '${key}' is not a valid hex string`))
       }

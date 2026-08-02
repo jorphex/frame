@@ -28,8 +28,9 @@ function handleMessageFromParent(message: WorkerProcessCommand) {
 
   const args = message.args || []
 
-  if (messageHandlers[message.command]) {
-    messageHandlers[message.command](...args)
+  const handler = messageHandlers[message.command]
+  if (handler) {
+    handler(...args)
   } else {
     log.warn(`child process with pid ${process.pid} received unexpected message: ${message.command}`)
   }

@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import accounts from '../accounts'
 import store from '../store'
+import { requireStoreAction } from '../store/action'
 import { parseChainId, verifyRpcChainId } from '../provider/chainRequests'
 
 const requestReferenceSchema = z.object({
@@ -43,7 +44,8 @@ export interface AddChainRequestReference {
 export async function addRequestedChain(chainData: unknown, requestReference: unknown) {
   const reference = requestReferenceSchema.parse(requestReference)
   const account = accounts.accounts[reference.account.toLowerCase()]
-  const request = account?.getRequest(reference.handlerId)
+  if (!account) throw new Error('Add-chain request is no longer pending')
+  const request = account.getRequest(reference.handlerId)
 
   if (!request || request.type !== 'addChain') throw new Error('Add-chain request is no longer pending')
 
@@ -55,7 +57,7 @@ export async function addRequestedChain(chainData: unknown, requestReference: un
   const rpcUrls = [chain.primaryRpc, chain.secondaryRpc].filter(Boolean)
   await verifyRpcChainId(rpcUrls, expectedChainId)
 
-  store.addNetwork(chain)
+  requireStoreAction('addNetwork')(chain)
   if (!store('main.networks', chain.type, chain.id)) throw new Error('Could not add chain')
 
   account.resolveRequest(request, null)

@@ -110,10 +110,12 @@ export default function (eth: EthereumProvider) {
     const results = await multicall(chainId, eth).batchCall(calls)
 
     return results.reduce((acc, result, i) => {
-      if (result.success) {
+      const token = tokens[i]
+      const balance = result.returnValues[0]
+      if (result.success && token && balance) {
         acc.push({
-          ...tokens[i],
-          ...result.returnValues[0]
+          ...token,
+          ...balance
         })
       }
 

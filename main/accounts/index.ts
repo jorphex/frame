@@ -7,6 +7,7 @@ import { toBeHex } from 'ethers'
 
 import provider from '../provider'
 import store from '../store'
+import { requireStoreAction } from '../store/action'
 import FrameAccount from './Account'
 import ExternalDataScanner, { DataScanner } from '../externalData'
 import Signer from '../signers/Signer'
@@ -139,7 +140,7 @@ export class Accounts extends EventEmitter {
     if (!address) return cb(new Error('No address, will not add account'))
     address = address.toLowerCase()
 
-    let account = store('main.accounts', address)
+    let account = this.accounts[address]
     if (!account) {
       log.info(`Account ${address} not found, creating account`)
 
@@ -157,14 +158,16 @@ export class Accounts extends EventEmitter {
   }
 
   rename(id: string, name: string) {
-    this.accounts[id].rename(name)
-    const account = this.accounts[id].summary()
+    const frameAccount = this.accounts[id]
+    if (!frameAccount) throw new Error(`Could not find account ${id}`)
+    frameAccount.rename(name)
+    const account = frameAccount.summary()
     this.update(account)
   }
 
   update(account: Account) {
     if (!this.accounts || this.accounts[account.id]) {
-      store.updateAccount(account)
+      requireStoreAction('updateAccount')(account)
     }
   }
 
@@ -265,7 +268,7 @@ export class Accounts extends EventEmitter {
       const { levels } = store('main.networksMeta', targetChain.type, targetChain.id, 'gas.price')
 
       // Set the gas default to asap
-      store.setGasDefault(targetChain.type, targetChain.id, 'asap', levels.asap)
+      requireStoreAction('setGasDefault')(targetChain.type, targetChain.id, 'asap', levels.asap)
 
       const params =
         type === ReplacementType.Speed
@@ -575,7 +578,7 @@ export class Accounts extends EventEmitter {
       previouslyActiveAccount.update()
     }
 
-    store.setAccount(summary)
+    requireStoreAction('setAccount')(summary)
 
     if (currentAccount.status === 'ok')
       this.verifyAddress(false, (err, verified) => {
@@ -650,7 +653,7 @@ export class Accounts extends EventEmitter {
     const summary = { id: '', status: '' }
     if (cb) cb(null, summary)
 
-    store.unsetAccount()
+    requireStoreAction('unsetAccount')()
 
     // setTimeout(() => { // Clear signer requests when unset
     //   if (s) {
@@ -841,7 +844,7 @@ export class Accounts extends EventEmitter {
     const signerUnavailable = (knownSigner?: Signer) => {
       const crumb = knownSigner ? signerPanelCrumb(knownSigner) : accountPanelCrumb()
 
-      store.navDash(crumb)
+      requireStoreAction('navDash')(crumb)
       return cb(new Error('Signer unavailable'))
     }
 
@@ -921,6 +924,7 @@ export class Accounts extends EventEmitter {
 
     const request = this.getRequestForAccount(accountId, handlerId)
     const account = this.accounts[accountId.toLowerCase()]
+    if (!account) throw new Error('Could not locate request account')
 
     account.rejectRequest(request, error)
     return true
@@ -1165,7 +1169,7 @@ export class Accounts extends EventEmitter {
 
     const currentAccount = this.current()
     if (currentAccount && currentAccount.address === address) {
-      store.unsetAccount()
+      requireStoreAction('unsetAccount')()
 
       const defaultAccount = (Object.values(this.accounts).filter((a) => a.address !== address) || [])[0]
       if (defaultAccount) {
@@ -1175,9 +1179,10 @@ export class Accounts extends EventEmitter {
       }
     }
 
-    if (this.accounts[address]) this.accounts[address].close()
+    const account = this.accounts[address]
+    if (account) account.close()
 
-    store.removeAccount(address)
+    requireStoreAction('removeAccount')(address)
     delete this.accounts[address]
   }
 
@@ -1446,7 +1451,7 @@ export class Accounts extends EventEmitter {
     if (!currentAccount) return log.error('No account selected during nonce reset')
 
     const txRequest = this.getTransactionRequest(currentAccount, handlerId)
-    const initialNonce = txRequest.payload.params[0].nonce
+    const initialNonce = txRequest.payload.params[0]?.nonce
     if (initialNonce) {
       txRequest.data.nonce = initialNonce
     } else {

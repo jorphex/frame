@@ -1,7 +1,6 @@
 import store from '.'
+import { requireStoreActionFrom } from './actionFrom'
 
 export function requireStoreAction(name: string) {
-  const action = store[name]
-  if (typeof action !== 'function') throw new Error(`Store action ${name} is unavailable`)
-  return action.bind(store)
+  return requireStoreActionFrom(store, name)
 }

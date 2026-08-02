@@ -60,6 +60,7 @@ test('performs resilient single and batch reverse lookups', async () => {
 
   await expect(ens.reverseLookup(['0x1', '0x2'])).resolves.toEqual(['frame.eth', ''])
   await expect(ens.verifyAddress('FRAME.ETH', '0x1')).resolves.toBe(true)
+  await expect(ens.verifyAddress('missing.eth', '0x2')).resolves.toBe(false)
 })
 
 test('rejects names without a configured resolver', async () => {

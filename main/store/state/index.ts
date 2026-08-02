@@ -54,6 +54,7 @@ const latestStateVersion = () => {
   }
 
   const latest = versions[versions.length - 1]
+  if (!latest) return state
   // log.info('Persisted state: returning latest state version: ', latest)
   return state.__[latest].main
 }

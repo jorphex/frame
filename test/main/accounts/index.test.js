@@ -106,6 +106,10 @@ it('sets the account signer', () => {
   expect(Accounts.current().address).toBe('0x22dd63c3619818fdbc262c78baee43cb61e9cccf')
 })
 
+it('rejects renaming an unknown account', () => {
+  expect(() => Accounts.rename('0xmissing', 'Missing')).toThrow(/could not find account/i)
+})
+
 describe('#updatePendingFees', () => {
   beforeEach(() => {
     request.data.gasFeesSource = GasFeesSource.Frame
