@@ -125,7 +125,7 @@ model](THREAT_MODEL.md), and [signer/platform support
 matrix](HARDWARE_SUPPORT.md). The implemented standards and local provider
 surface are documented in [supported EIPs](SUPPORTED_EIPS.md) and [RPC
 compatibility](RPC_COMPATIBILITY.md). Maintainers should follow the documented
-[release procedure](RELEASE.md).
+[release procedure](RELEASE.md) and [Linux qualification gate](QUALIFICATION.md).
 
 ### Related
 

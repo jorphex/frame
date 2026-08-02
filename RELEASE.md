@@ -87,7 +87,9 @@ preview commit before release.
    placement, local provider startup, update behavior, and preservation of a
    backed-up test profile.
 5. Run the applicable manual signer regression with test-only accounts. Do not
-   use valuable accounts merely to qualify a release.
+   use valuable accounts merely to qualify a release. Record the complete paired
+   browser, signer, package, and profile result using
+   [`QUALIFICATION.md`](QUALIFICATION.md).
 6. Record known limitations prominently in the release notes, including unsigned
    artifacts and unverified platforms/signers.
 7. Qualify the paired Chrome and Firefox companion archives from their own

@@ -57,6 +57,8 @@ Use a test-only account and a test network with no valuable assets.
 
 Any mismatch, blind-signing requirement, unexplained reload, or device-call loop
 is a failed regression. Do not publish a support claim from a partial run.
+Record release-candidate hardware results in the consolidated
+[`QUALIFICATION.md`](QUALIFICATION.md) matrix.
 
 ## Other Signer Regression
 
