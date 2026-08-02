@@ -18,14 +18,14 @@ const transferTitle = (effect, account) => {
     effect.from === ZERO_ADDRESS
       ? 'Mint'
       : effect.to === ZERO_ADDRESS
-      ? 'Burn'
-      : selected && effect.from === selected && effect.to === selected
-      ? 'Self Transfer'
-      : selected && effect.from === selected
-      ? 'Send'
-      : selected && effect.to === selected
-      ? 'Receive'
-      : 'Transfer'
+        ? 'Burn'
+        : selected && effect.from === selected && effect.to === selected
+          ? 'Self Transfer'
+          : selected && effect.from === selected
+            ? 'Send'
+            : selected && effect.to === selected
+              ? 'Receive'
+              : 'Transfer'
 
   return `${standardName(effect.standard)} ${direction}`
 }

@@ -64,8 +64,8 @@ function snapshotTransaction(
     transaction.to === undefined
       ? undefined
       : typeof transaction.to === 'string' && ADDRESS.test(transaction.to)
-      ? transaction.to.toLowerCase()
-      : null
+        ? transaction.to.toLowerCase()
+        : null
   const baseFee = type === 2n
   const feePerGas = parseRpcQuantity(baseFee ? transaction.maxFeePerGas : transaction.gasPrice)
   const priorityFee = baseFee ? parseRpcQuantity(transaction.maxPriorityFeePerGas) : 0n

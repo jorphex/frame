@@ -123,8 +123,8 @@ const EditTokenSpend = ({
     parsedAmount === undefined
       ? 'unknown'
       : isMax(amountValue)
-      ? 'unlimited'
-      : decimalAmount || amountValue.toString(10)
+        ? 'unlimited'
+        : decimalAmount || amountValue.toString(10)
 
   const inputLock =
     hasInvalidAmount ||

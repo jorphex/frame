@@ -534,8 +534,8 @@ class FrameAccount {
       evidence === 'rpc'
         ? `Your configured RPC reports ${subject}. This may grant maximum ERC-20 spending or collection-wide operator access. Review RPC-reported effects before proceeding.`
         : evidence === 'calldata-and-rpc'
-        ? `Top-level calldata requests broad token-like authority, and your configured RPC reports ${subject}. Review both the request intent and RPC-reported effects before proceeding.`
-        : `Top-level calldata requests ${subject}. The selector matches maximum approve(address,uint256) or enabled setApprovalForAll(address,bool), but does not prove the contract standard or successful execution.`
+          ? `Top-level calldata requests broad token-like authority, and your configured RPC reports ${subject}. Review both the request intent and RPC-reported effects before proceeding.`
+          : `Top-level calldata requests ${subject}. The selector matches maximum approve(address,uint256) or enabled setApprovalForAll(address,bool), but does not prove the contract standard or successful execution.`
     this.syncManagedApproval(req, ApprovalType.TokenApprovalRisk, {
       title: broadApprovalCount === 1 ? 'Broad Token Approval' : 'Broad Token Approvals',
       message,

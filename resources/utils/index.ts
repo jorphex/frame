@@ -16,10 +16,10 @@ function roundGwei(gwei: number) {
     gwei >= 10
       ? Math.round(gwei)
       : gwei >= 5
-      ? Math.round(gwei * 10) / 10
-      : gwei >= 1
-      ? Math.round(gwei * 100) / 100
-      : Math.round(gwei * 1000) / 1000
+        ? Math.round(gwei * 10) / 10
+        : gwei >= 1
+          ? Math.round(gwei * 100) / 100
+          : Math.round(gwei * 1000) / 1000
 
   return parseFloat(rounded.toString())
 }

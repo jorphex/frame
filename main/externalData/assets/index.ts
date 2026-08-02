@@ -47,19 +47,22 @@ export default function rates(pylon: Pylon, store: Store) {
     if (tokenUpdates.length > 0) {
       log.debug(`got token rate updates for addresses: ${tokenUpdates.map((u) => u.id.address)}`)
 
-      const tokenRates = tokenUpdates.reduce((allRates, update) => {
-        // address is always defined for tokens
-        const address = update.id.address as string
+      const tokenRates = tokenUpdates.reduce(
+        (allRates, update) => {
+          // address is always defined for tokens
+          const address = update.id.address as string
 
-        allRates[address] = {
-          usd: {
-            price: update.data.usd,
-            change24hr: update.data.usd_24h_change
+          allRates[address] = {
+            usd: {
+              price: update.data.usd,
+              change24hr: update.data.usd_24h_change
+            }
           }
-        }
 
-        return allRates
-      }, {} as Record<string, UsdRate>)
+          return allRates
+        },
+        {} as Record<string, UsdRate>
+      )
 
       storeApi.setTokenRates(tokenRates)
     }

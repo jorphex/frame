@@ -673,9 +673,9 @@ export class Provider extends EventEmitter {
     const connection = this.connection.connections?.ethereum?.[chainId]
     return Boolean(
       network &&
-        network.on !== false &&
-        connection?.chainConfig &&
-        (connection.primary?.connected || connection.secondary?.connected)
+      network.on !== false &&
+      connection?.chainConfig &&
+      (connection.primary?.connected || connection.secondary?.connected)
     )
   }
 

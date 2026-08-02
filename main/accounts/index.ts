@@ -113,11 +113,14 @@ export class Accounts extends EventEmitter {
   constructor() {
     super()
 
-    this.accounts = Object.entries(storeApi.getAccounts()).reduce((accounts, [id, account]) => {
-      accounts[id] = new FrameAccount(JSON.parse(JSON.stringify(account)), this)
+    this.accounts = Object.entries(storeApi.getAccounts()).reduce(
+      (accounts, [id, account]) => {
+        accounts[id] = new FrameAccount(JSON.parse(JSON.stringify(account)), this)
 
-      return accounts
-    }, {} as Record<string, FrameAccount>)
+        return accounts
+      },
+      {} as Record<string, FrameAccount>
+    )
 
     this._current = Object.values(this.accounts).find((acct) => acct.active)?.id || ''
 
@@ -189,8 +192,7 @@ export class Accounts extends EventEmitter {
 
     const currentAccount = this.current()
     const request = currentAccount?.getRequest(reqId) as
-      | (TransactionRequest | PermitSignatureRequest)
-      | undefined
+      (TransactionRequest | PermitSignatureRequest) | undefined
     if (currentAccount && request && request.status === undefined) {
       const approval = (request.approvals || []).find((a) => a.type === approvalType)
 
@@ -1060,8 +1062,8 @@ export class Accounts extends EventEmitter {
           err && typeof err === 'string'
             ? err
             : err && typeof err === 'object' && err.message && typeof err.message === 'string'
-            ? err.message
-            : 'Unknown Error' // TODO: Update to normalize input type
+              ? err.message
+              : 'Unknown Error' // TODO: Update to normalize input type
         currentAccount.requests[handlerId].notice = notice
       }
 

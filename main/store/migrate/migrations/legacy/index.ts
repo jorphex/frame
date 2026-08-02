@@ -210,8 +210,8 @@ const migrations = {
           return accounts[a].addresses.length === accounts[b].addresses.length
             ? 0
             : accounts[a].addresses.length > accounts[b].addresses.length
-            ? -1
-            : 1
+              ? -1
+              : 1
         })
         newAccounts[address] = Object.assign({}, accounts[primaryAccount[0]])
         // nameCount[newAccounts[address].name] = nameCount[newAccounts[address].name] || 0

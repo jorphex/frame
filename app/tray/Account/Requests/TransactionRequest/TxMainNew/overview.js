@@ -104,8 +104,8 @@ export function getSimulationPresentation(simulation) {
     simulation.status === 'succeeded'
       ? '_txMainTagGood'
       : simulation.status === 'reverted' || simulation.status === 'failed'
-      ? '_txMainTagBad'
-      : '_txMainTagWarning'
+        ? '_txMainTagBad'
+        : '_txMainTagWarning'
 
   return {
     className,

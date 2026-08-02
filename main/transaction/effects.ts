@@ -201,12 +201,12 @@ function parseLog(value: unknown): { effects: SimulationEffect[]; truncated: boo
     topic === TRANSFER_TOPIC
       ? parseTransfer(token, normalizedTopics, words)
       : topic === APPROVAL_TOPIC
-      ? parseApproval(token, normalizedTopics, words)
-      : topic === APPROVAL_FOR_ALL_TOPIC
-      ? parseApprovalForAll(token, normalizedTopics, words)
-      : topic === TRANSFER_SINGLE_TOPIC
-      ? parseTransferSingle(token, normalizedTopics, words)
-      : undefined
+        ? parseApproval(token, normalizedTopics, words)
+        : topic === APPROVAL_FOR_ALL_TOPIC
+          ? parseApprovalForAll(token, normalizedTopics, words)
+          : topic === TRANSFER_SINGLE_TOPIC
+            ? parseTransferSingle(token, normalizedTopics, words)
+            : undefined
 
   if (effect) return { effects: [effect], truncated: false }
   if (topic === TRANSFER_BATCH_TOPIC) return parseTransferBatch(token, normalizedTopics, words)

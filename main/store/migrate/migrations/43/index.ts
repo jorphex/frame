@@ -37,11 +37,14 @@ const migrate = (initial: unknown) => {
 
   const source = parsed.data.main.walletCallBatches
   const entries = source && typeof source === 'object' && !Array.isArray(source) ? Object.entries(source) : []
-  const walletCallBatches = entries.reduce((batches, [key, candidate]) => {
-    const batch = INTERNAL_KEY.test(key) ? migrateBatch(candidate) : undefined
-    if (batch) batches[key] = batch
-    return batches
-  }, {} as Record<string, z.infer<typeof WalletCallBatchSchema>>)
+  const walletCallBatches = entries.reduce(
+    (batches, [key, candidate]) => {
+      const batch = INTERNAL_KEY.test(key) ? migrateBatch(candidate) : undefined
+      if (batch) batches[key] = batch
+      return batches
+    },
+    {} as Record<string, z.infer<typeof WalletCallBatchSchema>>
+  )
 
   return {
     ...parsed.data,

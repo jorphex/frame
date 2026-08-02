@@ -38,10 +38,10 @@ const PermitOverview = ({ req, chainData, originName }) => {
     amount === undefined
       ? 'UNKNOWN AMOUNT'
       : amount === MAX_UINT256
-      ? '~UNLIMITED'
-      : hasTokenDecimals
-      ? formatTokenBaseUnitAmount(value, tokenData.decimals)
-      : 'UNKNOWN AMOUNT'
+        ? '~UNLIMITED'
+        : hasTokenDecimals
+          ? formatTokenBaseUnitAmount(value, tokenData.decimals)
+          : 'UNKNOWN AMOUNT'
 
   const amountSuffix = tokenData.symbol || 'UNKNOWN TOKEN'
 

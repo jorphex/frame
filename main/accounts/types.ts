@@ -39,13 +39,7 @@ export type TypedSignatureRequestType = 'signTypedData' | 'signErc20Permit'
 export type SignatureRequestType = 'sign' | TypedSignatureRequestType
 
 export type RequestType =
-  | SignatureRequestType
-  | 'transaction'
-  | 'access'
-  | 'addChain'
-  | 'switchChain'
-  | 'addToken'
-  | 'walletCalls'
+  SignatureRequestType | 'transaction' | 'access' | 'addChain' | 'switchChain' | 'addToken' | 'walletCalls'
 
 interface Request {
   type: RequestType
@@ -187,10 +181,7 @@ export interface TypedMessage<V extends SignTypedDataVersion = SignTypedDataVers
 }
 
 export type TypedDataRisk =
-  | 'legacy-v1'
-  | 'domain-chain-missing'
-  | 'domain-chain-invalid'
-  | 'domain-chain-mismatch'
+  'legacy-v1' | 'domain-chain-missing' | 'domain-chain-invalid' | 'domain-chain-mismatch'
 
 export interface TypedDataContext {
   requestChainId: number

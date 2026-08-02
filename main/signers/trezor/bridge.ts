@@ -24,8 +24,7 @@ export class DeviceError extends Error {
 }
 
 type TrezorPairingResponse =
-  | { tag: string }
-  | { selectedMethod: ThpPairingMethod | keyof typeof ThpPairingMethod }
+  { tag: string } | { selectedMethod: ThpPairingMethod | keyof typeof ThpPairingMethod }
 
 const manifest = { email: 'dev@frame.sh', appName: 'Frame', appUrl: 'https://frame.sh' }
 
