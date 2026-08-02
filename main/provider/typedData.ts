@@ -7,7 +7,14 @@ import type {
   TypedMessage
 } from '../accounts/types'
 
-type UnknownRecord = Record<string, unknown>
+interface UnknownRecord extends Record<string, unknown> {
+  name?: unknown
+  type?: unknown
+  types?: unknown
+  primaryType?: unknown
+  domain?: unknown
+  message?: unknown
+}
 type TypeDefinitions = Record<string, Array<{ name: string; type: string }>>
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/

@@ -2,18 +2,32 @@ type JsonReader = {
   getJson: <T = unknown>(path: string) => Promise<T>
 }
 
+interface ManifestReferences extends Record<string, unknown> {
+  name?: unknown
+  updated?: unknown
+  version?: unknown
+  content?: unknown
+  icon?: unknown
+  contracts?: unknown
+  tokens?: unknown
+}
+
+interface ManifestContract extends Record<string, unknown> {
+  metadata?: unknown
+}
+
 export type Manifest = {
   name?: string
   updated?: string
   version?: string
   content?: string
   icon?: unknown
-  contracts?: Array<Record<string, unknown>>
+  contracts?: ManifestContract[]
   tokens?: unknown
 }
 
 export async function resolveManifest(ipfs: JsonReader, cid: string) {
-  const metadata = await ipfs.getJson<Record<string, unknown>>(cid)
+  const metadata = await ipfs.getJson<ManifestReferences>(cid)
   const manifest: Manifest = {}
 
   if (typeof metadata.name === 'string') manifest.name = metadata.name
@@ -25,9 +39,7 @@ export async function resolveManifest(ipfs: JsonReader, cid: string) {
     manifest.icon = icon.icon
   }
   if (typeof metadata.contracts === 'string') {
-    const contractManifest = await ipfs.getJson<{ contracts?: Array<Record<string, unknown>> }>(
-      metadata.contracts
-    )
+    const contractManifest = await ipfs.getJson<{ contracts?: ManifestContract[] }>(metadata.contracts)
     manifest.contracts = (contractManifest.contracts || []).map((contract) => ({
       ...contract,
       metadata: Buffer.from(typeof contract.metadata === 'string' ? contract.metadata : '{}')
