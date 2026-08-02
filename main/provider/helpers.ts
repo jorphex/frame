@@ -28,6 +28,18 @@ import {
 
 import type { Chain } from '../store/state'
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+interface StoredFeeRequest {
+  mode?: string
+  status?: string
+  data: Record<string, unknown>
+}
+
+const isStoredFeeRequest = (value: unknown): value is StoredFeeRequest =>
+  isRecord(value) && isRecord(value['data'])
+
 export function decodeMessage(rawMessage: string) {
   if (isHexString(rawMessage)) {
     const buff = Buffer.from(stripHexPrefix(rawMessage), 'hex')
@@ -41,11 +53,14 @@ export function decodeMessage(rawMessage: string) {
 export function checkExistingNonceGas(tx: TransactionData) {
   const { from, nonce } = tx
 
-  const reqs = store('main.accounts', (from || '').toLowerCase(), 'requests')
-
-  const requests = Object.keys(reqs || {}).map((key) => reqs[key])
+  const storedRequests: unknown = store('main.accounts', (from || '').toLowerCase(), 'requests')
+  const requests = isRecord(storedRequests) ? Object.values(storedRequests) : []
   const existing = requests.filter(
-    (r) => r.mode === 'monitor' && r.status !== 'error' && r.data.nonce === nonce
+    (request): request is StoredFeeRequest =>
+      isStoredFeeRequest(request) &&
+      request.mode === 'monitor' &&
+      request.status !== 'error' &&
+      request.data['nonce'] === nonce
   )
 
   const maxStoredQuantity = (field: 'gasPrice' | 'maxFeePerGas' | 'maxPriorityFeePerGas') =>

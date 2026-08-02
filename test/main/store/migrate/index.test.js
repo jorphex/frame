@@ -22,6 +22,11 @@ beforeEach(() => {
   state = createState()
 })
 
+it('rejects malformed migration envelopes before applying a version', () => {
+  expect(() => migrations.apply(null)).toThrow('Before migration: state is not migratable')
+  expect(() => migrations.apply({ main: [] })).toThrow('Before migration: state is not migratable')
+})
+
 describe('migration 13', () => {
   beforeEach(() => {
     state.main._version = 12

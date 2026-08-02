@@ -12,12 +12,14 @@ interface GlobalLatticeSettings {
   derivation: Derivation
 }
 
-interface LatticeSettings extends GlobalLatticeSettings {
+interface PersistedLatticeSettings {
   deviceName: string
   tag: string
   privKey: string
   paired: boolean
 }
+
+interface LatticeSettings extends GlobalLatticeSettings, PersistedLatticeSettings {}
 
 function getLatticeSettings(deviceId: string): LatticeSettings {
   const { baseUrl, derivation, accountLimit } = getGlobalLatticeSettings()
@@ -83,7 +85,7 @@ export default class LatticeAdapter extends SignerAdapter {
     }, 'latticeSettings')
 
     this.signerObserver = store.observer(() => {
-      const devices: { [id: string]: LatticeSettings } = store('main.lattice') || {}
+      const devices: Record<string, PersistedLatticeSettings> = store('main.lattice') || {}
 
       Object.entries(devices).forEach(([deviceId, device]) => {
         if (deviceId in this.knownSigners) return

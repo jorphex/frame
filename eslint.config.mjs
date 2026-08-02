@@ -121,7 +121,7 @@ export default [
           varsIgnorePattern: '^_'
         }
       ],
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-empty-function': ['error', { allow: ['arrowFunctions'] }], // allow noop arrow functions, e.g. in a method signature for ensuring a parameter defaults to a function
       '@typescript-eslint/no-require-imports': 'off', // main process remains CommonJS until its ESM migration
       '@typescript-eslint/prefer-namespace-keyword': 'off', // use ES module syntax instead of namespace

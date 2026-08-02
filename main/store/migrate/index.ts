@@ -1,4 +1,5 @@
 import log from 'electron-log'
+import { z } from 'zod'
 
 import legacyMigrations from './migrations/legacy'
 import migration38 from './migrations/38'
@@ -25,21 +26,41 @@ const latestMigration = migrations[migrations.length - 1]
 if (!latestMigration) throw new Error('No state migrations are registered')
 const latest = latestMigration.version
 
+const MigratableStateSchema = z
+  .object({
+    main: z
+      .object({
+        _version: z.coerce.number().default(0)
+      })
+      .passthrough()
+  })
+  .passthrough()
+
+export type MigratableState = z.infer<typeof MigratableStateSchema>
+
+function parseMigratableState(state: unknown, context: string): MigratableState {
+  const parsed = MigratableStateSchema.safeParse(state)
+  if (parsed.success) return parsed.data
+
+  log.error(`${context}: state is not migratable`, parsed.error.issues)
+  throw new Error(`${context}: state is not migratable`)
+}
+
 export default {
   // Apply migrations to current state
-  apply: (state: any, migrateToVersion = latest) => {
-    state.main._version = state.main._version || 0
+  apply: (state: unknown, migrateToVersion = latest): MigratableState => {
+    let current = parseMigratableState(state, 'Before migration')
 
     migrations.forEach(({ version, migrate }) => {
-      if (state.main._version < version && version <= migrateToVersion) {
+      if (current.main._version < version && version <= migrateToVersion) {
         log.info(`Applying state migration: ${version}`)
 
-        state = migrate(state)
-        state.main._version = version
+        current = parseMigratableState(migrate(current), `After migration ${version}`)
+        current.main._version = version
       }
     })
 
-    return state
+    return current
   },
   latest
 }

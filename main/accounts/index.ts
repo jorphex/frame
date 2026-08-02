@@ -103,7 +103,7 @@ const storeApi = {
     return (store('main.accounts', id) || {}) as Account
   },
   getSigners: function () {
-    return Object.values((store('main.signers') || {}) as Record<string, Signer>)
+    return Object.values(store('main.signers') || {})
   }
 }
 
@@ -643,11 +643,15 @@ export class Accounts extends EventEmitter {
           const gas = store('main.networksMeta', chain.type, chain.id, 'gas')
 
           if (usesBaseFee(tx)) {
-            const { maxBaseFeePerGas, maxPriorityFeePerGas } = gas.price.fees
+            const { maxBaseFeePerGas, maxPriorityFeePerGas } = gas.price.fees || {}
+            if (!maxBaseFeePerGas || !maxPriorityFeePerGas) {
+              throw new Error(`Network ${chain.id} has no EIP-1559 fee estimate`)
+            }
             this.setPriorityFee(maxPriorityFeePerGas, id, false)
             this.setBaseFee(maxBaseFeePerGas, id, false)
           } else {
             const gasPrice = gas.price.levels.fast
+            if (!gasPrice) throw new Error(`Network ${chain.id} has no fast gas-price estimate`)
             this.setGasPrice(gasPrice, id, false)
           }
         } catch (e) {

@@ -78,7 +78,7 @@ const systemTrayEventHandlers: SystemTrayEventHandlers = {
   clickShow: () => app.show()
 }
 const systemTray = new SystemTray(systemTrayEventHandlers)
-const getDisplaySummonShortcut = () => store('main.shortcuts.altSlash')
+const getDisplaySummonShortcut = () => store('main.shortcuts.summon.enabled')
 
 const topRight = (window: BrowserWindow) => {
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea

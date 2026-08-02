@@ -5,11 +5,7 @@ import log from 'electron-log'
 import persist from '../persist'
 import migrations from '../migrate'
 
-import { MainSchema, Main } from './types/main'
-
-import type { Origin } from './types/origin'
-import type { Dapp } from './types/dapp'
-import type { Chain, ChainMetadata } from './types/chain'
+import { MainSchema } from './types/main'
 
 export type { ChainId, Chain, ChainMetadata } from './types/chain'
 export type { Connection } from './types/connection'
@@ -25,26 +21,50 @@ export type { Rate } from './types/rate'
 export type { ColorwayPalette } from './types/colors'
 export type { WalletCallBatch, WalletCallBatches, WalletCallReceipt } from './types/walletCallBatch'
 
-const StateSchema = z.object({
-  main: MainSchema
-})
+const StateSchema = z
+  .object({
+    main: MainSchema.passthrough()
+  })
+  .passthrough()
 
 export type Migration = {
   version: number
-  migrate: (initial: unknown) => any
+  migrate: (initial: unknown) => unknown
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const mergeValidatedState = (source: unknown, validated: unknown): unknown => {
+  if (Array.isArray(source) && Array.isArray(validated)) {
+    return validated.map((value, index) => mergeValidatedState(source[index], value))
+  }
+
+  if (isRecord(source) && isRecord(validated)) {
+    return Object.entries(validated).reduce<Record<string, unknown>>(
+      (merged, [key, value]) => {
+        merged[key] = mergeValidatedState(source[key], value)
+        return merged
+      },
+      { ...source }
+    )
+  }
+
+  return validated
+}
+
+const isValidState = (value: unknown): value is z.infer<typeof StateSchema> =>
+  StateSchema.safeParse(value).success
+
 const latestStateVersion = () => {
-  // TODO: validate state and type it here?
-  // TODO: what does this top-level state object look like?
-  const state = persist.get('main') as any
-  if (!state || !state.__) {
+  const state = persist.get('main')
+  if (!isRecord(state) || !isRecord(state['__'])) {
     // log.info('Persisted state: returning base state')
     return state
   }
 
   // valid states are less than or equal to the latest migration we know about
-  const versions = Object.keys(state.__)
+  const versions = Object.keys(state['__'])
     .filter((v) => parseInt(v) <= migrations.latest)
     .sort((a, b) => parseInt(a) - parseInt(b))
 
@@ -56,47 +76,30 @@ const latestStateVersion = () => {
   const latest = versions[versions.length - 1]
   if (!latest) return state
   // log.info('Persisted state: returning latest state version: ', latest)
-  return state.__[latest].main
+  const entry = state['__'][latest]
+  return isRecord(entry) && isRecord(entry['main']) ? entry['main'] : undefined
 }
 
-const get = (path: string, obj = latestStateVersion()) => {
+const get = (path: string, initial: unknown = latestStateVersion()) => {
+  let value = initial
   path.split('.').some((key) => {
-    if (typeof obj !== 'object') {
-      obj = undefined
+    if (!isRecord(value)) {
+      value = undefined
     } else {
-      obj = obj[key]
+      value = value[key]
     }
-    return obj === undefined // Stop navigating the path if we get to undefined value
+    return value === undefined // Stop navigating the path if we get to undefined value
   })
-  return obj
+  return value
 }
 
-const main = (path: string, def: any) => {
+const main = (path: string, def: unknown) => {
   const found = get(path)
   if (found === undefined) return def
   return found
 }
 
-// TODO: remove pieces of this as they're added to the main state definition
-type M = Main & {
-  shortcuts: any
-  lattice: any
-  latticeSettings: any
-  ledger: any
-  trezor: any
-  addresses: any
-  tokens: any
-  rates: any
-  inventory: any
-  signers: any
-  savedSigners: any
-  ipfs: any
-  frames: any
-  openDapps: any
-  dapp: any
-}
-
-const mainState: M = {
+const mainState = {
   _version: main('_version', 43),
   instanceId: main('instanceId', generateUuid()),
   colorway: main('colorway', 'dark'),
@@ -827,61 +830,53 @@ const initial = {
   main: mainState
 }
 
-// --- remove state that should not persist from session to session
+function clearSessionState(state: z.infer<typeof StateSchema>) {
+  Object.keys(state.main.accounts).forEach((id) => {
+    // Remove permissions granted to unknown origins.
+    const permissions = state.main.permissions[id]
+    if (permissions) delete permissions[uuidv5('Unknown', uuidv5.DNS)]
 
-Object.keys(initial.main.accounts).forEach((id) => {
-  // Remove permissions granted to unknown origins
-  const permissions = initial.main.permissions[id]
-  if (permissions) delete permissions[uuidv5('Unknown', uuidv5.DNS)]
-
-  // remote lastUpdated timestamp from balances
-  // TODO: define account schema more accurately
-  // @ts-expect-error -- Legacy account balances do not match the current persisted-state type.
-  initial.main.accounts[id].balances = { lastUpdated: undefined }
-})
-
-Object.values(initial.main.networks.ethereum as Record<string, Chain>).forEach((chain) => {
-  chain.connection.primary = { ...chain.connection.primary, connected: false }
-  chain.connection.secondary = { ...chain.connection.secondary, connected: false }
-})
-
-Object.values(initial.main.networksMeta).forEach((chains) => {
-  Object.values(chains as Record<string, ChainMetadata>).forEach((chainMeta) => {
-    // remove stale price data
-    chainMeta.nativeCurrency = { ...chainMeta.nativeCurrency, usd: { price: 0, change24hr: 0 } }
+    const account = state.main.accounts[id]
+    if (isRecord(account)) Reflect.set(account, 'balances', { lastUpdated: undefined })
   })
-})
 
-initial.main.origins = Object.entries(initial.main.origins as Record<string, Origin>).reduce(
-  (origins, [id, origin]) => {
-    if (id !== uuidv5('Unknown', uuidv5.DNS)) {
-      // don't persist unknown origin
-      origins[id] = {
-        ...origin,
-        session: {
-          ...origin.session,
-          endedAt: origin.session.lastUpdatedAt
-        }
-      }
+  Object.values(state.main.networks.ethereum).forEach((chain) => {
+    chain.connection.primary = { ...chain.connection.primary, connected: false }
+    chain.connection.secondary = { ...chain.connection.secondary, connected: false }
+  })
+
+  Object.values(state.main.networksMeta.ethereum).forEach((chainMeta) => {
+    chainMeta.nativeCurrency = {
+      ...chainMeta.nativeCurrency,
+      usd: { price: 0, change24hr: 0 }
     }
+  })
 
-    return origins
-  },
-  {} as Record<string, Origin>
-)
+  state.main.origins = Object.fromEntries(
+    Object.entries(state.main.origins)
+      .filter(([id]) => id !== uuidv5('Unknown', uuidv5.DNS))
+      .map(([id, origin]) => [
+        id,
+        {
+          ...origin,
+          session: {
+            ...origin.session,
+            endedAt: origin.session.lastUpdatedAt
+          }
+        }
+      ])
+  )
 
-initial.main.knownExtensions = Object.fromEntries(
-  Object.entries(initial.main.knownExtensions).filter(([_id, allowed]) => allowed)
-)
+  state.main.knownExtensions = Object.fromEntries(
+    Object.entries(state.main.knownExtensions).filter(([_id, allowed]) => allowed)
+  )
 
-initial.main.dapps = Object.fromEntries(
-  Object.entries(initial.main.dapps as Record<string, Dapp>).map(([id, dapp]) => [
-    id,
-    { ...dapp, openWhenReady: false }
-  ])
-)
+  state.main.dapps = Object.fromEntries(
+    Object.entries(state.main.dapps).map(([id, dapp]) => [id, { ...dapp, openWhenReady: false }])
+  )
 
-// ---
+  return state
+}
 
 export default function () {
   const migratedState = migrations.apply(initial)
@@ -890,7 +885,11 @@ export default function () {
   if (!result.success) {
     const issues = result.error.issues
     log.warn(`Found ${issues.length} issues while parsing saved state`, issues)
+    throw new Error('Saved state is invalid after migration')
   }
 
-  return migratedState
+  const validatedState = mergeValidatedState(migratedState, result.data)
+  if (!isValidState(validatedState)) throw new Error('Validated state has an invalid shape')
+
+  return clearSessionState(validatedState)
 }

@@ -349,7 +349,8 @@ app.on('ready', () => {
 })
 
 ipcMain.on('tray:action', (e, action, ...args) => {
-  if (store[action]) return store[action](...args)
+  const storeAction = typeof action === 'string' ? store[action] : undefined
+  if (typeof storeAction === 'function') return storeAction(...args)
   log.info('Tray sent unrecognized action: ', action)
 })
 

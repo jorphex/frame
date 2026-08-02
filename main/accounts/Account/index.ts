@@ -56,6 +56,7 @@ import type { Breadcrumb } from '../../windows/nav/breadcrumb'
 import { RequestStatus } from '../types'
 import type { Permission } from '../../store/state'
 import type { TransactionSimulation, WalletCallsSimulationResult } from '../../transaction/simulation'
+import type Signer from '../../signers/Signer'
 import { parseErc20ApprovalIntent } from '../../../resources/domain/transaction/allowance'
 
 const nebula = nebulaApi()

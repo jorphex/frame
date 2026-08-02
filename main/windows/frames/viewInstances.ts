@@ -22,8 +22,10 @@ const extract = (l: string): Extract => {
 export default {
   // Create a view instance on a frame
   create: (frameInstance: FrameInstance, view: ViewMetadata) => {
-    const frame = store('main.frames', frameInstance.frameId) as Frame | undefined
-    if (!frame) throw new Error(`Frame ${frameInstance.frameId} is unavailable while creating a view`)
+    const { frameId } = frameInstance
+    if (!frameId) throw new Error('Frame instance has no state id')
+    const frame = store('main.frames', frameId)
+    if (!frame) throw new Error(`Frame ${frameId} is unavailable while creating a view`)
 
     const viewInstance = createViewInstance(view.ens)
     const { session } = extract(view.url)
@@ -97,7 +99,7 @@ export default {
       )
 
     viewInstance.webContents.on('did-finish-load', () => {
-      requireStoreAction('updateFrameView')(frameInstance.frameId, view.id, { ready: true })
+      requireStoreAction('updateFrameView')(frameId, view.id, { ready: true })
     })
 
     // Keep reference to view on frame instance
@@ -108,7 +110,7 @@ export default {
     const views = frameInstance.views || {}
     const { frameId } = frameInstance
 
-    const viewMetadata = store('main.frames', frameId, 'views', viewId) as ViewMetadata | undefined
+    const viewMetadata = frameId ? store('main.frames', frameId, 'views', viewId) : undefined
     if (viewMetadata) {
       const { ens, session } = extract(viewMetadata.url)
       server.sessions.remove(ens, session)
@@ -127,7 +129,8 @@ export default {
   },
   position: (frameInstance: FrameInstance, viewId: string) => {
     const { frameId } = frameInstance
-    const frame = store('main.frames', frameId) as Frame | undefined
+    if (!frameId) return
+    const frame = store('main.frames', frameId)
     if (!frame) return
     const fullscreen = !!frame.fullscreen
     const viewInstance = (frameInstance.views || {})[viewId]

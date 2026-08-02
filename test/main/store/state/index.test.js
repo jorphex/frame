@@ -31,7 +31,14 @@ jest.mock('../../../../main/store/persist', () => {
             main: {
               _version: 2,
               instanceId: 'test-brand-new-frame',
-              privacy: { errorReporting: true }
+              privacy: { errorReporting: true },
+              accounts: {
+                '0x000000000000000000000000000000000000dead': {
+                  name: 'Legacy account',
+                  legacyMarker: 'preserved',
+                  balances: { lastUpdated: 123 }
+                }
+              }
             }
           }
         }
@@ -70,6 +77,16 @@ it('does not restore the removed upstream error-reporting preference', async () 
   const { default: state } = await import('../../../../main/store/state')
 
   expect(state().main).not.toHaveProperty('privacy')
+})
+
+it('preserves legacy account fields while clearing session balance timestamps', async () => {
+  mockLatestVersion = 2
+
+  const { default: state } = await import('../../../../main/store/state')
+  const account = state().main.accounts['0x000000000000000000000000000000000000dead']
+
+  expect(account).toMatchObject({ name: 'Legacy account', legacyMarker: 'preserved' })
+  expect(account.balances).toEqual({ lastUpdated: undefined })
 })
 
 it('preserves an older version of the state after creating a newer state entry', async () => {
