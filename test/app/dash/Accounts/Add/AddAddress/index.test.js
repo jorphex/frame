@@ -50,7 +50,7 @@ it('shows an error screen when ENS name resolution fails', async () => {
   await enterText(ensName)
   await clickCreate()
 
-  expect(screen.getByText(`Unable to resolve Ethereum address for ${ensName}`)).toBeTruthy()
+  expect(await screen.findByText(`Unable to resolve Ethereum address for ${ensName}`)).toBeTruthy()
   expect(screen.getByRole('button', { name: 'try again' })).toBeTruthy()
 })
 

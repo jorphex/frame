@@ -14,6 +14,10 @@ beforeEach(() => {
   jest.setSystemTime(startDate)
 })
 
+afterEach(() => {
+  jest.restoreAllMocks()
+})
+
 it('correctly sets the initial countdown time', () => {
   render(<TestComponent end={nextDay.getTime()} />)
   expect(screen.getByRole('timer').textContent).toBe('24h')
@@ -53,14 +57,17 @@ it('uses the correct extension for hours', () => {
 })
 
 it('sets the value correctly when the countdown has been completed', () => {
+  const setIntervalSpy = jest.spyOn(global, 'setInterval')
+  const clearIntervalSpy = jest.spyOn(global, 'clearInterval')
   render(<TestComponent end={nextDay.getTime()} />)
+  const interval = setIntervalSpy.mock.results[0].value
 
   act(() => {
     jest.advanceTimersByTime(1_000 * 60 * 60 * 24)
   })
 
   expect(screen.getByRole('timer').textContent).toBe('EXPIRED')
-  expect(jest.getTimerCount()).toBe(0)
+  expect(clearIntervalSpy).toHaveBeenCalledWith(interval)
 })
 
 it('sets the value to the completed state when a past date in passed in', () => {

@@ -11,9 +11,10 @@ import AddAddress from './AddAddress'
 
 const duration = { appear: 20, enter: 20, exit: 960 }
 
-class Add extends React.Component {
+export class Add extends React.Component {
   constructor(...args) {
     super(...args)
+    this.transitionNode = React.createRef()
     this.particleWorker = new Worker('./particleWorker.js')
   }
 
@@ -39,6 +40,7 @@ class Add extends React.Component {
   render() {
     return (
       <Transition
+        nodeRef={this.transitionNode}
         in={Boolean(this.store('view.addAccount'))}
         timeout={duration}
         onEnter={() => this.start()}
@@ -89,6 +91,7 @@ class Add extends React.Component {
                 </>
               ) : null}
               <div
+                ref={this.transitionNode}
                 className={
                   state !== 'exited' && state !== 'entering'
                     ? 'addAccountInterface addAccountInterfaceActive'
