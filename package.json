@@ -109,7 +109,7 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-is": "18.3.1",
-    "react-restore": "0.6.2",
+    "react-restore": "file:vendor/react-restore",
     "react-transition-group": "4.4.5",
     "rlp": "3.0.0",
     "semver": "7.6.3",
