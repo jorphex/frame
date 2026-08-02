@@ -484,9 +484,9 @@ describe('#signMessage', () => {
         ) {
           return {
             sig: {
-              r: '9af6cb',
-              s: 'abcd04',
-              v: Buffer.from('01', 'hex')
+              r: '0x9af6cb',
+              s: '0xabcd04',
+              v: 28n
             }
           }
         }
@@ -500,7 +500,7 @@ describe('#signMessage', () => {
     lattice.signMessage(4, 'sign this please', (err, res) => {
       try {
         expect(err).toBe(null)
-        expect(res).toBe('0x9af6cbabcd0401')
+        expect(res).toBe('0x9af6cbabcd041c')
         done()
       } catch (e) {
         done(e)
@@ -512,7 +512,21 @@ describe('#signMessage', () => {
     // wrong index, mock function expects 4, not 3
     lattice.signMessage(3, 'sign this please', (err, res) => {
       try {
-        expect(err).toBeTruthy()
+        expect(err.message).toBe('invalid message!')
+        expect(res).toBe(undefined)
+        done()
+      } catch (e) {
+        done(e)
+      }
+    })
+  })
+
+  it('rejects an incomplete signature response', (done) => {
+    lattice.connection.sign.mockResolvedValue({ sig: { r: '0x1', s: '0x2' } })
+
+    lattice.signMessage(4, 'sign this please', (err, res) => {
+      try {
+        expect(err.message).toBe('Lattice returned an incomplete signature')
         expect(res).toBe(undefined)
         done()
       } catch (e) {
@@ -534,9 +548,9 @@ describe('#signTypedData', () => {
         ) {
           return {
             sig: {
-              r: '3ea8cd',
-              s: 'abcd04',
-              v: Buffer.from('01', 'hex')
+              r: '0x3ea8cd',
+              s: '0xabcd04',
+              v: 27n
             }
           }
         }
@@ -550,7 +564,7 @@ describe('#signTypedData', () => {
     lattice.signTypedData(2, { version: SignTypedDataVersion.V4, data: 'typed data' }, (err, res) => {
       try {
         expect(err).toBe(null)
-        expect(res).toBe('0x3ea8cdabcd0401')
+        expect(res).toBe('0x3ea8cdabcd041b')
         done()
       } catch (e) {
         done(e)
@@ -562,7 +576,7 @@ describe('#signTypedData', () => {
     // wrong index, mock function expects 2, not 3
     lattice.signTypedData(3, { version: SignTypedDataVersion.V4, data: 'typed data' }, (err, res) => {
       try {
-        expect(err).toBeTruthy()
+        expect(err.message).toBe('invalid message!')
         expect(res).toBe(undefined)
         done()
       } catch (e) {
@@ -579,9 +593,9 @@ describe('#signTransaction', () => {
 
   const expectedSignature = {
     sig: {
-      r: Buffer.from('3ea8cd', 'hex'),
-      s: Buffer.from('96f7a0', 'hex'),
-      v: Buffer.from('00', 'hex')
+      r: '0x3ea8cd',
+      s: '0x96f7a0',
+      v: 0n
     }
   }
 
@@ -605,7 +619,7 @@ describe('#signTransaction', () => {
         return {
           sig: {
             ...expectedSignature.sig,
-            v: Buffer.from('1b', 'hex')
+            v: 27n
           }
         }
       } catch (e) {

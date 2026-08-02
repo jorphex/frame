@@ -7,6 +7,7 @@ import Lattice from '../../../../main/signers/lattice/Lattice'
 import store from '../../../../main/store'
 
 jest.mock('../../../../main/store')
+jest.mock('gridplus-sdk')
 jest.mock('../../../../main/signers/lattice/Lattice')
 
 let adapter

@@ -1,7 +1,7 @@
 import log from 'electron-log'
 import { encode } from 'rlp'
 import { Client, Utils, Constants } from 'gridplus-sdk'
-import { padToEven, addHexPrefix } from '@ethereumjs/util'
+import { padToEven, addHexPrefix, stripHexPrefix } from '@ethereumjs/util'
 import { TypedTransaction } from '@ethereumjs/tx'
 import { SignTypedDataVersion } from '@metamask/eth-sig-util'
 
@@ -21,10 +21,12 @@ interface DeriveOptions {
   derivation?: Derivation
 }
 
+type SignatureComponent = string | number | bigint | Uint8Array
+
 interface Signature {
-  r: Buffer
-  s: Buffer
-  v: Buffer
+  r: SignatureComponent
+  s: SignatureComponent
+  v?: SignatureComponent
 }
 
 type LatticeResponseError = {
@@ -69,6 +71,38 @@ function getStatusForError(err: Error) {
   }
 
   return Status.UNKNOWN_ERROR
+}
+
+function signatureComponentToHex(component: SignatureComponent) {
+  if (typeof component === 'string') return stripHexPrefix(component)
+  if (typeof component === 'number' || typeof component === 'bigint') return component.toString(16)
+  return Buffer.from(component).toString('hex')
+}
+
+function normalizeSignature(value: unknown) {
+  if (!value || typeof value !== 'object') throw new Error('Lattice returned no signature')
+
+  const { r, s, v } = value as Partial<Signature>
+  if (r === undefined || s === undefined || v === undefined) {
+    throw new Error('Lattice returned an incomplete signature')
+  }
+
+  return {
+    r: signatureComponentToHex(r),
+    s: signatureComponentToHex(s),
+    v: padToEven(signatureComponentToHex(v))
+  }
+}
+
+function getSigningErrorMessage(err: unknown) {
+  if (err && typeof err === 'object') {
+    const { errorMessage, message } = err as Partial<LatticeResponseError & Error>
+
+    if (errorMessage) return errorMessage
+    if (message) return message
+  }
+
+  return 'Unknown Lattice signing error'
 }
 
 export default class Lattice extends Signer {
@@ -268,8 +302,7 @@ export default class Lattice extends Signer {
       return cb(null, signature)
     } catch (err) {
       log.error('failed to sign message with Lattice', err)
-      const latticeErrorMessage = (err as LatticeResponseError).errorMessage
-      return cb(new Error(latticeErrorMessage))
+      return cb(new Error(getSigningErrorMessage(err)))
     }
   }
 
@@ -284,8 +317,7 @@ export default class Lattice extends Signer {
       return cb(null, signature)
     } catch (err) {
       log.error('failed to sign typed data with Lattice', err)
-      const latticeErrorMessage = (err as LatticeResponseError).errorMessage
-      return cb(new Error(latticeErrorMessage))
+      return cb(new Error(getSigningErrorMessage(err)))
     }
   }
 
@@ -300,20 +332,13 @@ export default class Lattice extends Signer {
         const signingOptions = await this.createTransactionSigningOptions(tx, unsignedTx)
 
         const signedTx = await connection.sign(signingOptions)
-        const sig = signedTx?.sig as Signature
-
-        return {
-          v: sig.v.toString('hex'),
-          r: sig.r.toString('hex'),
-          s: sig.s.toString('hex')
-        }
+        return normalizeSignature(signedTx?.sig)
       })
 
       cb(null, addHexPrefix(signedTx.serialize().toString('hex')))
     } catch (err) {
       log.error('error signing transaction with Lattice', err)
-      const latticeErrorMessage = (err as LatticeResponseError).errorMessage
-      return cb(new Error(latticeErrorMessage))
+      return cb(new Error(getSigningErrorMessage(err)))
     }
   }
 
@@ -344,9 +369,9 @@ export default class Lattice extends Signer {
     }
 
     const result = await connection.sign(signOpts)
-    const sig = result?.sig as Signature
+    const sig = normalizeSignature(result?.sig)
 
-    const signature = [sig.r, sig.s, padToEven(sig.v.toString('hex'))].join('')
+    const signature = [sig.r, sig.s, sig.v].join('')
 
     return addHexPrefix(signature)
   }
