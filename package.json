@@ -312,6 +312,7 @@
       "@trezor/connect>@trezor/transport>usb": false,
       "@trezor/connect>@trezor/utxo-lib>blake-hash": false,
       "@trezor/connect>@trezor/utxo-lib>tiny-secp256k1": false,
+      "@ledgerhq/hw-app-eth>@ledgerhq/domain-service>eip55>keccak#3.0.4": false,
       "electron-builder>app-builder-lib>electron-builder-squirrel-windows>electron-winstaller": false,
       "gridplus-sdk>secp256k1": false,
       "jest>@jest/core>jest-resolve>unrs-resolver#1.12.2": false,
