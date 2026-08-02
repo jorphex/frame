@@ -4,7 +4,7 @@ import { z } from 'zod'
 const MAX_CHAIN_ID = Number.MAX_SAFE_INTEGER
 
 const watchAssetSchema = z.object({
-  type: z.string(),
+  type: z.string().max(32),
   options: z.object({
     address: z.string(),
     chainId: z.number().int().positive().max(MAX_CHAIN_ID).optional()
@@ -12,7 +12,7 @@ const watchAssetSchema = z.object({
 })
 
 export interface WatchAssetRequest {
-  type: 'ERC20'
+  type: 'ERC20' | 'ERC1046'
   address: Address
   chainId: number
 }
@@ -26,7 +26,10 @@ export function parseWatchAssetRequest(params: unknown, defaultChainId: number):
   if (!result.success) throw invalidParams(result.error.issues[0]?.message || 'invalid asset request')
 
   const { type, options } = result.data
-  if (type.toUpperCase() !== 'ERC20') throw invalidParams(`unsupported asset type ${type}`)
+  const normalizedType = type.toUpperCase()
+  if (normalizedType !== 'ERC20' && normalizedType !== 'ERC1046') {
+    throw invalidParams(`unsupported asset type ${type}`)
+  }
 
   let address: string
   try {
@@ -40,7 +43,7 @@ export function parseWatchAssetRequest(params: unknown, defaultChainId: number):
   }
 
   return {
-    type: 'ERC20',
+    type: normalizedType,
     address,
     chainId: options.chainId ?? defaultChainId
   }

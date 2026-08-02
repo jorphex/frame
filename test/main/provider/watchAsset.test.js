@@ -16,6 +16,14 @@ it('uses a positive safe numeric asset chain id', () => {
   expect(parseWatchAssetRequest({ type: 'ERC20', options: { address, chainId: 8453 } }, 1).chainId).toBe(8453)
 })
 
+it('normalizes an ERC-1046 request with the same address and chain rules', () => {
+  expect(parseWatchAssetRequest({ type: 'erc1046', options: { address, chainId: 10 } }, 1)).toEqual({
+    type: 'ERC1046',
+    address,
+    chainId: 10
+  })
+})
+
 it.each([
   ['missing params', undefined],
   ['an unsupported type', { type: 'ERC721', options: { address } }],

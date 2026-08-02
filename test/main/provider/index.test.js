@@ -14,6 +14,7 @@ import { toRpcQuantity } from '../../../resources/domain/transaction/quantity'
 import { gweiToHex } from '../../../resources/utils'
 import { Type as SignerType } from '../../../resources/domain/signer'
 import Erc20Contract from '../../../main/contracts/erc20'
+import { resolveErc1046Metadata } from '../../../main/provider/erc1046'
 import walletCallBatchLedger from '../../../main/provider/walletCallLedger'
 import { executeWalletCallRuntime } from '../../../main/provider/walletCallRuntime'
 import walletCallEvidenceRuntime from '../../../main/provider/walletCallEvidenceRuntime'
@@ -32,6 +33,10 @@ jest.mock('../../../main/reveal', () => ({
   resolveEntityType: jest.fn().mockResolvedValue('external')
 }))
 jest.mock('../../../main/contracts/erc20', () => jest.fn())
+jest.mock('../../../main/provider/erc1046', () => ({
+  ...jest.requireActual('../../../main/provider/erc1046'),
+  resolveErc1046Metadata: jest.fn()
+}))
 jest.mock('../../../main/provider/walletCallRuntime', () => ({ executeWalletCallRuntime: jest.fn() }))
 jest.mock('../../../main/provider/walletCallEvidenceRuntime', () => ({
   __esModule: true,
@@ -1360,7 +1365,7 @@ describe('#send', () => {
   })
 
   describe('#wallet_watchAsset', () => {
-    let getTokenData, request
+    let getTokenData, getTokenUri, request
 
     const checksumAddress = '0xBfa641051Ba0a0Ad1b0AcF549a89536A0D76472E'
     const settle = async () => {
@@ -1380,8 +1385,16 @@ describe('#send', () => {
         decimals: 18,
         totalSupply: '21000000000000000000000000'
       })
+      getTokenUri = jest.fn().mockResolvedValue('ipfs://bafy-metadata')
+      resolveErc1046Metadata.mockReset()
+      resolveErc1046Metadata.mockResolvedValue({
+        interop: { erc1046: true },
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18
+      })
       Erc20Contract.mockClear()
-      Erc20Contract.mockImplementation(() => ({ getTokenData }))
+      Erc20Contract.mockImplementation(() => ({ getTokenData, getTokenUri }))
 
       request = {
         id: 10,
@@ -1460,6 +1473,136 @@ describe('#send', () => {
 
       expect(Erc20Contract).toHaveBeenCalledWith(checksumAddress, 5)
       expect(accountRequests[0].token.chainId).toBe(5)
+    })
+
+    it('validates ERC-1046 metadata before acknowledging and prompts only afterward', async () => {
+      request.params.type = 'ERC1046'
+      let resolveMetadata
+      resolveErc1046Metadata.mockImplementation(() => new Promise((resolve) => (resolveMetadata = resolve)))
+
+      const response = new Promise((resolve) =>
+        send(request, (value) => resolve({ value, promptCount: accountRequests.length }))
+      )
+      await settle()
+      expect(resolveMetadata).toBeDefined()
+      expect(accountRequests).toHaveLength(0)
+
+      resolveMetadata({
+        interop: { erc1046: true },
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18
+      })
+
+      await expect(response).resolves.toEqual({
+        value: expect.objectContaining({ result: true }),
+        promptCount: 0
+      })
+      expect(getTokenUri).toHaveBeenCalledTimes(1)
+      expect(resolveErc1046Metadata).toHaveBeenCalledWith('ipfs://bafy-metadata')
+      expect(accountRequests).toHaveLength(1)
+      expect(accountRequests[0].token).toEqual({
+        chainId: 1,
+        address: checksumAddress,
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18,
+        logoURI: ''
+      })
+    })
+
+    it('returns an RPC error when ERC-1046 metadata cannot be verified', async () => {
+      request.params.type = 'ERC1046'
+      resolveErc1046Metadata.mockRejectedValue(new Error('unsupported URI'))
+
+      await expect(sendRequest()).resolves.toMatchObject({
+        error: { code: -32602, message: expect.stringMatching(/ERC-1046 metadata/) }
+      })
+      expect(accountRequests).toHaveLength(0)
+    })
+
+    it('clears failed ERC-1046 validation so a later request can retry', async () => {
+      request.params.type = 'ERC1046'
+      resolveErc1046Metadata.mockRejectedValueOnce(new Error('temporary failure')).mockResolvedValueOnce({
+        interop: { erc1046: true },
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18
+      })
+
+      await expect(sendRequest()).resolves.toMatchObject({ error: { code: -32602 } })
+      await expect(sendRequest({ ...request, id: 11 })).resolves.toMatchObject({ result: true })
+
+      expect(Erc20Contract).toHaveBeenCalledTimes(2)
+      expect(accountRequests).toHaveLength(1)
+    })
+
+    it('coalesces ERC-1046 validation and creates one prompt', async () => {
+      request.params.type = 'ERC1046'
+      let resolveMetadata
+      resolveErc1046Metadata.mockImplementation(() => new Promise((resolve) => (resolveMetadata = resolve)))
+
+      const first = sendRequest()
+      const second = sendRequest({ ...request, id: 11 })
+      await settle()
+
+      expect(Erc20Contract).toHaveBeenCalledTimes(1)
+      resolveMetadata({
+        interop: { erc1046: true },
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18
+      })
+
+      await expect(Promise.all([first, second])).resolves.toEqual([
+        expect.objectContaining({ result: true }),
+        expect.objectContaining({ result: true })
+      ])
+      expect(accountRequests).toHaveLength(1)
+    })
+
+    it('acknowledges valid ERC-1046 metadata but drops a stale account prompt', async () => {
+      request.params.type = 'ERC1046'
+      let resolveMetadata
+      resolveErc1046Metadata.mockImplementation(() => new Promise((resolve) => (resolveMetadata = resolve)))
+
+      const response = sendRequest()
+      await settle()
+      accounts.current.mockReturnValue({ id: '0x3333333333333333333333333333333333333333' })
+      resolveMetadata({
+        interop: { erc1046: true },
+        name: 'BadgerDAO Token',
+        symbol: 'BADGER',
+        decimals: 18
+      })
+
+      await expect(response).resolves.toMatchObject({ result: true })
+      expect(accountRequests).toHaveLength(0)
+    })
+
+    it('does not send a second response when prompt delivery fails after validation', async () => {
+      request.params.type = 'ERC1046'
+      const response = jest.fn()
+      accounts.addRequest.mockImplementationOnce(() => {
+        throw new Error('prompt unavailable')
+      })
+
+      send(request, response)
+      await settle()
+      await settle()
+
+      expect(response).toHaveBeenCalledTimes(1)
+      expect(response).toHaveBeenCalledWith(expect.objectContaining({ result: true }))
+    })
+
+    it('still validates an already listed ERC-1046 token without prompting again', async () => {
+      request.params.type = 'ERC1046'
+      store.set('main.tokens.custom', [{ address: '0xbfa641051ba0a0ad1b0acf549a89536a0d76472e', chainId: 1 }])
+
+      await expect(sendRequest()).resolves.toMatchObject({ result: true })
+
+      expect(getTokenUri).toHaveBeenCalledTimes(1)
+      expect(accountRequests).toHaveLength(0)
     })
 
     it('does not look up or prompt for a token that is already added', async () => {

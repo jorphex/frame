@@ -1,9 +1,11 @@
-import { toNumber } from 'ethers'
+import { Interface, toNumber } from 'ethers'
 import { addHexPrefix } from '@ethereumjs/util'
 import provider from '../provider'
 import { erc20Interface } from '../../resources/contracts'
 
 import type { Result, TransactionDescription } from 'ethers'
+
+const erc1046Interface = new Interface(['function tokenURI() view returns (string)'])
 
 export interface TokenData {
   decimals?: number
@@ -12,11 +14,16 @@ export interface TokenData {
   totalSupply?: string
 }
 
-function callContract(address: Address, chainId: number, fn: string): Promise<Result> {
+function callContract(
+  address: Address,
+  chainId: number,
+  fn: string,
+  contractInterface: Interface = erc20Interface
+): Promise<Result> {
   return new Promise((resolve, reject) => {
     const wrappedPayload = {
       method: 'eth_call',
-      params: [{ to: address, data: erc20Interface.encodeFunctionData(fn) }, 'latest'],
+      params: [{ to: address, data: contractInterface.encodeFunctionData(fn) }, 'latest'],
       id: 1,
       jsonrpc: '2.0',
       _origin: 'frame-internal',
@@ -27,7 +34,7 @@ function callContract(address: Address, chainId: number, fn: string): Promise<Re
       if (error) return reject(error)
       if (typeof response?.result !== 'string') return reject(new Error(`Missing ${fn} contract result`))
       try {
-        resolve(erc20Interface.decodeFunctionResult(fn, response.result))
+        resolve(contractInterface.decodeFunctionResult(fn, response.result))
       } catch (decodeError) {
         reject(decodeError)
       }
@@ -109,5 +116,11 @@ export default class Erc20Contract {
       symbol: calls[2],
       totalSupply: calls[3]
     }
+  }
+
+  async getTokenUri(): Promise<string> {
+    const [tokenUri] = await callContract(this.address, this.chainId, 'tokenURI', erc1046Interface)
+    if (typeof tokenUri !== 'string' || !tokenUri) throw new Error('Missing tokenURI contract result')
+    return tokenUri
   }
 }

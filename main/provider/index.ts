@@ -42,6 +42,7 @@ import {
   requestedAccountPermission
 } from './permissions'
 import Erc20Contract from '../contracts/erc20'
+import { reconcileErc1046TokenData, resolveErc1046Metadata } from './erc1046'
 import { getOriginAccess, requestOriginAccess } from '../api/origins'
 import { parseCallsStatus, parseGetCapabilities, parseSendCalls, parseShowCallsStatus } from './walletCalls'
 import { WalletCallLifecycleController } from './walletCallLifecycle'
@@ -82,6 +83,7 @@ import { parseMessageRequest } from '../signatures/message'
 import { hasAddress } from '../../resources/domain/account'
 import { mapRequest } from '../requests'
 
+import type { TokenData } from '../contracts/erc20'
 import type { Origin, Token } from '../store/state'
 
 const SUPPORTED_TRANSACTION_PARAMS = new Set([
@@ -138,12 +140,35 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 }
 
+function customToken(address: Address, chainId: number, tokenData: TokenData): Token | undefined {
+  const name = tokenData.name.trim()
+  const symbol = tokenData.symbol.trim()
+  const decimals = tokenData.decimals
+
+  if (
+    !name ||
+    name.length > MAX_TOKEN_NAME_LENGTH ||
+    !symbol ||
+    symbol.length > MAX_TOKEN_SYMBOL_LENGTH ||
+    !tokenData.totalSupply ||
+    typeof decimals !== 'number' ||
+    !Number.isInteger(decimals) ||
+    decimals < 0 ||
+    decimals > 255
+  ) {
+    return
+  }
+
+  return { chainId, name, address, symbol, decimals, logoURI: '' }
+}
+
 const getPayloadOrigin = ({ _origin }: RPCRequestPayload) => storeApi.getOrigin(_origin)
 
 export class Provider extends EventEmitter {
   connected = false
   connection = Chains
   private pendingAssetSuggestions = new Set<string>()
+  private pendingErc1046Suggestions = new Map<string, Promise<Token>>()
 
   handlers: Record<string, RPCRequestCallback> = {}
   subscriptions: { [key in SubscriptionType]: Subscription[] } = {
@@ -1301,52 +1326,91 @@ export class Provider extends EventEmitter {
         new Erc20Contract(address, chainId).getTokenData(),
         TOKEN_METADATA_TIMEOUT_MS
       )
-      const name = tokenData.name.trim()
-      const symbol = tokenData.symbol.trim()
-      const decimals = tokenData.decimals
-
-      if (
-        !name ||
-        name.length > MAX_TOKEN_NAME_LENGTH ||
-        !symbol ||
-        symbol.length > MAX_TOKEN_SYMBOL_LENGTH ||
-        !tokenData.totalSupply ||
-        typeof decimals !== 'number' ||
-        !Number.isInteger(decimals) ||
-        decimals < 0 ||
-        decimals > 255
-      ) {
+      const token = customToken(address, chainId, tokenData)
+      if (!token) {
         return log.warn('Could not verify suggested ERC-20 token metadata', { address, chainId })
       }
 
-      if (accounts.current()?.id !== accountId) {
-        return log.info('Ignoring asset suggestion after selected account changed', { address, chainId })
-      }
-
-      const tokenExists = store('main.tokens.custom').some(
-        (token: Token) => token.chainId === chainId && token.address.toLowerCase() === address.toLowerCase()
-      )
-      if (tokenExists) return
-
-      const token: Token = {
-        chainId,
-        name,
-        address,
-        symbol,
-        decimals,
-        logoURI: ''
-      }
-
-      accounts.addRequest({
-        handlerId: uuid(),
-        type: 'addToken',
-        token,
-        account: accountId,
-        origin: payload._origin,
-        payload
-      } as AddTokenRequest)
+      this.queueAddTokenRequest(payload, accountId, token)
     } catch (error) {
       log.warn('Could not verify suggested ERC-20 token', { address, chainId, error })
+    }
+  }
+
+  private queueAddTokenRequest(payload: RPCRequestPayload, accountId: Address, token: Token) {
+    const { address, chainId } = token
+    if (accounts.current()?.id !== accountId) {
+      return log.info('Ignoring asset suggestion after selected account changed', { address, chainId })
+    }
+
+    const tokenExists = store('main.tokens.custom').some(
+      (candidate: Token) =>
+        candidate.chainId === chainId && candidate.address.toLowerCase() === address.toLowerCase()
+    )
+    if (tokenExists) return
+
+    accounts.addRequest({
+      handlerId: uuid(),
+      type: 'addToken',
+      token,
+      account: accountId,
+      origin: payload._origin,
+      payload
+    } as AddTokenRequest)
+  }
+
+  private async loadErc1046Token(address: Address, chainId: number) {
+    const contract = new Erc20Contract(address, chainId)
+    const tokenUri = await contract.getTokenUri()
+    const [metadata, tokenData] = await Promise.all([
+      resolveErc1046Metadata(tokenUri),
+      contract.getTokenData()
+    ])
+    const token = customToken(address, chainId, reconcileErc1046TokenData(metadata, tokenData))
+    if (!token) throw new Error('ERC-1046 token metadata cannot be displayed safely')
+    return token
+  }
+
+  private async validateErc1046Suggestion(
+    payload: RPCRequestPayload,
+    cb: RPCRequestCallback,
+    accountId: Address,
+    address: Address,
+    chainId: number,
+    suggestionKey: string
+  ) {
+    let validation = this.pendingErc1046Suggestions.get(suggestionKey)
+    const ownsValidation = !validation
+    if (!validation) {
+      validation = withTimeout(this.loadErc1046Token(address, chainId), TOKEN_METADATA_TIMEOUT_MS)
+      this.pendingErc1046Suggestions.set(suggestionKey, validation)
+    }
+
+    let token: Token
+    try {
+      token = await validation
+    } catch (error) {
+      log.warn('Could not verify suggested ERC-1046 token', { address, chainId, error })
+      if (ownsValidation && this.pendingErc1046Suggestions.get(suggestionKey) === validation) {
+        this.pendingErc1046Suggestions.delete(suggestionKey)
+      }
+      resError(
+        { code: -32602, message: 'Invalid params: ERC-1046 metadata could not be verified' },
+        payload,
+        cb
+      )
+      return
+    }
+
+    try {
+      cb({ id: payload.id, jsonrpc: '2.0', result: true })
+      if (ownsValidation) this.queueAddTokenRequest(payload, accountId, token)
+    } catch (error) {
+      log.error('Could not deliver validated ERC-1046 suggestion', { address, chainId, error })
+    } finally {
+      if (ownsValidation && this.pendingErc1046Suggestions.get(suggestionKey) === validation) {
+        this.pendingErc1046Suggestions.delete(suggestionKey)
+      }
     }
   }
 
@@ -1374,11 +1438,22 @@ export class Provider extends EventEmitter {
           token.chainId === request.chainId && token.address.toLowerCase() === request.address.toLowerCase()
       )
 
-      cb({ id: payload.id, jsonrpc: '2.0', result: true })
-
       const suggestionKey = `${currentAccount.id.toLowerCase()}:${
         request.chainId
       }:${request.address.toLowerCase()}`
+      if (request.type === 'ERC1046') {
+        void this.validateErc1046Suggestion(
+          payload,
+          cb,
+          currentAccount.id,
+          request.address,
+          request.chainId,
+          suggestionKey
+        )
+        return
+      }
+
+      cb({ id: payload.id, jsonrpc: '2.0', result: true })
       if (!tokenExists && !this.pendingAssetSuggestions.has(suggestionKey)) {
         this.pendingAssetSuggestions.add(suggestionKey)
         void this.queueCustomTokenRequest(

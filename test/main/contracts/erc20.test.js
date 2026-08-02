@@ -1,4 +1,6 @@
 import provider from '../../../main/provider'
+import { Interface } from 'ethers'
+
 import Erc20Contract from '../../../main/contracts/erc20'
 import { erc20Interface } from '../../../resources/contracts'
 
@@ -48,4 +50,29 @@ it('does not represent a failed decimals call as zero', async () => {
   expect(token.decimals).toBeUndefined()
   expect(token).not.toHaveProperty('decimals')
   expect(token.name).toBe('Zero Token')
+})
+
+it('reads and decodes an ERC-1046 tokenURI on the selected chain', async () => {
+  const tokenUriInterface = new Interface(['function tokenURI() view returns (string)'])
+  provider.sendAsync.mockImplementation((payload, callback) => {
+    callback(null, {
+      result: tokenUriInterface.encodeFunctionResult('tokenURI', ['ipfs://bafy-metadata'])
+    })
+  })
+
+  await expect(new Erc20Contract(address, 10).getTokenUri()).resolves.toBe('ipfs://bafy-metadata')
+  expect(provider.sendAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      method: 'eth_call',
+      chainId: '0xa',
+      params: [
+        expect.objectContaining({
+          to: address,
+          data: tokenUriInterface.encodeFunctionData('tokenURI')
+        }),
+        'latest'
+      ]
+    }),
+    expect.any(Function)
+  )
 })
