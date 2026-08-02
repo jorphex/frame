@@ -96,6 +96,10 @@ same authorized socket. HTTP clients use Frame's non-standard
   startup recovery; a new connection may require a new approval.
 - Origin permission is not proof of local process identity. A malicious process
   running as the same OS user can assert browser-like origin metadata.
+- A recognized browser companion requires explicit user approval before Frame
+  accepts its proxied dapp origins. The current WebSocket protocol does not
+  cryptographically authenticate the extension, so this approval limits silent
+  impersonation but does not establish process identity.
 
 The companion browser extension is a separate project. Browser-wide provider
 injection and EIP-6963 discovery are outside this desktop repository's

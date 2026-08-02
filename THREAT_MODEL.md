@@ -47,8 +47,12 @@ separate recognition logic. The current model does not fully isolate permissions
 by authenticated process identity, account, chain, method, or expiry. Request
 bodies, HTTP connections, WebSocket clients, and request rates have explicit
 ceilings. Header and request-body receive times are bounded; HTTP subscription
-polls complete within 15 seconds. These availability and connection-isolation
-controls do not authenticate callers or make asserted origins trustworthy.
+polls complete within 15 seconds. A recognized companion must be explicitly
+approved before it can proxy dapp origins, including the published Chrome
+extension. Extension protocol, ID, and query metadata remain caller assertions,
+so approval is not cryptographic companion authentication. These availability,
+approval, and connection-isolation controls do not authenticate callers or make
+asserted origins trustworthy.
 
 The operating system account is therefore a major trust boundary. Frame is not
 expected to protect wallet data from malware, debuggers, or an administrator that

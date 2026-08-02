@@ -224,7 +224,7 @@ export function parseFrameExtension(req: IncomingMessage): FrameExtension | unde
   const query = queryString.parse((req.url || '').replace('/', ''))
   const hasExtensionIdentity = query['identity'] === 'frame-extension'
 
-  if (origin === 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf') {
+  if (origin === 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf' && hasExtensionIdentity) {
     // Match production chrome
     return { browser: 'chrome', id: 'ldcoohedfbjoobcadoglnnmmfbdlmmhf' }
   } else if (origin.startsWith(`${extensionPrefixes.chrome}://`) && dev && hasExtensionIdentity) {
@@ -244,8 +244,6 @@ export function parseFrameExtension(req: IncomingMessage): FrameExtension | unde
 }
 
 export async function isKnownExtension(extension: FrameExtension) {
-  if (extension.browser === 'chrome' || extension.browser === 'safari') return true
-
   const extensionPermission = storeApi.getKnownExtension(extension.id)
 
   return extensionPermission ?? requestExtensionPermission(extension)

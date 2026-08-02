@@ -190,12 +190,19 @@ describe('#updateOrigin', () => {
 describe('#parseFrameExtension', () => {
   it('correctly identifies the Chrome extension', () => {
     const origin = 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf'
-    const req = { headers: { origin } }
+    const req = { headers: { origin }, url: '/?identity=frame-extension' }
 
     expect(parseFrameExtension(req)).toStrictEqual({
       browser: 'chrome',
       id: 'ldcoohedfbjoobcadoglnnmmfbdlmmhf'
     })
+  })
+
+  it('does not recognize the Chrome extension without the identity query parameter', () => {
+    const origin = 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf'
+    const req = { headers: { origin }, url: '/' }
+
+    expect(parseFrameExtension(req)).toBeUndefined()
   })
 
   it('does not recognize a Chrome extension with the wrong id', () => {
@@ -272,14 +279,20 @@ describe('#isKnownExtension', () => {
     store.notify = jest.fn()
   })
 
-  it('always knows the single Chrome extension', async () => {
+  it('prompts the user to trust the Chrome extension', () => {
     const extension = { browser: 'chrome', id: 'ldcoohedfbjoobcadoglnnmmfbdlmmhf' }
-    return expect(isKnownExtension(extension)).resolves.toBe(true)
+
+    isKnownExtension(extension)
+
+    expect(store.notify).toHaveBeenCalledWith('extensionConnect', extension)
   })
 
-  it('always knows the single Safari extension', async () => {
+  it('prompts the user to trust a Safari extension', () => {
     const extension = { browser: 'safari', id: 'test-frame' }
-    return expect(isKnownExtension(extension)).resolves.toBe(true)
+
+    isKnownExtension(extension)
+
+    expect(store.notify).toHaveBeenCalledWith('extensionConnect', extension)
   })
 
   it('knows a previously trusted Firefox extension', async () => {

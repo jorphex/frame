@@ -60,6 +60,7 @@ const ConfirmButton = styled.div`
 const ExtensionConnectNotification = ({ id, browser, onClose }) => {
   const respond = (accepted) => link.rpc('respondToExtensionRequest', id, accepted, onClose)
   const browserName = capitalize(browser)
+  const browserIcon = svg[browser] || svg.chrome
   const [copyId, setCopyId] = useState(false)
 
   return (
@@ -68,7 +69,7 @@ const ExtensionConnectNotification = ({ id, browser, onClose }) => {
         <div className='notifyBoxSlide'>
           <ClusterBox>
             <NotifyTop>
-              <div style={{ color: 'var(--moon)' }}>{svg.firefox(40)}</div>
+              <div style={{ color: 'var(--moon)' }}>{browserIcon(40)}</div>
             </NotifyTop>
             <Cluster>
               <ClusterRow>

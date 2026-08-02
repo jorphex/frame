@@ -12,7 +12,8 @@ let socketConnection, mockSocket
 const extensionRequest = {
   headers: {
     origin: 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf'
-  }
+  },
+  url: '/?identity=frame-extension'
 }
 
 jest.mock('ws')
@@ -23,6 +24,7 @@ jest.mock('../../../main/windows', () => {})
 
 beforeEach(() => {
   store.initOrigin = jest.fn()
+  store.set('main.knownExtensions', { ldcoohedfbjoobcadoglnnmmfbdlmmhf: true })
   accounts.getSelectedAddresses.mockReturnValue([])
 
   socketConnection = new EventEmitter()
