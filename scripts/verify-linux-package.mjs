@@ -61,6 +61,7 @@ const ledgerVersions = Object.fromEntries(
 )
 const { SiweMessage } = require(path.join(appModules, 'siwe'))
 const ethers = require(path.join(appModules, 'ethers'))
+const sigUtil = require(path.join(appModules, '@metamask/eth-sig-util'))
 const siwe = new SiweMessage(\`example.com wants you to sign in with your Ethereum account:
 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
@@ -70,6 +71,39 @@ Version: 1
 Chain ID: 1
 Nonce: 32891756
 Issued At: 2021-09-30T16:25:24Z\`)
+const signaturePrivateKey = Buffer.from('46'.repeat(32), 'hex')
+const signatureAddress = '0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f'
+const signatureData = {
+  types: {
+    EIP712Domain: [
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+      { name: 'verifyingContract', type: 'address' }
+    ],
+    Mail: [
+      { name: 'recipient', type: 'address' },
+      { name: 'contents', type: 'string' }
+    ]
+  },
+  primaryType: 'Mail',
+  domain: { name: 'Frame', version: '1', chainId: 1, verifyingContract: signatureAddress },
+  message: { recipient: signatureAddress, contents: 'hello' }
+}
+const signature = sigUtil.signTypedData({
+  privateKey: signaturePrivateKey,
+  data: signatureData,
+  version: sigUtil.SignTypedDataVersion.V4
+})
+const signatureHash = sigUtil.TypedDataUtils.eip712Hash(
+  signatureData,
+  sigUtil.SignTypedDataVersion.V4
+).toString('hex')
+const recoveredSignatureAddress = sigUtil.recoverTypedSignature({
+  data: signatureData,
+  signature,
+  version: sigUtil.SignTypedDataVersion.V4
+})
 const modernModules = require(path.join(appRoot, 'compiled/main/nebula/modules.js'))
 const signerCrypto = require(path.join(appRoot, 'compiled/main/signers/hot/crypto.js'))
 const { Wallet } = require(path.join(appModules, '@ethereumjs/wallet'))
@@ -95,6 +129,10 @@ Promise.all([modernModules.loadKuboModule(), modernModules.loadUnixFsModule()])
     siweDomain: siwe.domain,
     ethersVersion: ethers.version,
     ethersBrowserProvider: typeof ethers.BrowserProvider,
+    signatureVersion: require(path.join(appModules, '@metamask/eth-sig-util/package.json')).version,
+    signature,
+    signatureHash,
+    recoveredSignatureAddress,
     walletAddress,
     signerEncryptionVersion: encryptedSignerSecret.version,
     signerSecretRoundTrip: decryptedSignerSecret.plaintext === signerSecret,
@@ -130,6 +168,13 @@ assert.deepEqual(probeResult.ledgerVersions, {
 assert.equal(probeResult.siweDomain, 'example.com')
 assert.equal(probeResult.ethersVersion, packageJson.dependencies.ethers)
 assert.equal(probeResult.ethersBrowserProvider, 'function')
+assert.equal(probeResult.signatureVersion, packageJson.dependencies['@metamask/eth-sig-util'])
+assert.equal(probeResult.signatureHash, 'd07e8b0969c3d3ba7934bcf9134d586ce1c14c96c4396824a3c6b0137c1e4943')
+assert.equal(
+  probeResult.signature,
+  '0xd5a81e21c610fc88fa3acf615af9881b4b23c52ff4c6a4094b6cfb4af09dde5e35a4e4d8d365477faea588b3fdc54ea3792b14c607f1d69a39e5c6ca8e2d5e2a1c'
+)
+assert.equal(probeResult.recoveredSignatureAddress, '0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f')
 assert.equal(probeResult.walletAddress, '0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f')
 assert.equal(probeResult.signerEncryptionVersion, 2)
 assert.equal(probeResult.signerSecretRoundTrip, true)
@@ -157,5 +202,5 @@ console.log(
     probeResult.abi
   } hardware-wallet native, Ledger ${
     probeResult.ledgerVersions['@ledgerhq/hw-app-eth']
-  }, SIWE, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
+  }, SIWE, EIP-712, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )
