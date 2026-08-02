@@ -59,7 +59,7 @@ function invalidParams(message: string) {
 
 function parseSchema<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value)
-  if (!result.success) throw invalidParams(result.error.issues[0].message)
+  if (!result.success) throw invalidParams(result.error.issues[0]?.message || 'invalid request')
   return result.data
 }
 

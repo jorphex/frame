@@ -5,6 +5,7 @@ import type { DeviceUniquePath, Device as TrezorDevice } from '@trezor/connect'
 import { SignerAdapter } from '../adapters'
 import Trezor, { Status } from './Trezor'
 import store from '../../store'
+import { requireStoreAction } from '../../store/action'
 import TrezorBridge from './bridge'
 
 interface KnownSigners {
@@ -107,7 +108,8 @@ export default class TrezorSignerAdapter extends SignerAdapter {
 
     TrezorBridge.on('trezor:enteringPhrase', (deviceId: string) => {
       log.verbose(`Trezor ${deviceId} waiting for passphrase entry on device`)
-      const signer = this.knownSigners[deviceId].signer
+      const signer = this.knownSigners[deviceId]?.signer
+      if (!signer) return
 
       // const currentStatus = signer.status
 
@@ -199,7 +201,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
     this.emit('add', trezor)
 
     // Show signer in dash window
-    store.navReplace('dash', [
+    requireStoreAction('navReplace')('dash', [
       {
         view: 'expandedSigner',
         data: { signer: trezor.id }
@@ -281,13 +283,17 @@ export default class TrezorSignerAdapter extends SignerAdapter {
   }
 
   private addEventHandler(signer: Trezor, event: string, handler: (device: TrezorDevice) => void) {
-    this.knownSigners[signer.id].eventHandlers[event] = handler
+    const signerInfo = this.knownSigners[signer.id]
+    if (!signerInfo) throw new Error(`Trezor ${signer.id} is not registered`)
+    signerInfo.eventHandlers[event] = handler
   }
 
   private handleEvent(signerId: string, event: string, ...args: any) {
-    const action = this.knownSigners[signerId]?.eventHandlers[event] || (() => {})
+    const signerInfo = this.knownSigners[signerId]
+    if (!signerInfo) return
+    const action = signerInfo.eventHandlers[event] || (() => {})
 
-    delete this.knownSigners[signerId].eventHandlers[event]
+    delete signerInfo.eventHandlers[event]
 
     action(args)
   }

@@ -7,6 +7,7 @@ import { recoverTypedSignature, SignTypedDataVersion } from '@metamask/eth-sig-u
 import { addHexPrefix, intToHex } from '@ethereumjs/util'
 
 import store from '../store'
+import { requireStoreAction } from '../store/action'
 import packageFile from '../../package.json'
 
 import proxyConnection from './proxy'
@@ -789,6 +790,9 @@ export class Provider extends EventEmitter {
   sendTransaction(payload: RPC.SendTransaction.Request, res: RPCRequestCallback, targetChain: Chain) {
     try {
       const txParams = payload.params[0]
+      if (!txParams) {
+        return resError({ message: 'Transaction params are required', code: -32602 }, payload, res)
+      }
       const payloadChain = payload.chainId
       const transactionType = (txParams as { type?: unknown } | undefined)?.type
       const parsedTransactionType =
@@ -823,8 +827,7 @@ export class Provider extends EventEmitter {
           res
         )
       }
-      const unsupportedParam =
-        txParams && Object.keys(txParams).find((key) => !SUPPORTED_TRANSACTION_PARAMS.has(key))
+      const unsupportedParam = Object.keys(txParams).find((key) => !SUPPORTED_TRANSACTION_PARAMS.has(key))
       if (unsupportedParam) {
         return resError(
           { message: `Transaction parameter '${unsupportedParam}' is not supported`, code: -32602 },
@@ -1205,7 +1208,15 @@ export class Provider extends EventEmitter {
     }
 
     accounts.rejectUnapprovedRequestsForOriginChain(request.origin, request.sourceChainId, request.handlerId)
-    store.switchOriginChain(request.origin, request.chain.id, request.chain.type)
+    let switchOriginChain: ReturnType<typeof requireStoreAction>
+    try {
+      switchOriginChain = requireStoreAction('switchOriginChain')
+    } catch {
+      const error = { code: -32603, message: 'Store action switchOriginChain is unavailable' }
+      currentAccount.rejectRequest(request, error)
+      return cb(new Error(error.message))
+    }
+    switchOriginChain(request.origin, request.chain.id, request.chain.type)
     currentAccount.resolveRequest(request, null)
     cb(null)
   }
@@ -1357,12 +1368,12 @@ export class Provider extends EventEmitter {
     }
   }
 
-  private parseTargetChain(payload: RPCRequestPayload): Chain {
+  private parseTargetChain(payload: RPCRequestPayload): Chain | undefined {
     if ('chainId' in payload) {
       const chainId = parseInt(payload.chainId || '', 16)
-      const chainConnection = this.connection.connections['ethereum'][chainId] || {}
+      const chainConnection = this.connection.connections.ethereum[chainId]
 
-      return chainConnection.chainConfig && { type: 'ethereum', id: chainId }
+      return chainConnection?.chainConfig ? { type: 'ethereum', id: chainId } : undefined
     }
 
     return getPayloadOrigin(payload).chain
@@ -1417,7 +1428,7 @@ export class Provider extends EventEmitter {
 
   private getAssets(
     payload: RPC.GetAssets.Request,
-    currentAccount: FrameAccount | null,
+    currentAccount: FrameAccount | null | undefined,
     cb: RPCCallback<RPC.GetAssets.Response>
   ) {
     if (!currentAccount) return resError('no account selected', payload, cb)

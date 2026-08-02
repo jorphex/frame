@@ -2,6 +2,7 @@ import log from 'electron-log'
 
 import { SignerAdapter } from '../adapters'
 import store from '../../store'
+import { requireStoreAction } from '../../store/action'
 import Lattice from './Lattice'
 import { Derivation } from '../Signer/derive'
 
@@ -99,7 +100,7 @@ export default class LatticeAdapter extends SignerAdapter {
         lattice.on('update', emitUpdate)
 
         lattice.on('connect', (paired: boolean) => {
-          store.updateLattice(deviceId, { paired })
+          requireStoreAction('updateLattice')(deviceId, { paired })
 
           if (paired) {
             // Lattice recognizes the private key and remembers if this
@@ -111,7 +112,7 @@ export default class LatticeAdapter extends SignerAdapter {
         })
 
         lattice.on('paired', (hasActiveWallet: boolean) => {
-          store.updateLattice(deviceId, { paired: true })
+          requireStoreAction('updateLattice')(deviceId, { paired: true })
 
           if (hasActiveWallet) {
             const { derivation } = getLatticeSettings(deviceId)
@@ -121,7 +122,7 @@ export default class LatticeAdapter extends SignerAdapter {
 
         lattice.on('error', () => {
           if (lattice.connection && !lattice.connection.isPaired) {
-            store.updateLattice(deviceId, { paired: false })
+            requireStoreAction('updateLattice')(deviceId, { paired: false })
           }
 
           lattice.disconnect()
@@ -142,7 +143,7 @@ export default class LatticeAdapter extends SignerAdapter {
           // don't attempt to automatically connect if the Lattice isn't
           // paired as this could happen without the user noticing
           lattice.connect(baseUrl, privKey).catch(() => {
-            store.updateLattice(deviceId, { paired: false })
+            requireStoreAction('updateLattice')(deviceId, { paired: false })
           })
         }
       })
@@ -166,7 +167,7 @@ export default class LatticeAdapter extends SignerAdapter {
   override remove(lattice: Lattice) {
     log.info(`removing Lattice ${lattice.deviceId}`)
 
-    store.removeLattice(lattice.deviceId)
+    requireStoreAction('removeLattice')(lattice.deviceId)
 
     if (lattice.deviceId in this.knownSigners) {
       lattice.close()

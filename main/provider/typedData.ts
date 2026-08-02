@@ -75,7 +75,9 @@ function containsRecursiveTypes(types: TypeDefinitions, roots: string[]) {
     if (visited.has(type) || !hasOwn(types, type)) return false
 
     active.add(type)
-    const recursive = types[type].some(({ type: fieldType }) => visit(referencedType(fieldType)))
+    const fields = types[type]
+    if (!fields) return false
+    const recursive = fields.some(({ type: fieldType }) => visit(referencedType(fieldType)))
     active.delete(type)
     visited.add(type)
     return recursive

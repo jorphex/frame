@@ -1935,6 +1935,16 @@ describe('#send', () => {
       })
     })
 
+    it('rejects a request without transaction params', (done) => {
+      tx = undefined
+
+      sendTransaction((response) => {
+        expect(response.result).toBeUndefined()
+        expect(response.error).toMatchObject({ code: -32602, message: 'Transaction params are required' })
+        done()
+      })
+    })
+
     it('rejects a transaction with a mismatched chain id', (done) => {
       sendTransaction((response) => {
         try {

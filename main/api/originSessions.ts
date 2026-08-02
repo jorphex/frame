@@ -1,4 +1,4 @@
-import store from '../store'
+import { requireStoreAction } from '../store/action'
 
 export const ORIGIN_SESSION_TIMEOUT_MS = 60 * 1000
 
@@ -30,4 +30,6 @@ export class OriginSessionMonitor {
   }
 }
 
-export default new OriginSessionMonitor((originId) => store.endOriginSession(originId))
+export default new OriginSessionMonitor((originId) => {
+  requireStoreAction('endOriginSession')(originId)
+})

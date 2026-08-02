@@ -4,6 +4,7 @@ import queryString from 'query-string'
 
 import accounts, { AccessRequest } from '../accounts'
 import store from '../store'
+import { requireStoreAction } from '../store/action'
 
 import type { Permission } from '../store/state'
 
@@ -89,7 +90,7 @@ async function requestExtensionPermission(extension: FrameExtension) {
   })
 
   activeExtensionChecks[extension.id] = result
-  store.notify('extensionConnect', extension)
+  requireStoreAction('notify')('extensionConnect', extension)
 
   return result
 }
@@ -172,9 +173,9 @@ export function updateOrigin(
     // the user visits in their browser
 
     if (existingOrigin) {
-      store.addOriginRequest(originId)
+      requireStoreAction('addOriginRequest')(originId)
     } else {
-      store.initOrigin(originId, {
+      requireStoreAction('initOrigin')(originId, {
         name: origin,
         chain: {
           id: 1,

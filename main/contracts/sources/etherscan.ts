@@ -77,6 +77,7 @@ export async function fetchEtherscanContract(
     // etherscan compatible
     if (result?.length) {
       const source = result[0]
+      if (!source) return
       const implementation = source.Implementation
 
       if (implementation && implementation !== contractAddress) {

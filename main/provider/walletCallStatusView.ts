@@ -1,4 +1,4 @@
-import store from '../store'
+import { requireStoreAction } from '../store/action'
 import windows from '../windows'
 import type { WalletCallStatusViewData } from '../windows/nav/breadcrumb'
 import type { WalletCallsStatus } from './walletCallBatches'
@@ -37,6 +37,6 @@ export function createWalletCallStatusViewData({
 
 export function showWalletCallStatus(input: ShowWalletCallStatusInput) {
   const data = createWalletCallStatusViewData(input)
-  store.showWalletCallsStatus(data.accountId, data)
+  requireStoreAction('showWalletCallsStatus')(data.accountId, data)
   windows.showTray()
 }

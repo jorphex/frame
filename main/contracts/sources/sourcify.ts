@@ -67,8 +67,9 @@ async function fetchSourceCode(
     const res = await fetchWithTimeout(endpointUrl, {}, 4000)
     const parsedResponse = await parseResponse<SourcifySourceCodeResponse>(res)
 
-    return parsedResponse && ['partial', 'full'].includes(parsedResponse.status)
-      ? JSON.parse(parsedResponse.files[0].content)
+    const metadataFile = parsedResponse?.files[0]
+    return parsedResponse && ['partial', 'full'].includes(parsedResponse.status) && metadataFile
+      ? JSON.parse(metadataFile.content)
       : Promise.reject(`Contract ${contractAddress} not found in Sourcify`)
   } catch (e) {
     log.warn(

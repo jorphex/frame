@@ -88,13 +88,15 @@ export default class GasMonitor {
     }
     if (
       rewardPercentiles.length === 0 ||
-      rewardPercentiles.some(
-        (percentile, index) =>
+      rewardPercentiles.some((percentile, index) => {
+        const previousPercentile = rewardPercentiles[index - 1]
+        return (
           !Number.isFinite(percentile) ||
           percentile < 0 ||
           percentile > 100 ||
-          (index > 0 && percentile <= rewardPercentiles[index - 1])
-      )
+          (index > 0 && (previousPercentile === undefined || percentile <= previousPercentile))
+        )
+      })
     ) {
       throw new Error('Invalid eth_feeHistory reward percentiles')
     }

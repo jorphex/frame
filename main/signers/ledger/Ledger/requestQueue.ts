@@ -21,7 +21,7 @@ export class RequestQueue {
 
   pollRequest() {
     // each request must return a promise
-    const request = this.requestQueue.length === 0 ? noRequest : this.requestQueue.splice(0, 1)[0]
+    const request = this.requestQueue.shift() || noRequest
 
     request
       .execute()

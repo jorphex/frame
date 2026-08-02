@@ -41,6 +41,7 @@ const derivationPaths: { [key: string]: string } = {
 
 export function getDerivationPath(derivation: Derivation, index = -1) {
   const path = derivationPaths[derivation.valueOf()]
+  if (!path) throw new Error(`Unsupported derivation path: ${derivation}`)
 
   return path.replace('<index>', (index > -1 ? index : '').toString())
 }

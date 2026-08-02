@@ -181,12 +181,13 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
   socket.on('error', (err) => log.error(err))
   socket.on('close', () => {
     Object.keys(subs).forEach((sub) => {
-      if (subs[sub].socket.id === socket.id) {
+      const subscription = subs[sub]
+      if (subscription?.socket.id === socket.id) {
         provider.send({
           jsonrpc: '2.0',
           id: 1,
           method: 'eth_unsubscribe',
-          _origin: subs[sub].originId,
+          _origin: subscription.originId,
           params: [sub]
         })
         delete subs[sub]

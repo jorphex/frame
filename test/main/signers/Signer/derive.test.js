@@ -98,4 +98,8 @@ describe('#getDerivationPath', () => {
 
     expect(path).toBe("44'/60'/0'/0/0")
   })
+
+  it('rejects an unsupported derivation path', () => {
+    expect(() => getDerivationPath('unsupported')).toThrow(/unsupported derivation path/i)
+  })
 })

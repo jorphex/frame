@@ -134,7 +134,9 @@ export default class Ledger extends Signer {
       await this.checkDeviceStatus()
 
       if (this.isReady()) {
-        const [major, minor, patch] = (config.version || '1.6.1').split('.').map((n) => parseInt(n))
+        const [major = 0, minor = 0, patch = 0] = (config.version || '1.6.1')
+          .split('.')
+          .map((n) => parseInt(n))
         const version = { major, minor, patch }
 
         this.appVersion = version

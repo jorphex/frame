@@ -53,7 +53,9 @@ export default class Signer extends EventEmitter {
   }
 
   getCoinbase(cb: Callback<string>) {
-    cb(null, this.addresses[0].toString())
+    const address = this.addresses[0]
+    if (!address) return cb(new Error('Signer has no derived addresses'), undefined)
+    cb(null, address.toString())
   }
 
   verifyAddress(index: number, current: string, display: boolean, cb: Callback<boolean>) {

@@ -200,6 +200,7 @@ export function snapshotPreparedWalletCallExecutionInput(
     }
     const transaction = snapshotTransaction(prepared.transaction, input)
     const call = calls[index]
+    if (!call) throw new Error('Prepared wallet call has no matching request call')
     const nonce = parseRpcQuantity(transaction.nonce) as bigint
     const gasLimit = parseRpcQuantity(transaction.gasLimit) as bigint
     const feePerGas = parseRpcQuantity(
@@ -287,7 +288,9 @@ export async function executePreparedWalletCallBatch(
     {
       ledger,
       signCall: async (_call, index) => {
-        const transaction = snapshot.preparation.calls[index].transaction
+        const preparedCall = snapshot.preparation.calls[index]
+        if (!preparedCall) throw new Error('Prepared wallet call is missing during execution')
+        const transaction = preparedCall.transaction
         const signed = await signTransaction(transaction, index)
         return verifySignedTransaction(signed?.rawTransaction, transaction)
       },

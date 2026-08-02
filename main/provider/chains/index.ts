@@ -58,6 +58,7 @@ function createOriginChainObserver(handler: ChainChangedHandler & NetworkChanged
 
     for (const originId in currentOrigins) {
       const currentOrigin = currentOrigins[originId]
+      if (!currentOrigin) continue
       const knownOrigin = knownOrigins[originId]
 
       if (knownOrigin && knownOrigin.chain.id !== currentOrigin.chain.id) {
@@ -80,7 +81,9 @@ function getActiveChains(): RPC.GetEthereumChains.Chain[] {
     .sort((a, b) => a.id - b.id)
     .map((chain) => {
       const { id, explorer, name } = chain
-      const { nativeCurrency, primaryColor } = meta[id]
+      const chainMetadata = meta[id]
+      if (!chainMetadata) throw new Error(`Missing metadata for active chain ${id}`)
+      const { nativeCurrency, primaryColor } = chainMetadata
       const { icon: currencyIcon, name: currencyName, symbol, decimals } = nativeCurrency
 
       const icons = currencyIcon ? [{ url: currencyIcon }] : []

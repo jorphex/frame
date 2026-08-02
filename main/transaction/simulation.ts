@@ -104,7 +104,7 @@ export function parseDelegationIndicator(value: unknown) {
   if (typeof value !== 'string') return
 
   const match = EIP_7702_DELEGATION.exec(value)
-  return match ? `0x${match[1].toLowerCase()}` : undefined
+  return match?.[1] ? `0x${match[1].toLowerCase()}` : undefined
 }
 
 function parseGasUsed(value: unknown) {
@@ -492,6 +492,15 @@ export async function simulateWalletCalls(
       ? Math.min(configuredTimeout, DEFAULT_TIMEOUT_MS)
       : DEFAULT_TIMEOUT_MS
   const targetChain: Chain = { type: 'ethereum', id: Number(chainId) }
+  const firstTransaction = transactions[0]
+  if (!firstTransaction) {
+    return {
+      status: 'failed',
+      source: 'eth_simulateV1',
+      calls: [],
+      reason: 'Wallet call simulation requires between 1 and 16 calls'
+    }
+  }
   const payload: JSONRPCRequestPayload = {
     id: 1,
     jsonrpc: '2.0',
@@ -507,7 +516,7 @@ export async function simulateWalletCalls(
 
   const [outcome, firstAllowance, delegation] = await Promise.all([
     requestRpc(dependencies.send, payload, targetChain, timeoutMs),
-    readTokenAllowance(transactions[0], dependencies.send, targetChain, timeoutMs),
+    readTokenAllowance(firstTransaction, dependencies.send, targetChain, timeoutMs),
     readAccountDelegation(sender, dependencies.send, targetChain, timeoutMs)
   ])
   const withDelegation = (result: Omit<WalletCallsSimulationResult, 'delegation'>) => ({

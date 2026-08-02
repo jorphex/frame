@@ -52,9 +52,8 @@ export interface SignerCompatibility {
 
 function signerCompatibility(txData: TransactionData, signer: SignerSummary): SignerCompatibility {
   if (typeSupportsBaseFee(txData.type)) {
-    const compatible =
-      signer.type in londonHardforkSigners &&
-      londonHardforkSigners[signer.type](signer.appVersion, signer.model)
+    const compatibilityCheck = londonHardforkSigners[signer.type]
+    const compatible = !!compatibilityCheck?.(signer.appVersion, signer.model)
     return { signer: signer.type, tx: 'london', compatible }
   }
 
@@ -200,7 +199,9 @@ function classifyTransaction({
   payload: { params },
   recipientType
 }: Omit<TransactionRequest, 'classification'>): TxClassification {
-  const { to, data = '0x' } = params[0]
+  const transaction = params[0]
+  if (!transaction) throw new Error('Transaction request has no transaction data')
+  const { to, data = '0x' } = transaction
 
   if (!to) return TxClassification.CONTRACT_DEPLOY
   if (recipientType === 'external' && data.length > 2) return TxClassification.SEND_DATA

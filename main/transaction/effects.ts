@@ -100,7 +100,7 @@ function parseTransfer(token: string, topics: string[], words: string[]): Simula
     }
   }
   if (topics.length === 4 && words.length === 0) {
-    const tokenId = parseWord(topics[3].slice(2))
+    const tokenId = parseWord(topics[3]?.slice(2))
     if (tokenId !== undefined) return { type: 'transfer', standard: 'erc721', token, from, to, tokenId }
   }
 
@@ -124,7 +124,7 @@ function parseApproval(token: string, topics: string[], words: string[]): Simula
     }
   }
   if (topics.length === 4 && words.length === 0) {
-    const tokenId = parseWord(topics[3].slice(2))
+    const tokenId = parseWord(topics[3]?.slice(2))
     if (tokenId !== undefined) return { type: 'approval', standard: 'erc721', token, owner, spender, tokenId }
   }
 

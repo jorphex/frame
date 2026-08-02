@@ -563,6 +563,10 @@ describe('#classifyTransaction', () => {
     recipientType
   })
 
+  it('rejects a request without transaction data', () => {
+    expect(() => classifyTransaction({ payload: { method, params: [] } })).toThrow(/no transaction data/i)
+  })
+
   describe('contract deployments', () => {
     it('should classify transactions with data and no recipient as contract deployments', () => {
       const request = Request(

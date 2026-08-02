@@ -13,6 +13,7 @@ import RingSigner from './hot/RingSigner'
 import HotSigner from './hot/HotSigner'
 
 import store from '../store'
+import { requireStoreAction } from '../store/action'
 
 const registeredAdapters = [new LedgerAdapter(), new TrezorAdapter(), new LatticeAdapter()]
 
@@ -84,6 +85,7 @@ class Signers extends EventEmitter {
 
   removeAdapter(adapter: SignerAdapter) {
     const adapterSpec = this.adapters[adapter.adapterType]
+    if (!adapterSpec) return
 
     adapterSpec.listeners.forEach((listener) => {
       adapter.removeListener(listener.event, listener.handler)
@@ -102,7 +104,7 @@ class Signers extends EventEmitter {
     if (!(id in this.signers)) {
       this.signers[id] = signer
 
-      store.newSigner(signer.summary())
+      requireStoreAction('newSigner')(signer.summary())
     }
   }
 
@@ -111,13 +113,14 @@ class Signers extends EventEmitter {
 
     if (signer) {
       delete this.signers[id]
-      store.removeSigner(id)
-      store.navClearSigner(id)
+      requireStoreAction('removeSigner')(id)
+      requireStoreAction('navClearSigner')(id)
 
       const type = signer.type === 'ring' || signer.type === 'seed' ? 'hot' : signer.type
 
-      if (type in this.adapters) {
-        this.adapters[type].adapter.remove(signer)
+      const adapter = this.adapters[type]?.adapter
+      if (adapter) {
+        adapter.remove(signer)
       } else {
         // backwards compatibility
         signer.close()
@@ -132,7 +135,7 @@ class Signers extends EventEmitter {
     if (id in this.signers) {
       this.signers[id] = signer
 
-      store.updateSigner(signer.summary())
+      requireStoreAction('updateSigner')(signer.summary())
     } else {
       this.add(signer)
     }
@@ -144,13 +147,14 @@ class Signers extends EventEmitter {
     if (signer) {
       const type = signer.type === 'ring' || signer.type === 'seed' ? 'hot' : signer.type
 
-      if (this.scans[type] && typeof this.scans[type] === 'function') {
+      const scan = this.scans[type]
+      if (typeof scan === 'function') {
         signer.close()
         delete this.signers[id]
 
-        this.scans[type]()
-      } else if (type in this.adapters) {
-        this.adapters[type].adapter.reload(signer)
+        scan()
+      } else {
+        this.adapters[type]?.adapter.reload(signer)
       }
     }
   }
@@ -175,7 +179,7 @@ class Signers extends EventEmitter {
     // Get signer
     const signer = this.get(id)
     // Make sure signer is of type 'ring'
-    if (signer.type !== 'ring') {
+    if (!signer || signer.type !== 'ring') {
       return cb(new Error('Private keys can only be added to ring signers'), undefined)
     }
 
@@ -187,7 +191,7 @@ class Signers extends EventEmitter {
     // Get signer
     const signer = this.get(id)
 
-    if (signer.type !== 'ring') {
+    if (!signer || signer.type !== 'ring') {
       return cb(new Error('Private keys can only be removed from ring signers'), undefined)
     }
 
@@ -205,7 +209,7 @@ class Signers extends EventEmitter {
     // Get signer
     const signer = this.get(id)
 
-    if (signer.type !== 'ring') {
+    if (!signer || signer.type !== 'ring') {
       return cb(new Error('Keystores can only be used with ring signers'), undefined)
     }
 

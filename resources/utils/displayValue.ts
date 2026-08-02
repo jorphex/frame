@@ -27,11 +27,7 @@ const displayUnitMapping = {
 }
 
 function isLargeNumber(bn: BigNumber) {
-  const largeNumberDisplayKeys = Object.keys(displayUnitMapping)
-  const firstLargeNumberDisplayKey = largeNumberDisplayKeys[0]
-  const firstLargeNumberDisplayValue =
-    displayUnitMapping[firstLargeNumberDisplayKey as keyof typeof displayUnitMapping]
-  return bn.isGreaterThanOrEqualTo(firstLargeNumberDisplayValue.lowerBound)
+  return bn.isGreaterThanOrEqualTo(displayUnitMapping.million.lowerBound)
 }
 
 function getDisplay(bn: BigNumber, type: string, decimals: number, displayFullValue?: boolean) {
@@ -76,9 +72,8 @@ function getDisplay(bn: BigNumber, type: string, decimals: number, displayFullVa
   }
 
   // maximum display value
-  const displayUnitKeys = Object.keys(displayUnitMapping)
-  const lastDisplayUnitKey = displayUnitKeys[displayUnitKeys.length - 1]
-  const lastDisplayUnitValue = displayUnitMapping[lastDisplayUnitKey as keyof typeof displayUnitMapping]
+  const lastDisplayUnitKey = 'quadrillion'
+  const lastDisplayUnitValue = displayUnitMapping.quadrillion
 
   return {
     approximationSymbol: '>',
@@ -158,7 +153,7 @@ export function displayValueData(sourceValue: SourceValue, params: DisplayValueD
       const getDisplayedDecimals = () => {
         if (!displayDecimals) return 0
 
-        const preDecimalStr = value.toFixed(1, BigNumber.ROUND_FLOOR).split('.')[0]
+        const [preDecimalStr = '0'] = value.toFixed(1, BigNumber.ROUND_FLOOR).split('.')
         const numNonDecimals = preDecimalStr === '0' ? 0 : preDecimalStr.length
 
         return BigNumber(6)

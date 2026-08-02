@@ -19,7 +19,7 @@ export type Subscription = {
   originId: string
 }
 
-export function hasSubscriptionPermission(subType: string, address: string, originId: string) {
+export function hasSubscriptionPermission(subType: string, address: string | undefined, originId: string) {
   if (subType === SubscriptionType.CHAINS && isTrustedOrigin(originId)) {
     // internal trusted origins are allowed to subscribe to chain changes without approval
     return true

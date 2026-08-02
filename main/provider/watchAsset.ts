@@ -23,7 +23,7 @@ function invalidParams(message: string) {
 
 export function parseWatchAssetRequest(params: unknown, defaultChainId: number): WatchAssetRequest {
   const result = watchAssetSchema.safeParse(params)
-  if (!result.success) throw invalidParams(result.error.issues[0].message)
+  if (!result.success) throw invalidParams(result.error.issues[0]?.message || 'invalid asset request')
 
   const { type, options } = result.data
   if (type.toUpperCase() !== 'ERC20') throw invalidParams(`unsupported asset type ${type}`)

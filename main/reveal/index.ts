@@ -60,8 +60,7 @@ async function resolveEntityType(address: string, chainId: number): Promise<Enti
 
 async function resolveEnsName(address: string): Promise<string> {
   try {
-    const ensName: string = (await nebula.ens.reverseLookup([address]))[0]
-    return ensName
+    return (await nebula.ens.reverseLookup([address]))[0] || ''
   } catch (e) {
     log.warn(e)
     return ''

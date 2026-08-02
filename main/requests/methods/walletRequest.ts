@@ -38,7 +38,7 @@ export default function (rpcRequest: RPCRequestPayload) {
     }
   }
 
-  const errorMessage = result.error.issues[0].message
+  const errorMessage = result.error.issues[0]?.message || 'Invalid wallet request'
 
   throw new Error(errorMessage)
 }

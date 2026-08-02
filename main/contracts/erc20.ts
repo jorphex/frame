@@ -45,24 +45,30 @@ export default class Erc20Contract {
   }
 
   static isApproval(data: TransactionDescription) {
+    const [spender, value] = data.fragment.inputs
     return (
       data.name === 'approve' &&
       data.fragment.inputs.length === 2 &&
-      (data.fragment.inputs[0].name || '').toLowerCase().endsWith('spender') &&
-      data.fragment.inputs[0].type === 'address' &&
-      (data.fragment.inputs[1].name || '').toLowerCase().endsWith('value') &&
-      data.fragment.inputs[1].type === 'uint256'
+      spender !== undefined &&
+      value !== undefined &&
+      (spender.name || '').toLowerCase().endsWith('spender') &&
+      spender.type === 'address' &&
+      (value.name || '').toLowerCase().endsWith('value') &&
+      value.type === 'uint256'
     )
   }
 
   static isTransfer(data: TransactionDescription) {
+    const [recipient, value] = data.fragment.inputs
     return (
       data.name === 'transfer' &&
       data.fragment.inputs.length === 2 &&
-      (data.fragment.inputs[0].name || '').toLowerCase().endsWith('to') &&
-      data.fragment.inputs[0].type === 'address' &&
-      (data.fragment.inputs[1].name || '').toLowerCase().endsWith('value') &&
-      data.fragment.inputs[1].type === 'uint256'
+      recipient !== undefined &&
+      value !== undefined &&
+      (recipient.name || '').toLowerCase().endsWith('to') &&
+      recipient.type === 'address' &&
+      (value.name || '').toLowerCase().endsWith('value') &&
+      value.type === 'uint256'
     )
   }
 

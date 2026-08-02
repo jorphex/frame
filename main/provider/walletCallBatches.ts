@@ -331,10 +331,12 @@ export class WalletCallBatchLedger {
 
     const index = batch.transactions.findIndex((transaction) => transaction.hash === normalizedHash)
     if (index < 0) throw new Error('Transaction hash is not reserved')
-    if (batch.transactions[index].state === 'submitted') return
+    const existingTransaction = batch.transactions[index]
+    if (!existingTransaction) throw new Error('Reserved transaction is missing')
+    if (existingTransaction.state === 'submitted') return
 
     const transactions = [...batch.transactions]
-    transactions[index] = { ...transactions[index], state: 'submitted' }
+    transactions[index] = { ...existingTransaction, state: 'submitted' }
     this.writeBatch(batches, key, { ...batch, transactions, updatedAt: Math.max(now, batch.updatedAt) })
   }
 
@@ -357,6 +359,7 @@ export class WalletCallBatchLedger {
     )
     if (index < 0) throw new Error('Receipt transaction is not part of this batch')
     const existingTransaction = batch.transactions[index]
+    if (!existingTransaction) throw new Error('Receipt transaction is missing')
     const existingReceipt = existingTransaction.receipt
     if (existingReceipt) {
       if (JSON.stringify(existingReceipt) !== JSON.stringify(parsed.data)) {

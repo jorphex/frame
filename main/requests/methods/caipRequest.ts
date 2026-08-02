@@ -10,7 +10,8 @@ export const chainIdMatcher = z
   .string()
   .refine((id) => {
     const match = EIP155_CHAIN_ID.exec(id)
-    return !!match && BigInt(match[1]) <= MAX_SAFE_CHAIN_ID
+    const numericId = match?.[1]
+    return numericId !== undefined && BigInt(numericId) <= MAX_SAFE_CHAIN_ID
   }, 'Chain ID must be a canonical, safely supported CAIP-2 eip155 reference')
   .transform((id) => addHexPrefix(BigInt(id.slice('eip155:'.length)).toString(16)))
 

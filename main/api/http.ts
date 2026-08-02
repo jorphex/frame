@@ -81,7 +81,8 @@ const cleanup = (id: string) => {
   delete polls[id]
   delete pending[id]
   Object.keys(pollSubs).forEach((sub) => {
-    if (pollSubs[sub].id === id) {
+    const subscription = pollSubs[sub]
+    if (subscription?.id === id) {
       provider.send({ jsonrpc: '2.0', id: 1, method: 'eth_unsubscribe', params: [sub], _origin: '' })
       delete pollSubs[sub]
     }

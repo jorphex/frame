@@ -188,6 +188,7 @@ export async function prepareWalletCallBatch(
 
     for (let index = 0; index < snapshot.calls.length; index += 1) {
       const call = snapshot.calls[index]
+      if (!call) throw new Error('Wallet call is missing during preparation')
       const intent = Object.freeze({
         from: snapshot.account,
         chainId: snapshot.chainId,

@@ -96,7 +96,9 @@ export async function executeWalletCallBatch(
 
   try {
     for (let index = 0; index < calls.length; index += 1) {
-      const signed = await dependencies.signCall(calls[index], index)
+      const call = calls[index]
+      if (!call) throw new Error('Wallet call is missing during execution')
+      const signed = await dependencies.signCall(call, index)
       const rawTransaction = signed?.rawTransaction
       const hash = hashSignedTransaction(rawTransaction)
       dependencies.ledger.reserveTransaction(input.origin, input.account, input.id, hash)
