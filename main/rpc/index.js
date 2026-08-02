@@ -18,6 +18,9 @@ const nebulaApi = require('../nebula').default
 const { arraysEqual, randomLetters } = require('../../resources/utils')
 const { isSignatureRequest } = require('../signatures')
 const { default: TrezorBridge } = require('../../main/signers/trezor/bridge')
+const { createAccountCodeReader } = require('../accounts/accountCode')
+
+const accountCodeReader = createAccountCodeReader(provider.connection)
 
 const callbackWhenDone = (fn, cb) => {
   try {
@@ -43,6 +46,9 @@ const rpc = {
   signMessage: accounts.signMessage,
   getAccounts: accounts.getAccounts,
   getCoinbase: accounts.getCoinbase,
+  getAccountCodeClassification(address, chainId, cb) {
+    accountCodeReader.read(address, chainId).then((result) => cb(null, result), cb)
+  },
   // Review
   // getSigners: signers.getSigners,
   setSigner: (id, cb) => {

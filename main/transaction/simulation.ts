@@ -6,6 +6,7 @@ import {
   parseErc20ApprovalIntent
 } from '../../resources/domain/transaction/allowance'
 import { parseRpcQuantity } from '../../resources/domain/transaction/quantity'
+import { parseAccountCode } from '../../resources/domain/account/code'
 import { parseSimulationEffects } from './effects'
 import type { SimulationEffect } from './effects'
 
@@ -18,7 +19,7 @@ const MAX_TRACE_ACCOUNTS = 1024
 const MAX_UINT64 = (1n << 64n) - 1n
 const MAX_UINT256 = (1n << 256n) - 1n
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
-const EIP_7702_DELEGATION = /^0xef0100([0-9a-f]{40})$/i
+export { parseDelegationIndicator } from '../../resources/domain/account/code'
 
 type SimulationSource = 'eth_simulateV1' | 'eth_call'
 type SimulationStatus = 'pending' | 'succeeded' | 'reverted' | 'unavailable' | 'failed'
@@ -146,13 +147,6 @@ function isData(value: unknown) {
     value.length <= MAX_RETURN_DATA_BYTES * 2 + 2 &&
     /^0x(?:[0-9a-fA-F]{2})*$/.test(value)
   )
-}
-
-export function parseDelegationIndicator(value: unknown) {
-  if (typeof value !== 'string') return
-
-  const match = EIP_7702_DELEGATION.exec(value)
-  return match?.[1] ? `0x${match[1].toLowerCase()}` : undefined
 }
 
 function parseGasUsed(value: unknown) {
@@ -465,11 +459,16 @@ async function readAccountDelegation(
     const error = normalizeRpcError(outcome.response.error)
     return unavailable(boundedMessage(error?.message, 'Account delegation check failed'))
   }
-  if (!isData(outcome.response.result)) return unavailable('RPC returned invalid account code')
+  const parsed = parseAccountCode(outcome.response.result)
+  if (!parsed) return unavailable('RPC returned invalid account code')
 
-  const delegate = parseDelegationIndicator(outcome.response.result)
-  return delegate
-    ? { status: 'delegated', source: 'eth_getCode', account: normalizedAccount, delegate }
+  return parsed.status === 'delegated'
+    ? {
+        status: 'delegated',
+        source: 'eth_getCode',
+        account: normalizedAccount,
+        delegate: parsed.delegate
+      }
     : { status: 'undelegated', source: 'eth_getCode', account: normalizedAccount }
 }
 
