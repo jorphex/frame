@@ -1,13 +1,16 @@
 import { readFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import process from 'node:process'
+import { readSourceIdentity } from './source-identity.mjs'
 
 const path = process.argv[2]
 if (!path) throw new Error('Usage: node scripts/verify-sbom.mjs <sbom.json>')
 if (!process.env.npm_execpath) throw new Error('SBOM verification must run through npm')
 
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-const packageLock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'))
+const packageLockBytes = await readFile(new URL('../package-lock.json', import.meta.url))
+const packageLock = JSON.parse(packageLockBytes)
 const sbom = JSON.parse(await readFile(path, 'utf8'))
 
 if (sbom.bomFormat !== 'CycloneDX' || typeof sbom.specVersion !== 'string') {
@@ -21,6 +24,27 @@ if (sbom.metadata?.component?.version !== packageJson.version) {
 }
 if (!Array.isArray(sbom.components) || sbom.components.length === 0) {
   throw new Error('SBOM has no production components')
+}
+
+const { commit: sourceCommit, timestamp: sourceTimestamp } = readSourceIdentity()
+const serialBytes = createHash('sha256')
+  .update(`${packageJson.name}\0${packageJson.version}\0${sourceCommit}\0`)
+  .update(packageLockBytes)
+  .digest()
+  .subarray(0, 16)
+serialBytes[6] = (serialBytes[6] & 0x0f) | 0x50
+serialBytes[8] = (serialBytes[8] & 0x3f) | 0x80
+const serialHex = serialBytes.toString('hex')
+const expectedSerial = `urn:uuid:${serialHex.slice(0, 8)}-${serialHex.slice(8, 12)}-${serialHex.slice(12, 16)}-${serialHex.slice(16, 20)}-${serialHex.slice(20)}`
+const sourceProperty = sbom.metadata.component.properties?.find(
+  (property) => property?.name === 'frame:source-commit'
+)
+if (
+  sbom.serialNumber !== expectedSerial ||
+  sbom.metadata.timestamp !== new Date(sourceTimestamp).toISOString() ||
+  sourceProperty?.value !== sourceCommit
+) {
+  throw new Error('SBOM source identity does not match the clean reviewed commit')
 }
 
 const references = new Set()

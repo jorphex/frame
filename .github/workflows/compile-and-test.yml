@@ -65,6 +65,10 @@ jobs:
         run: npm run sbom:linux
       - name: Verify production SBOM
         run: npm run sbom:verify:linux
+      - name: Finalize and verify release checksums
+        run: |
+          npm run checksums:linux
+          npm run release:verify:linux
       - name: Upload package smoke-test artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { once } from 'node:events'
-import { createReadStream } from 'node:fs'
-import { access, readFile, readdir, writeFile } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -299,20 +297,6 @@ assert.equal(probeResult.esmModules.length, 2)
 assert.ok(probeResult.esmModules.every((exports) => exports > 0))
 assert.match(probeResult.abi, /^\d+$/)
 
-const sha256 = (file) =>
-  new Promise((resolve, reject) => {
-    const hash = createHash('sha256')
-    createReadStream(file)
-      .on('error', reject)
-      .on('data', (chunk) => hash.update(chunk))
-      .on('end', () => resolve(hash.digest('hex')))
-  })
-
-const checksums = await Promise.all(
-  artifacts.map(async (artifact) => `${await sha256(path.join(dist, artifact))}  ${artifact}`)
-)
-
-await writeFile(path.join(dist, 'SHA256SUMS'), `${checksums.join('\n')}\n`)
 console.log(
   `Verified ${artifacts.join(' and ')} with Electron ${probeResult.electron} ABI ${
     probeResult.abi

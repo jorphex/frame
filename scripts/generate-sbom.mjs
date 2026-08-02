@@ -1,13 +1,16 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import process from 'node:process'
+import { readSourceIdentity } from './source-identity.mjs'
 
 const output = process.argv[2]
 if (!output) throw new Error('Usage: node scripts/generate-sbom.mjs <output.json>')
 if (!process.env.npm_execpath) throw new Error('SBOM generation must run through npm')
 
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+const packageLock = await readFile(new URL('../package-lock.json', import.meta.url))
 const runNpm = (args) =>
   execFileSync(process.execPath, [process.env.npm_execpath, ...args], {
     encoding: 'utf8',
@@ -17,6 +20,26 @@ const sbom = JSON.parse(runNpm(['sbom', '--sbom-format', 'cyclonedx']))
 const productionTree = JSON.parse(runNpm(['ls', '--omit=dev', '--all', '--json']))
 
 const rootRef = sbom.metadata?.component?.['bom-ref']
+if (typeof rootRef !== 'string') throw new Error('npm SBOM is missing its root component')
+const { commit: sourceCommit, timestamp: sourceTimestamp } = readSourceIdentity()
+const serialBytes = createHash('sha256')
+  .update(`${packageJson.name}\0${packageJson.version}\0${sourceCommit}\0`)
+  .update(packageLock)
+  .digest()
+  .subarray(0, 16)
+serialBytes[6] = (serialBytes[6] & 0x0f) | 0x50
+serialBytes[8] = (serialBytes[8] & 0x3f) | 0x80
+const serialHex = serialBytes.toString('hex')
+sbom.serialNumber = `urn:uuid:${serialHex.slice(0, 8)}-${serialHex.slice(8, 12)}-${serialHex.slice(12, 16)}-${serialHex.slice(16, 20)}-${serialHex.slice(20)}`
+sbom.metadata.timestamp = new Date(sourceTimestamp).toISOString()
+sbom.metadata.component.name = packageJson.name
+sbom.metadata.component.version = packageJson.version
+sbom.metadata.component.properties = [
+  ...(sbom.metadata.component.properties || []).filter(
+    (property) => property?.name !== 'frame:source-commit'
+  ),
+  { name: 'frame:source-commit', value: sourceCommit }
+].sort((left, right) => left.name.localeCompare(right.name))
 const productionReferences = new Set()
 const productionGraph = new Map([[rootRef, new Set()]])
 function collectProductionReferences(dependencies, parentReference) {

@@ -49,6 +49,8 @@
     "package:verify:linux": "node scripts/verify-linux-package.mjs",
     "sbom:linux": "node scripts/generate-sbom.mjs dist/frame.cdx.json",
     "sbom:verify:linux": "node scripts/verify-sbom.mjs dist/frame.cdx.json",
+    "checksums:linux": "node scripts/write-linux-checksums.mjs",
+    "release:verify:linux": "node scripts/verify-linux-release.mjs",
     "copy-assets": "shx mkdir -p ./compiled/main/windows && shx cp ./main/windows/*.png ./compiled/main/windows",
     "parcel:build": "parcel build --no-autoinstall --public-url .",
     "publish": "node -e \"console.error('Direct publishing is disabled; use the qualified draft-release workflow.'); process.exit(1)\"",

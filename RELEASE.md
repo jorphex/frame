@@ -42,10 +42,13 @@ reproducible artifacts have not yet been demonstrated.
    npm run package:verify:linux
    npm run sbom:linux
    npm run sbom:verify:linux
+   npm run checksums:linux
+   npm run release:verify:linux
    ```
 
 6. Inspect the final diff, dependency graph, test output, package names,
-   `dist/SHA256SUMS`, and `dist/frame.cdx.json`. Do not waive unexplained signing,
+   `dist/SHA256SUMS`, and `dist/frame.cdx.json`. The checksum manifest must cover
+   both packages and the source-bound SBOM. Do not waive unexplained signing,
    migration, native-module, or packaging failures.
 
 ## Build The Draft
