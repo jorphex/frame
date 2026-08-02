@@ -4,17 +4,27 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { access, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const dist = path.resolve('dist')
-const entries = await readdir(dist)
+const artifactWaitTimeout = 30_000
+const artifactPollInterval = 250
 
-const findArtifact = (suffix) => {
-  const matches = entries.filter((entry) => entry.endsWith(suffix))
-  assert.equal(matches.length, 1, `Expected one ${suffix} artifact, found ${matches.length}`)
-  return matches[0]
+const findArtifact = async (suffix) => {
+  const deadline = Date.now() + artifactWaitTimeout
+
+  while (Date.now() < deadline) {
+    const entries = await readdir(dist)
+    const matches = entries.filter((entry) => entry.endsWith(suffix))
+    assert.ok(matches.length <= 1, `Expected one ${suffix} artifact, found ${matches.length}`)
+    if (matches.length === 1) return matches[0]
+    await delay(artifactPollInterval)
+  }
+
+  assert.fail(`Timed out waiting ${artifactWaitTimeout}ms for one ${suffix} artifact`)
 }
 
-const artifacts = [findArtifact('.AppImage'), findArtifact('_amd64.deb')]
+const artifacts = await Promise.all([findArtifact('.AppImage'), findArtifact('_amd64.deb')])
 const unpackedModules = path.join(dist, 'linux-unpacked', 'resources', 'app.asar.unpacked', 'node_modules')
 const nativeModules = [
   path.join(unpackedModules, 'node-hid', 'build', 'Release', 'HID_hidraw.node'),
