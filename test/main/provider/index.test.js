@@ -1899,6 +1899,101 @@ describe('#send', () => {
       })
     })
 
+    it.each([
+      ['blob transaction', '0x3', 4200],
+      ['unknown transaction', '0x5', 4200],
+      ['malformed transaction type', '0x03', -32602]
+    ])('rejects an explicit %s before creating a request', (_label, type, code, done) => {
+      tx.type = type
+
+      sendTransaction((response) => {
+        try {
+          expect(response.result).toBeUndefined()
+          expect(response.error).toMatchObject({ code })
+          expect(response.error.message).toMatch(/transaction type/i)
+          expect(accountRequests).toHaveLength(0)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
+    it.each(['blobVersionedHashes', 'maxFeePerBlobGas', 'futureEnvelopeField'])(
+      "rejects unsupported transaction parameter '%s' before creating a request",
+      (field, done) => {
+        tx[field] = []
+
+        sendTransaction((response) => {
+          try {
+            expect(response.result).toBeUndefined()
+            expect(response.error).toMatchObject({ code: -32602 })
+            expect(response.error.message).toContain(`'${field}'`)
+            expect(accountRequests).toHaveLength(0)
+            done()
+          } catch (error) {
+            done(error)
+          }
+        })
+      }
+    )
+
+    it('rejects malformed access-list input before creating a request', (done) => {
+      tx.accessList = [{ address: '0x1234', storageKeys: [] }]
+
+      sendTransaction((response) => {
+        try {
+          expect(response.result).toBeUndefined()
+          expect(response.error.message).toMatch(/access list.*invalid address/i)
+          expect(accountRequests).toHaveLength(0)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
+    it('attaches the complete normalized access list to transaction review', (done) => {
+      const accessList = [
+        {
+          address: '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          storageKeys: [`0x${'BB'.repeat(32)}`]
+        }
+      ]
+      tx.accessList = accessList
+
+      sendTransaction(() => {
+        try {
+          expect(accountRequests).toHaveLength(1)
+          expect(accountRequests[0].data.accessList).toEqual([
+            {
+              address: accessList[0].address.toLowerCase(),
+              storageKeys: [accessList[0].storageKeys[0].toLowerCase()]
+            }
+          ])
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
+    it('rejects an access list on a chain before EIP-2930 activation', (done) => {
+      tx.chainId = '0x89'
+      tx.accessList = []
+
+      sendTransaction((response) => {
+        try {
+          expect(response.result).toBeUndefined()
+          expect(response.error.message).toMatch(/access lists are not supported on this chain/i)
+          expect(accountRequests).toHaveLength(0)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
     it('populates the transaction with the request chain id if not provided in the transaction', (done) => {
       delete tx.chainId
 

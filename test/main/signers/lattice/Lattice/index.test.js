@@ -639,12 +639,19 @@ describe('#signTransaction', () => {
   })
 
   it('signs a post eip-1559 transaction', (done) => {
-    const txToSign = { ...tx, type: '0x2' }
+    const accessList = [
+      {
+        address: '0x0000000000000000000000000000000000000001',
+        storageKeys: ['0x0000000000000000000000000000000000000000000000000000000000000002']
+      }
+    ]
+    const txToSign = { ...tx, type: '0x2', accessList }
 
     lattice.connection.sign.mockImplementation(async (opts) => {
       try {
         expect(opts.currency).toBe('ETH')
         expect(opts.data.type).toBe(2)
+        expect(opts.data.accessList).toEqual(accessList)
         expect(opts.data.signerPath[4]).toBe(4)
         expect(parseInt(opts.data.chainId)).toBe(137)
 
@@ -657,7 +664,45 @@ describe('#signTransaction', () => {
     lattice.signTransaction(4, txToSign, (err, res) => {
       try {
         expect(err).toBe(null)
-        expect(res).toBe('0x02d3818980808080808080c080833ea8cd8396f7a0')
+        expect(res).toBe(
+          '0x02f84c818980808080808080f838f7940000000000000000000000000000000000000001e1a0000000000000000000000000000000000000000000000000000000000000000280833ea8cd8396f7a0'
+        )
+        done()
+      } catch (e) {
+        done(e)
+      }
+    })
+  })
+
+  it('uses the downgraded legacy type in the device payload', (done) => {
+    lattice.appVersion = { major: 0, minor: 10, patch: 0 }
+    const txToSign = {
+      ...tx,
+      type: '0x2',
+      maxFeePerGas: '0x2',
+      maxPriorityFeePerGas: '0x1'
+    }
+
+    lattice.connection.sign.mockImplementation(async (opts) => {
+      try {
+        expect(opts.currency).toBe('ETH')
+        expect(opts.data.type).toBe(undefined)
+        expect(opts.data.gasPrice).toBe(2)
+
+        return {
+          sig: {
+            ...expectedSignature.sig,
+            v: 27n
+          }
+        }
+      } catch (e) {
+        done(e)
+      }
+    })
+
+    lattice.signTransaction(4, txToSign, (err) => {
+      try {
+        expect(err).toBe(null)
         done()
       } catch (e) {
         done(e)

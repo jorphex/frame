@@ -328,7 +328,7 @@ export default class Lattice extends Signer {
       const latticeTx = compatibility.compatible ? { ...rawTx } : londonToLegacy(rawTx)
 
       const signedTx = await sign(latticeTx, async (tx) => {
-        const unsignedTx = this.createTransaction(index, rawTx.type, latticeTx.chainId, tx)
+        const unsignedTx = this.createTransaction(index, latticeTx.chainId, tx)
         const signingOptions = await this.createTransactionSigningOptions(tx, unsignedTx)
 
         const signedTx = await connection.sign(signingOptions)
@@ -376,9 +376,8 @@ export default class Lattice extends Signer {
     return addHexPrefix(signature)
   }
 
-  private createTransaction(index: number, txType: string, chainId: string, tx: TypedTransaction) {
+  private createTransaction(index: number, chainId: string, tx: TypedTransaction) {
     const { value, to, data, ...txJson } = tx.toJSON()
-    const type = hexToInt(txType)
 
     const unsignedTx: any = {
       to,
@@ -391,8 +390,12 @@ export default class Lattice extends Signer {
       signerPath: this.getPath(index)
     }
 
-    if (type) {
-      unsignedTx.type = type
+    if (tx.type) {
+      unsignedTx.type = tx.type
+    }
+
+    if ('accessList' in txJson) {
+      unsignedTx.accessList = txJson.accessList
     }
 
     const optionalFields = ['gasPrice', 'maxFeePerGas', 'maxPriorityFeePerGas']

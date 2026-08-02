@@ -246,6 +246,30 @@ describe('#getRawTx', () => {
     expect(tx.nonce).toBeUndefined()
   })
 
+  it('normalizes a valid access list without changing its order or duplicates', () => {
+    const address = '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    const storageKey = `0x${'BB'.repeat(32)}`
+
+    const tx = getRawTx({
+      accessList: [{ address, storageKeys: [storageKey, storageKey] }]
+    })
+
+    expect(tx.accessList).toEqual([
+      {
+        address: address.toLowerCase(),
+        storageKeys: [storageKey.toLowerCase(), storageKey.toLowerCase()]
+      }
+    ])
+  })
+
+  it('rejects malformed access-list input', () => {
+    expect(() =>
+      getRawTx({
+        accessList: [{ address: '0x1234', storageKeys: [] }]
+      })
+    ).toThrow(/access list.*invalid address/i)
+  })
+
   const invalidNonces = [
     { description: 'non-numeric', nonce: 'invalid' },
     { description: 'negative integer', nonce: '-360' },

@@ -63,3 +63,15 @@ application shutdown.
 
 Automated tests must not broadcast, access a physical device by default, or share
 ports/profile data with an installed Frame instance.
+
+## EIP-2930 Access Lists
+
+Frame validates and displays the complete ordered access list before signing.
+Software, Ledger, and Lattice transaction paths preserve that list in the typed
+transaction payload. Trezor Connect accepts access lists through its EIP-1559
+type-2 signing path, which Frame covers with deterministic adapter tests.
+
+Trezor Connect does not expose an EIP-2930 type-1 signing request in the installed
+API, so Frame rejects type-1 transactions for Trezor instead of converting them
+or signing different bytes. These access-list paths have not received new
+physical-device qualification in this fork.

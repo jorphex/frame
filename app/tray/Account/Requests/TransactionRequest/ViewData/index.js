@@ -14,7 +14,8 @@ const txFieldPriority = [
   'gasLimit',
   'gasPrice',
   'maxFeePerGas',
-  'maxPriorityFeePerGas'
+  'maxPriorityFeePerGas',
+  'accessList'
 ]
 
 const nonceHasBeenChanged = (req) => {
@@ -53,9 +54,14 @@ const NonceValue = ({ req, nonce }) => {
   )
 }
 
-const TextValue = ({ value }) => <span>{value}</span>
+const TextValue = ({ value }) =>
+  typeof value === 'object' ? (
+    <pre className='simpleJsonStructuredValue'>{JSON.stringify(value, null, 2)}</pre>
+  ) : (
+    <span>{value}</span>
+  )
 
-const SimpleTxJSON = ({ json, req }) => {
+export const SimpleTxJSON = ({ json, req }) => {
   return (
     <div className='simpleJson'>
       {Object.keys(json)
@@ -82,7 +88,7 @@ const SimpleTxJSON = ({ json, req }) => {
   )
 }
 
-class ViewData extends React.Component {
+export class ViewData extends React.Component {
   constructor(props, context) {
     super(props, context)
     this.state = {
@@ -137,7 +143,7 @@ class ViewData extends React.Component {
   decodeRawTx(tx) {
     const decodeTx = {}
     Object.keys(tx).forEach((key) => {
-      if (tx[key] && !tx[key].startsWith('0x')) {
+      if (typeof tx[key] !== 'string' || !tx[key].startsWith('0x')) {
         decodeTx[key] = tx[key]
       } else if (
         [

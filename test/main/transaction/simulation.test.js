@@ -83,6 +83,18 @@ it('builds bounded single-call RPC inputs from transaction data', () => {
   })
 })
 
+it('preserves an exact access list in configured-RPC simulation input', () => {
+  const accessList = [
+    {
+      address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      storageKeys: [`0x${'bb'.repeat(32)}`]
+    }
+  ]
+
+  expect(buildSimulationCall({ ...transaction, accessList })).toMatchObject({ accessList })
+  expect(buildEthCall({ ...transaction, accessList })).toMatchObject({ accessList })
+})
+
 it('strictly parses one successful simulation call', () => {
   expect(parseSimulateResult(simulateSuccess)).toEqual({
     status: 'succeeded',

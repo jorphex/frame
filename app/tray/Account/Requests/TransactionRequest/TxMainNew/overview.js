@@ -9,6 +9,7 @@ import { DisplayValue } from '../../../../../../resources/Components/DisplayValu
 import RequestHeader from '../../../../../../resources/Components/RequestHeader'
 import BigNumber from 'bignumber.js'
 import { isBroadTokenAuthorityEffect } from '../../../../../../resources/domain/transaction/effects'
+import { summarizeAccessList } from '../../../../../../resources/domain/transaction/accessList'
 
 const SimpleContractCallOverview = ({ method }) => {
   const body = method ? `Calling Contract Method ${method}` : 'Calling Contract'
@@ -160,6 +161,15 @@ export function getDelegationPresentation(simulation) {
   return null
 }
 
+export function getAccessListPresentation(transaction) {
+  const summary = summarizeAccessList(transaction?.accessList)
+  if (!summary) return null
+
+  const entryLabel = `${summary.entries} address${summary.entries === 1 ? '' : 'es'}`
+  const keyLabel = `${summary.storageKeys} storage key${summary.storageKeys === 1 ? '' : 's'}`
+  return { className: '_txMainTagWarning', label: `Access list: ${entryLabel}, ${keyLabel}` }
+}
+
 const BaseOverviews = {
   CONTRACT_DEPLOY: DeployContractOverview,
   CONTRACT_CALL: ContractCallOverview,
@@ -183,6 +193,7 @@ const TxOverview = ({
   const simulationEffects = getSimulationEffectsPresentation(req.simulation, req.account)
   const allowance = getAllowancePresentation(req.simulation)
   const delegation = getDelegationPresentation(req.simulation)
+  const accessList = getAccessListPresentation(req.data)
 
   const Description = BaseOverviews[classification]
 
@@ -244,6 +255,13 @@ const TxOverview = ({
           <ClusterRow>
             <ClusterValue>
               <div className={`_txMainTag ${delegation.className}`}>{delegation.label}</div>
+            </ClusterValue>
+          </ClusterRow>
+        )}
+        {accessList && (
+          <ClusterRow>
+            <ClusterValue>
+              <div className={`_txMainTag ${accessList.className}`}>{accessList.label}</div>
             </ClusterValue>
           </ClusterRow>
         )}

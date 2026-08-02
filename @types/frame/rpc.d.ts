@@ -165,6 +165,7 @@ declare namespace RPC {
       value?: string
       chainId: string
       type?: string
+      accessList?: Array<{ address: string; storageKeys: string[] }>
     }
 
     interface Request extends Omit<RPCRequestPayload, 'method'> {

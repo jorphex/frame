@@ -1,9 +1,7 @@
 import log from 'electron-log'
-import { hexToInt } from '../../../../resources/utils'
 import { padToEven, stripHexPrefix, addHexPrefix } from '@ethereumjs/util'
 import { SignTypedDataVersion, TypedDataUtils } from '@metamask/eth-sig-util'
 import type { Device as TrezorDevice } from '@trezor/connect'
-import { TypedTransaction } from '@ethereumjs/tx'
 
 import { v5 as uuid } from 'uuid'
 
@@ -13,6 +11,7 @@ import { sign, londonToLegacy, signerCompatibility } from '../../../transaction'
 import { Derivation, getDerivationPath } from '../../Signer/derive'
 import TrezorBridge, { DeviceError } from '../bridge'
 import type { TypedMessage } from '../../../accounts/types'
+import { normalizeTrezorTransaction } from '../transaction'
 
 const ns = '3bbcee75-cecc-5b56-8031-b6641c1ed1f1'
 
@@ -318,7 +317,7 @@ export default class Trezor extends Signer {
           throw new Error('Trezor is not connected')
         }
 
-        const trezorTx = this.normalizeTransaction(rawTx.chainId, tx)
+        const trezorTx = normalizeTrezorTransaction(rawTx.chainId, tx)
         const path = this.getPath(index)
 
         try {
@@ -346,31 +345,5 @@ export default class Trezor extends Signer {
 
   private normalize(hex: string) {
     return (hex && padToEven(stripHexPrefix(hex))) || ''
-  }
-
-  private normalizeTransaction(chainId: string, tx: TypedTransaction) {
-    const txJson = tx.toJSON()
-
-    const unsignedTx = {
-      nonce: this.normalize(txJson.nonce || ''),
-      gasLimit: this.normalize(txJson.gasLimit || ''),
-      to: this.normalize(txJson.to || ''),
-      value: this.normalize(txJson.value || ''),
-      data: this.normalize(txJson.data || ''),
-      chainId: hexToInt(chainId)
-    }
-
-    const optionalFields = ['gasPrice', 'maxFeePerGas', 'maxPriorityFeePerGas']
-
-    optionalFields.forEach((field) => {
-      // @ts-ignore
-      const val: string = txJson[field]
-      if (val) {
-        // @ts-ignore
-        unsignedTx[field] = this.normalize(val)
-      }
-    })
-
-    return unsignedTx
   }
 }

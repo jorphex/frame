@@ -67,6 +67,10 @@ function signerCompatibility(txData: TransactionData, signer: SignerSummary): Si
 
 function londonToLegacy(txData: TransactionData): TransactionData {
   if (txData.type === '0x2') {
+    if (txData.accessList !== undefined) {
+      throw new Error('Access-list transactions cannot use legacy signer fallback')
+    }
+
     const { type, maxFeePerGas, maxPriorityFeePerGas, ...tx } = txData
 
     return { ...tx, type: '0x0', gasPrice: maxFeePerGas }
@@ -108,6 +112,10 @@ function calculateMaxFeePerGas(maxBaseFee: string, maxPriorityFee: string) {
 
 function populate(rawTx: TransactionData, chainConfig: Common, gas: Gas): TransactionData {
   const txData: TransactionData = { ...rawTx }
+
+  if (rawTx.accessList !== undefined && !chainConfig.isActivatedEIP(2930)) {
+    throw new Error('Transaction access lists are not supported on this chain')
+  }
 
   // non-EIP-1559 case
   if (!chainConfig.isActivatedEIP(1559) || !gas.price.fees) {

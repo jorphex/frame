@@ -6,6 +6,7 @@ import TxRequestComponent from '../../../../../../app/tray/Account/Requests/Tran
 import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew'
 import {
   getAllowancePresentation,
+  getAccessListPresentation,
   getDelegationPresentation,
   getSimulationEffectsPresentation,
   getSimulationPresentation
@@ -15,6 +16,7 @@ import {
   SimulationDelegation,
   SimulationEffects
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData/effects'
+import { ViewData } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData'
 import {
   canApproveTransaction,
   getRequiredRequestApproval
@@ -344,6 +346,36 @@ describe('simulation review', () => {
     render(<SimulationDelegation simulation={simulation} />)
     expect(screen.getByRole('note').textContent).toMatch(/could not determine/i)
     expect(screen.queryByText(/delegates execution to/i)).toBeNull()
+  })
+
+  it('summarizes and renders a complete ordered access list', () => {
+    const firstAddress = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const secondAddress = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    const firstKey = `0x${'11'.repeat(32)}`
+    const secondKey = `0x${'22'.repeat(32)}`
+    const accessList = [
+      { address: firstAddress, storageKeys: [firstKey, secondKey] },
+      { address: secondAddress, storageKeys: [] }
+    ]
+
+    expect(getAccessListPresentation({ accessList })).toEqual({
+      className: '_txMainTagWarning',
+      label: 'Access list: 2 addresses, 2 storage keys'
+    })
+    render(
+      <ViewData
+        req={{
+          account,
+          data: { chainId: '0x1', type: '0x2', accessList },
+          simulation: { status: 'succeeded' }
+        }}
+      />
+    )
+
+    const rendered = document.querySelector('.simpleJsonStructuredValue').textContent
+    expect(rendered.indexOf(firstAddress)).toBeLessThan(rendered.indexOf(secondAddress))
+    expect(rendered.indexOf(firstKey)).toBeLessThan(rendered.indexOf(secondKey))
+    expect(rendered).toBe(JSON.stringify(accessList, null, 2))
   })
 })
 

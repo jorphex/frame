@@ -238,6 +238,17 @@ describe('#londonToLegacy', () => {
     expect(tx.to).toBe(rawTx.to)
     expect(tx.data).toBe(rawTx.data)
   })
+
+  it('does not drop an access list during legacy signer fallback', () => {
+    expect(() =>
+      londonToLegacy({
+        type: '0x2',
+        maxFeePerGas: '0x2',
+        maxPriorityFeePerGas: '0x1',
+        accessList: []
+      })
+    ).toThrow(/access-list transactions cannot use legacy signer fallback/i)
+  })
 })
 
 describe('#maxFee', () => {
@@ -416,11 +427,31 @@ describe('#populate', () => {
 
   describe('eip-2930 transactions', () => {
     const chainConfig = new Common({ chain: 'mainnet', hardfork: 'berlin' })
+    const accessList = [
+      {
+        address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        storageKeys: [`0x${'bb'.repeat(32)}`]
+      }
+    ]
 
     it('sets the transaction type', () => {
       const tx = populate(rawTx, chainConfig, gas)
 
       expect(tx.type).toBe('0x1')
+    })
+
+    it('preserves an access list on a supporting chain', () => {
+      const tx = populate({ ...rawTx, accessList }, chainConfig, gas)
+
+      expect(tx).toMatchObject({ type: '0x1', accessList })
+    })
+
+    it('rejects an access list before EIP-2930 activation', () => {
+      const preBerlin = new Common({ chain: 'mainnet', hardfork: 'istanbul' })
+
+      expect(() => populate({ ...rawTx, accessList }, preBerlin, gas)).toThrow(
+        /access lists are not supported on this chain/i
+      )
     })
   })
 })
@@ -479,6 +510,28 @@ describe('#sign', () => {
       ...signature,
       v: '0x0' // additional zeroes are stripped
     })
+  })
+
+  it('signs and serializes the exact ordered access list', async () => {
+    const accessList = [
+      {
+        address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        storageKeys: [`0x${'bb'.repeat(32)}`]
+      }
+    ]
+    const rawTx = {
+      ...baseTx,
+      type: '0x2',
+      maxFeePerGas: '0x737be7600',
+      maxPriorityFeePerGas: '0x3',
+      accessList
+    }
+    const signingFn = jest.fn().mockResolvedValueOnce(signature)
+
+    const signedTx = await sign(rawTx, signingFn)
+
+    expect(signingFn.mock.calls[0][0].toJSON().accessList).toEqual(accessList)
+    expect(signedTx.toJSON().accessList).toEqual(accessList)
   })
 
   it('adds hex prefixes to the signature', async () => {

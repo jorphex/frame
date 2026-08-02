@@ -109,6 +109,12 @@ Externally supplied type-4 transactions and authorization lists are rejected;
 Frame does not create or sign EIP-7702 authorizations. Delegation state can
 change after review, and a faulty or malicious RPC can omit or falsify it.
 
+Externally supplied transaction envelopes are restricted to fields and types
+Frame explicitly supports. Access lists have bounded entry and storage-key
+counts, require exact address/key widths, retain order and duplicates, and are
+shown in full during review. Signer adapters must preserve those exact bytes;
+unsupported hardware transaction types fail instead of being silently converted.
+
 This fork does not initialize or ship a hosted crash-telemetry client. Uncaught
 main-process errors are written to the local Electron log and may display a local
 dialog, but Frame does not transmit crash events, instance identifiers, network
@@ -146,7 +152,8 @@ boundaries. See [`RELEASE.md`](RELEASE.md).
 - Never sign or broadcast without an explicit, origin-bound approval unless a
   separately reviewed policy explicitly permits it.
 - Normalize and validate every external request before permission checks and UI.
-- Preserve chain binding and display the actual payload sent to the signer.
+- Preserve chain binding, transaction type, and access list, and display the
+  actual payload sent to the signer.
 - Keep renderer privileges minimal and validate IPC payloads and senders.
 - Fail closed when origin, chain, signer capability, simulation, or decoding is
   ambiguous.

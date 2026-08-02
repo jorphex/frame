@@ -16,6 +16,7 @@ import { isHexString } from 'ethers'
 
 import store from '../store'
 import { usesBaseFee, TransactionData, GasFeesSource } from '../../resources/domain/transaction'
+import { normalizeAccessList } from '../../resources/domain/transaction/accessList'
 import { getAddress } from '../../resources/utils'
 import { MAX_UINT256, parseRpcQuantity, toRpcQuantity } from '../../resources/domain/transaction/quantity'
 import {
@@ -125,7 +126,7 @@ function parseValue(value = '') {
 }
 
 export function getRawTx(newTx: RPC.SendTransaction.TxParams): TransactionData {
-  const { gas, gasLimit, data, value, type, from, to, ...rawTx } = newTx
+  const { gas, gasLimit, data, value, type, from, to, accessList, ...rawTx } = newTx
   const getNonce = () => {
     // pass through hex string or undefined
     if (rawTx.nonce === undefined || isHexString(rawTx.nonce)) {
@@ -147,6 +148,7 @@ export function getRawTx(newTx: RPC.SendTransaction.TxParams): TransactionData {
     type: '0x0',
     value: parseValue(value),
     data: addHexPrefix(padToEven(stripHexPrefix(data || '0x'))),
+    ...(accessList !== undefined && { accessList: normalizeAccessList(accessList) }),
     gasLimit: gasLimit || gas,
     chainId: rawTx.chainId,
     nonce: getNonce(),

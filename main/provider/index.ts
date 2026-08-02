@@ -26,6 +26,7 @@ import { createRpcProvider, estimateL1GasCost } from '../chains/optimism'
 import reveal from '../reveal'
 import { getSignerType, Type as SignerType } from '../../resources/domain/signer'
 import { normalizeChainId, TransactionData } from '../../resources/domain/transaction'
+import { parseRpcQuantity } from '../../resources/domain/transaction/quantity'
 import { populate as populateTransaction, maxFee, classifyTransaction } from '../transaction'
 import { capitalize } from '../../resources/utils'
 import { ApprovalType } from '../../resources/constants'
@@ -79,6 +80,22 @@ import { hasAddress } from '../../resources/domain/account'
 import { mapRequest } from '../requests'
 
 import type { Origin, Token } from '../store/state'
+
+const SUPPORTED_TRANSACTION_PARAMS = new Set([
+  'nonce',
+  'gasPrice',
+  'gas',
+  'maxPriorityFeePerGas',
+  'maxFeePerGas',
+  'gasLimit',
+  'from',
+  'to',
+  'data',
+  'value',
+  'chainId',
+  'type',
+  'accessList'
+])
 
 interface RequiredApproval {
   type: ApprovalType
@@ -773,18 +790,43 @@ export class Provider extends EventEmitter {
       const txParams = payload.params[0]
       const payloadChain = payload.chainId
       const transactionType = (txParams as { type?: unknown } | undefined)?.type
+      const parsedTransactionType =
+        typeof transactionType === 'number' && Number.isSafeInteger(transactionType) && transactionType >= 0
+          ? BigInt(transactionType)
+          : parseRpcQuantity(transactionType)
 
       if (
         txParams &&
-        (Object.prototype.hasOwnProperty.call(txParams, 'authorizationList') ||
-          transactionType === 4 ||
-          (typeof transactionType === 'string' && /^(?:0x)?0*4$/i.test(transactionType)))
+        (Object.prototype.hasOwnProperty.call(txParams, 'authorizationList') || parsedTransactionType === 4n)
       ) {
         return resError(
           {
             message: 'EIP-7702 authorization transactions are not supported',
             code: 4200
           },
+          payload,
+          res
+        )
+      }
+      if (transactionType !== undefined && parsedTransactionType === undefined) {
+        return resError(
+          { message: 'Transaction type must be a canonical RPC quantity', code: -32602 },
+          payload,
+          res
+        )
+      }
+      if (parsedTransactionType !== undefined && parsedTransactionType > 2n) {
+        return resError(
+          { message: `Transaction type ${transactionType} is not supported`, code: 4200 },
+          payload,
+          res
+        )
+      }
+      const unsupportedParam =
+        txParams && Object.keys(txParams).find((key) => !SUPPORTED_TRANSACTION_PARAMS.has(key))
+      if (unsupportedParam) {
+        return resError(
+          { message: `Transaction parameter '${unsupportedParam}' is not supported`, code: -32602 },
           payload,
           res
         )
