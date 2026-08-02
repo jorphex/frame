@@ -15,6 +15,7 @@ const MAX_RETURN_DATA_BYTES = 128 * 1024
 const MAX_WALLET_CALLS = 16
 const MAX_UINT64 = (1n << 64n) - 1n
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
+const EIP_7702_DELEGATION = /^0xef0100([0-9a-f]{40})$/i
 
 type SimulationSource = 'eth_simulateV1' | 'eth_call'
 type SimulationStatus = 'pending' | 'succeeded' | 'reverted' | 'unavailable' | 'failed'
@@ -28,6 +29,14 @@ export interface TokenAllowanceSnapshot {
   requestedAmount: string
 }
 
+export interface AccountDelegationCheck {
+  status: 'delegated' | 'undelegated' | 'unavailable'
+  source: 'eth_getCode'
+  account: string
+  delegate?: string
+  reason?: string
+}
+
 export interface TransactionSimulation {
   status: SimulationStatus
   source?: SimulationSource
@@ -36,6 +45,7 @@ export interface TransactionSimulation {
   effects?: SimulationEffect[]
   effectsTruncated?: boolean
   allowance?: TokenAllowanceSnapshot
+  delegation?: AccountDelegationCheck
 }
 
 export interface SimulationCallData {
@@ -59,6 +69,7 @@ export interface WalletCallsSimulationResult {
   source: 'eth_simulateV1'
   calls: TransactionSimulation[]
   reason?: string
+  delegation?: AccountDelegationCheck
 }
 
 export type WalletCallsSimulation = { status: 'pending'; calls: [] } | WalletCallsSimulationResult
@@ -87,6 +98,13 @@ function isData(value: unknown) {
     value.length <= MAX_RETURN_DATA_BYTES * 2 + 2 &&
     /^0x(?:[0-9a-fA-F]{2})*$/.test(value)
   )
+}
+
+export function parseDelegationIndicator(value: unknown) {
+  if (typeof value !== 'string') return
+
+  const match = EIP_7702_DELEGATION.exec(value)
+  return match ? `0x${match[1].toLowerCase()}` : undefined
 }
 
 function parseGasUsed(value: unknown) {
@@ -217,6 +235,48 @@ async function readTokenAllowance(
     currentAmount,
     requestedAmount: intent.amount
   }
+}
+
+async function readAccountDelegation(
+  account: unknown,
+  send: ChainSend,
+  targetChain: Chain,
+  timeoutMs: number
+): Promise<AccountDelegationCheck> {
+  const normalizedAccount = typeof account === 'string' && ADDRESS.test(account) ? account.toLowerCase() : ''
+  const unavailable = (reason: string): AccountDelegationCheck => ({
+    status: 'unavailable',
+    source: 'eth_getCode',
+    account: normalizedAccount,
+    reason
+  })
+
+  if (!normalizedAccount) return unavailable('Transaction has an invalid sender address')
+
+  const outcome = await requestRpc(
+    send,
+    {
+      id: 3,
+      jsonrpc: '2.0',
+      method: 'eth_getCode',
+      params: [normalizedAccount, 'latest']
+    },
+    targetChain,
+    timeoutMs
+  )
+  if ('timedOut' in outcome) return unavailable('Account delegation check timed out')
+  if (!isRecord(outcome.response)) return unavailable('RPC returned an invalid delegation response')
+
+  if (outcome.response.error !== undefined) {
+    const error = normalizeRpcError(outcome.response.error)
+    return unavailable(boundedMessage(error?.message, 'Account delegation check failed'))
+  }
+  if (!isData(outcome.response.result)) return unavailable('RPC returned invalid account code')
+
+  const delegate = parseDelegationIndicator(outcome.response.result)
+  return delegate
+    ? { status: 'delegated', source: 'eth_getCode', account: normalizedAccount, delegate }
+    : { status: 'undelegated', source: 'eth_getCode', account: normalizedAccount }
 }
 
 function parseSimulatedCall(call: unknown): TransactionSimulation | undefined {
@@ -367,12 +427,17 @@ export async function simulateTransaction(
   }
 
   const targetChain: Chain = { type: 'ethereum', id: Number(chainId) }
-  const [simulation, allowance] = await Promise.all([
+  const [simulation, allowance, delegation] = await Promise.all([
     simulateExecution(transaction, send, targetChain, timeoutMs),
-    readTokenAllowance(transaction, send, targetChain, timeoutMs)
+    readTokenAllowance(transaction, send, targetChain, timeoutMs),
+    readAccountDelegation(transaction.from, send, targetChain, timeoutMs)
   ])
 
-  return allowance ? { ...simulation, allowance } : simulation
+  return {
+    ...simulation,
+    ...(allowance ? { allowance } : {}),
+    ...(delegation.status === 'undelegated' ? {} : { delegation })
+  }
 }
 
 export async function simulateWalletCalls(
@@ -438,64 +503,69 @@ export async function simulateWalletCalls(
     ]
   }
 
-  const [outcome, firstAllowance] = await Promise.all([
+  const [outcome, firstAllowance, delegation] = await Promise.all([
     requestRpc(dependencies.send, payload, targetChain, timeoutMs),
-    readTokenAllowance(transactions[0], dependencies.send, targetChain, timeoutMs)
+    readTokenAllowance(transactions[0], dependencies.send, targetChain, timeoutMs),
+    readAccountDelegation(sender, dependencies.send, targetChain, timeoutMs)
   ])
+  const withDelegation = (result: Omit<WalletCallsSimulationResult, 'delegation'>) => ({
+    ...result,
+    ...(delegation.status === 'undelegated' ? {} : { delegation })
+  })
 
   if ('timedOut' in outcome) {
-    return {
+    return withDelegation({
       status: 'failed',
       source: 'eth_simulateV1',
       calls: [],
       reason: 'Stateful wallet call simulation timed out'
-    }
+    })
   }
   if (!isRecord(outcome.response)) {
-    return {
+    return withDelegation({
       status: 'failed',
       source: 'eth_simulateV1',
       calls: [],
       reason: 'RPC returned an invalid batch simulation response'
-    }
+    })
   }
   if (outcome.response.error !== undefined) {
     const error = normalizeRpcError(outcome.response.error)
     if (!error) {
-      return {
+      return withDelegation({
         status: 'failed',
         source: 'eth_simulateV1',
         calls: [],
         reason: 'RPC returned an invalid batch simulation error'
-      }
+      })
     }
 
-    return {
+    return withDelegation({
       status: isUnsupportedMethod(error) ? 'unavailable' : 'failed',
       source: 'eth_simulateV1',
       calls: [],
       reason: isUnsupportedMethod(error)
         ? 'Configured RPC does not support stateful wallet call simulation'
         : boundedMessage(error.message, 'Stateful wallet call simulation failed')
-    }
+    })
   }
 
   const calls = parseSimulateCallsResult(outcome.response.result, transactions.length)
   if (!calls) {
-    return {
+    return withDelegation({
       status: 'failed',
       source: 'eth_simulateV1',
       calls: [],
       reason: 'RPC returned an invalid batch simulation result'
-    }
+    })
   }
 
   const callsWithAllowances = calls.map((call, index) =>
     index === 0 && firstAllowance ? { ...call, allowance: firstAllowance } : call
   )
-  return {
+  return withDelegation({
     status: callsWithAllowances.some((call) => call.status === 'reverted') ? 'reverted' : 'succeeded',
     source: 'eth_simulateV1',
     calls: callsWithAllowances
-  }
+  })
 }

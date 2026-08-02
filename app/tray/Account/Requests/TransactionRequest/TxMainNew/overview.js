@@ -145,6 +145,21 @@ export function getAllowancePresentation(simulation) {
   return { className: '_txMainTagBad', label: 'RPC reports a different nonzero token allowance' }
 }
 
+export function getDelegationPresentation(simulation) {
+  const delegation = simulation?.delegation
+  if (delegation?.status === 'delegated' && delegation.delegate) {
+    return {
+      className: '_txMainTagBad',
+      label: `RPC reports delegated account: ${delegation.delegate}`
+    }
+  }
+  if (delegation?.status === 'unavailable') {
+    return { className: '_txMainTagWarning', label: 'Account delegation check unavailable' }
+  }
+
+  return null
+}
+
 const BaseOverviews = {
   CONTRACT_DEPLOY: DeployContractOverview,
   CONTRACT_CALL: ContractCallOverview,
@@ -167,6 +182,7 @@ const TxOverview = ({
   const simulation = getSimulationPresentation(req.simulation)
   const simulationEffects = getSimulationEffectsPresentation(req.simulation, req.account)
   const allowance = getAllowancePresentation(req.simulation)
+  const delegation = getDelegationPresentation(req.simulation)
 
   const Description = BaseOverviews[classification]
 
@@ -221,6 +237,13 @@ const TxOverview = ({
           <ClusterRow>
             <ClusterValue>
               <div className={`_txMainTag ${simulation.className}`}>{simulation.label}</div>
+            </ClusterValue>
+          </ClusterRow>
+        )}
+        {delegation && (
+          <ClusterRow>
+            <ClusterValue>
+              <div className={`_txMainTag ${delegation.className}`}>{delegation.label}</div>
             </ClusterValue>
           </ClusterRow>
         )}

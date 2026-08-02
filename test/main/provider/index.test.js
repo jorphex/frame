@@ -1879,6 +1879,26 @@ describe('#send', () => {
       }, '0x5')
     })
 
+    it.each([
+      ['type-4 transaction', (transaction) => (transaction.type = '0x4')],
+      ['numeric type-4 transaction', (transaction) => (transaction.type = 4)],
+      ['authorization list', (transaction) => (transaction.authorizationList = [])]
+    ])('rejects an unsupported EIP-7702 %s before creating a request', (_label, mutate, done) => {
+      mutate(tx)
+
+      sendTransaction((response) => {
+        try {
+          expect(response.result).toBeUndefined()
+          expect(response.error).toMatchObject({ code: 4200 })
+          expect(response.error.message).toMatch(/EIP-7702 authorization transactions are not supported/)
+          expect(accountRequests).toHaveLength(0)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
     it('populates the transaction with the request chain id if not provided in the transaction', (done) => {
       delete tx.chainId
 

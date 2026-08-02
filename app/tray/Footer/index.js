@@ -22,6 +22,7 @@ export const canApproveWalletCalls = (req, actionRequestId) =>
   !req.locked &&
   req.simulation !== undefined &&
   req.simulation?.status !== 'pending' &&
+  req.simulation?.delegation?.status !== 'delegated' &&
   req.preparation?.status === 'succeeded'
 
 class Footer extends React.Component {

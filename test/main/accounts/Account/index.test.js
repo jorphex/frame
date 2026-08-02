@@ -667,6 +667,57 @@ describe('#addRequest', () => {
     expect(request.approvals).toEqual([gasApproval])
   })
 
+  it('requires stable explicit consent while the selected account remains delegated', async () => {
+    const selectedAccount = accountState.address.toLowerCase()
+    const delegation = {
+      status: 'delegated',
+      source: 'eth_getCode',
+      account: selectedAccount,
+      delegate
+    }
+    simulateTransaction
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call', delegation })
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call', delegation })
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call' })
+    const request = {
+      handlerId: 'delegated-account-approval',
+      type: 'transaction',
+      account: selectedAccount,
+      data: { chainId: '0x1', from: selectedAccount, gasLimit: '0x5208' },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    const approval = request.approvals[0]
+    expect(approval).toMatchObject({
+      type: ApprovalType.DelegatedAccountRisk,
+      approved: false,
+      data: {
+        title: 'Delegated Account',
+        confirmLabel: 'Sign With Delegated Account',
+        account: selectedAccount,
+        delegate
+      }
+    })
+    expect(approval.data.message).toMatch(/execute with the delegate's code/i)
+    approval.approve()
+
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.approvals[0]).toBe(approval)
+    expect(approval.approved).toBe(true)
+
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.approvals).toEqual([])
+  })
+
   it('preserves an acknowledged override across automatic fee rechecks and removes it on success', async () => {
     simulateTransaction
       .mockResolvedValueOnce({ status: 'failed', source: 'eth_simulateV1', reason: 'RPC timeout' })
@@ -1276,6 +1327,23 @@ describe('#claimWalletCallsRequest', () => {
 
     expect(() => account.claimWalletCallsRequest(request.handlerId)).not.toThrow()
     expect(request).toMatchObject({ locked: true, status: 'pending' })
+  })
+
+  it('rejects a delegated-account batch at the main-process claim boundary', () => {
+    const request = readyWalletCallsRequest('delegated-wallet-calls')
+    request.simulation.delegation = {
+      status: 'delegated',
+      source: 'eth_getCode',
+      account: request.account,
+      delegate
+    }
+    account.requests[request.handlerId] = request
+    const expected = JSON.parse(JSON.stringify(request))
+    accounts.update.mockClear()
+
+    expect(() => account.claimWalletCallsRequest(request.handlerId)).toThrow(/delegated accounts/i)
+    expect(request).toEqual(expected)
+    expect(accounts.update).not.toHaveBeenCalled()
   })
 
   it.each([

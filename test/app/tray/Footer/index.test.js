@@ -23,6 +23,7 @@ it('blocks only the wallet-call request with an action already in flight', () =>
 it.each([
   ['missing simulation', { simulation: undefined }],
   ['pending simulation', { simulation: { status: 'pending' } }],
+  ['delegated sender', { simulation: { status: 'succeeded', delegation: { status: 'delegated' } } }],
   ['pending preparation', { preparation: { status: 'pending' } }],
   ['failed preparation', { preparation: { status: 'failed', reason: 'unavailable' } }],
   ['claimed request', { locked: true }],

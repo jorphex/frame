@@ -6,11 +6,13 @@ import TxRequestComponent from '../../../../../../app/tray/Account/Requests/Tran
 import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew'
 import {
   getAllowancePresentation,
+  getDelegationPresentation,
   getSimulationEffectsPresentation,
   getSimulationPresentation
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
 import {
   SimulationAllowance,
+  SimulationDelegation,
   SimulationEffects
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData/effects'
 import {
@@ -302,6 +304,46 @@ describe('simulation review', () => {
     expect(getAllowancePresentation({ status: 'succeeded' })).toBeNull()
     render(<SimulationAllowance simulation={{ status: 'succeeded' }} />)
     expect(screen.queryByText('RPC-Reported Current Allowance')).toBeNull()
+  })
+
+  it('prominently summarizes and details a configured-RPC delegation report', () => {
+    const delegate = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const simulation = {
+      status: 'succeeded',
+      delegation: { status: 'delegated', source: 'eth_getCode', account: account.toLowerCase(), delegate }
+    }
+
+    expect(getDelegationPresentation(simulation)).toEqual({
+      className: '_txMainTagBad',
+      label: `RPC reports delegated account: ${delegate}`
+    })
+    render(<SimulationDelegation simulation={simulation} />)
+
+    expect(screen.getByText('Account Delegation Check')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toMatch(/transactions execute with the delegate's code/i)
+    expect(screen.getByText(account.toLowerCase())).toBeTruthy()
+    expect(screen.getByText(delegate)).toBeTruthy()
+    expect(screen.getByText('eth_getCode')).toBeTruthy()
+  })
+
+  it('shows an unavailable delegation check without claiming delegation', () => {
+    const simulation = {
+      status: 'succeeded',
+      delegation: {
+        status: 'unavailable',
+        source: 'eth_getCode',
+        account: account.toLowerCase(),
+        reason: 'RPC returned invalid account code'
+      }
+    }
+
+    expect(getDelegationPresentation(simulation)).toEqual({
+      className: '_txMainTagWarning',
+      label: 'Account delegation check unavailable'
+    })
+    render(<SimulationDelegation simulation={simulation} />)
+    expect(screen.getByRole('note').textContent).toMatch(/could not determine/i)
+    expect(screen.queryByText(/delegates execution to/i)).toBeNull()
   })
 })
 

@@ -137,3 +137,35 @@ export const SimulationAllowance = ({ simulation }) => {
     </div>
   )
 }
+
+export const SimulationDelegation = ({ simulation }) => {
+  const delegation = simulation?.delegation
+  if (delegation?.status !== 'delegated' && delegation?.status !== 'unavailable') return null
+
+  return (
+    <div className='txViewData'>
+      <div className='txViewDataHeader'>Account Delegation Check</div>
+      <div
+        className={
+          delegation.status === 'delegated' ? 'simulationEffectsTruncated' : 'simulationEffectsNotice'
+        }
+        role={delegation.status === 'delegated' ? 'alert' : 'note'}
+      >
+        {delegation.status === 'delegated'
+          ? "Your configured RPC reports EIP-7702 delegated code. Transactions execute with the delegate's code and may not behave like ordinary account transactions."
+          : `Frame could not determine whether this account delegates execution. ${
+              delegation.reason || ''
+            }`.trim()}
+      </div>
+      <SimpleJSON
+        humanizeKeys
+        quoteStrings={false}
+        json={{
+          account: delegation.account,
+          ...(delegation.delegate ? { delegate: delegation.delegate } : {}),
+          source: delegation.source
+        }}
+      />
+    </div>
+  )
+}

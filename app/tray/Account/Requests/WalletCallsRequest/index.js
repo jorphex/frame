@@ -103,6 +103,7 @@ export class WalletCallsRequest extends React.Component {
     const callLabel = req.calls.length === 1 ? 'call' : 'calls'
     const simulation = simulationPresentation(req.simulation)
     const preparation = preparationPresentation(req, this.props.chainData)
+    const delegation = req.simulation?.delegation
 
     return (
       <div key={req.handlerId} className='signerRequest cardShow'>
@@ -127,6 +128,22 @@ export class WalletCallsRequest extends React.Component {
                 is approved.
               </div>
             </div>
+
+            {delegation?.status === 'delegated' && (
+              <div className='walletCallsWarning' role='alert'>
+                <div className='walletCallsWarningTitle'>Delegated account batch blocked</div>
+                <div>
+                  Your configured RPC reports that {delegation.account} delegates execution to{' '}
+                  {delegation.delegate}. Frame does not submit wallet-call batches from delegated accounts.
+                </div>
+              </div>
+            )}
+            {delegation?.status === 'unavailable' && (
+              <div className='walletCallsSimulation walletCallsSimulationWarning' role='status'>
+                <div className='walletCallsSimulationTitle'>Account delegation check unavailable</div>
+                <div className='walletCallsSimulationReason'>{delegation.reason}</div>
+              </div>
+            )}
 
             <div className={`walletCallsSimulation ${simulation.className}`} role='status'>
               <div className='walletCallsSimulationTitle'>{simulation.label}</div>

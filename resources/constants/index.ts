@@ -4,6 +4,7 @@ export enum ApprovalType {
   SimulationApproval = 'approveSimulationOverride',
   TokenApprovalRisk = 'approveBroadTokenAuthority',
   TokenAllowanceChangeRisk = 'approveExistingTokenAllowanceChange',
+  DelegatedAccountRisk = 'approveDelegatedAccountExecution',
   TokenPermitRisk = 'approveUnlimitedTokenPermit',
   SignatureRisk = 'approveDangerousSignature'
 }

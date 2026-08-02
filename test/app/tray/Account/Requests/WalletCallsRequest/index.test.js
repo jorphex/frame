@@ -158,6 +158,43 @@ it('warns about non-atomic partial execution and exposes no approval control', (
   expect(screen.queryByText('Sign')).toBeNull()
 })
 
+it('shows that delegated-account wallet-call submission is blocked', () => {
+  const req = request([{ to: target, value: '0x0', data: '0x' }])
+  const delegate = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  req.simulation = {
+    status: 'succeeded',
+    source: 'eth_simulateV1',
+    calls: [{ status: 'succeeded', source: 'eth_simulateV1' }],
+    delegation: { status: 'delegated', source: 'eth_getCode', account, delegate }
+  }
+
+  render(<WalletCallsRequest originName='example.test' req={req} />)
+
+  expect(screen.getByText('Delegated account batch blocked')).toBeTruthy()
+  expect(screen.getByText((content) => content.includes(account) && content.includes(delegate))).toBeTruthy()
+})
+
+it('shows an unavailable wallet-call delegation check without claiming delegation', () => {
+  const req = request([{ to: target, value: '0x0', data: '0x' }])
+  req.simulation = {
+    status: 'succeeded',
+    source: 'eth_simulateV1',
+    calls: [{ status: 'succeeded', source: 'eth_simulateV1' }],
+    delegation: {
+      status: 'unavailable',
+      source: 'eth_getCode',
+      account,
+      reason: 'Account delegation check timed out'
+    }
+  }
+
+  render(<WalletCallsRequest originName='example.test' req={req} />)
+
+  expect(screen.getByText('Account delegation check unavailable')).toBeTruthy()
+  expect(screen.getByText('Account delegation check timed out')).toBeTruthy()
+  expect(screen.queryByText('Delegated account batch blocked')).toBeNull()
+})
+
 it('renders complete long calldata rather than a shortened preview', () => {
   const calldata = `0x${'ab'.repeat(256)}`
   render(

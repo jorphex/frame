@@ -470,6 +470,7 @@ class FrameAccount {
     this.removeApproval(req, ApprovalType.SimulationApproval)
     this.removeApproval(req, ApprovalType.TokenApprovalRisk)
     this.removeApproval(req, ApprovalType.TokenAllowanceChangeRisk)
+    this.removeApproval(req, ApprovalType.DelegatedAccountRisk)
   }
 
   private syncSimulationApproval(req: TransactionRequest, simulation: TransactionSimulation) {
@@ -578,6 +579,22 @@ class FrameAccount {
     })
   }
 
+  private syncDelegatedAccountRisk(req: TransactionRequest, simulation: TransactionSimulation) {
+    const delegation = simulation.delegation
+    if (delegation?.status !== 'delegated' || !delegation.delegate) {
+      this.removeApproval(req, ApprovalType.DelegatedAccountRisk)
+      return
+    }
+
+    this.syncManagedApproval(req, ApprovalType.DelegatedAccountRisk, {
+      title: 'Delegated Account',
+      message: `Your configured RPC reports that ${delegation.account} delegates execution to ${delegation.delegate}. Transactions from this account execute with the delegate's code and may behave differently from an ordinary account. Verify the delegate before proceeding.`,
+      confirmLabel: 'Sign With Delegated Account',
+      account: delegation.account,
+      delegate: delegation.delegate
+    })
+  }
+
   syncPermitApprovalRisk(req: PermitSignatureRequest) {
     const amount = parseTokenBaseUnitAmount(req.typedMessage?.data?.message?.value)
     if (amount !== MAX_UINT256) {
@@ -618,6 +635,7 @@ class FrameAccount {
     this.syncSimulationApproval(req, simulation)
     this.syncTokenApprovalRisk(req, simulation)
     this.syncTokenAllowanceChangeRisk(req, simulation)
+    this.syncDelegatedAccountRisk(req, simulation)
     this.update()
   }
 
@@ -850,6 +868,9 @@ class FrameAccount {
     }
     if (!walletCalls.simulation || walletCalls.simulation.status === 'pending') {
       throw new Error('Wallet-call execution check is still pending')
+    }
+    if (walletCalls.simulation.delegation?.status === 'delegated') {
+      throw new Error('Wallet-call batches from delegated accounts are not supported')
     }
     if (!walletCalls.preparation || walletCalls.preparation.status !== 'succeeded') {
       throw new Error('Wallet-call transaction preparation is not ready')

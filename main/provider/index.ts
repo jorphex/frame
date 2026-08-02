@@ -772,6 +772,23 @@ export class Provider extends EventEmitter {
     try {
       const txParams = payload.params[0]
       const payloadChain = payload.chainId
+      const transactionType = (txParams as { type?: unknown } | undefined)?.type
+
+      if (
+        txParams &&
+        (Object.prototype.hasOwnProperty.call(txParams, 'authorizationList') ||
+          transactionType === 4 ||
+          (typeof transactionType === 'string' && /^(?:0x)?0*4$/i.test(transactionType)))
+      ) {
+        return resError(
+          {
+            message: 'EIP-7702 authorization transactions are not supported',
+            code: 4200
+          },
+          payload,
+          res
+        )
+      }
 
       const normalizedTx = normalizeChainId(txParams, payloadChain ? parseInt(payloadChain, 16) : undefined)
       const tx = {

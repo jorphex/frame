@@ -96,9 +96,18 @@ filtering. A renderer compromise must not be assumed harmless.
 
 RPC endpoints, explorers, IPFS gateways, ABI sources, token metadata, pricing
 services, update hosting, and signer-vendor services may be unavailable,
-incorrect, or malicious. Decoding is explanatory and is not transaction
-simulation. Users must verify chain, recipient, value, calldata, and signing
-details on the hardware device whenever possible.
+incorrect, or malicious. Transaction execution checks, reported token effects,
+allowance reads, and EIP-7702 account-delegation checks come from the configured
+RPC and are not independently verified. Decoding is explanatory and does not
+prove contract behavior. Users must verify chain, recipient, value, calldata,
+and signing details on the hardware device whenever possible.
+
+Frame recognizes the exact EIP-7702 delegation indicator returned by
+`eth_getCode`, requires an additional approval for ordinary transactions from a
+reported delegated account, and blocks sequential wallet-call batches from one.
+Externally supplied type-4 transactions and authorization lists are rejected;
+Frame does not create or sign EIP-7702 authorizations. Delegation state can
+change after review, and a faulty or malicious RPC can omit or falsify it.
 
 This fork does not initialize or ship a hosted crash-telemetry client. Uncaught
 main-process errors are written to the local Electron log and may display a local
