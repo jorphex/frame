@@ -3,6 +3,9 @@ import { z } from 'zod'
 
 export const ExtensionBrowserSchema = z.enum(['chrome', 'firefox', 'safari'])
 export const ExtensionFingerprintSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/)
+export const ExtensionInstallationIdSchema = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
 const P256CoordinateSchema = z
   .string()
   .regex(/^[A-Za-z0-9_-]{43}$/)
@@ -29,7 +32,8 @@ export const extensionPublicKeyFingerprint = (publicKey: ExtensionPublicKey) =>
 
 export const ExtensionCredentialSchema = z
   .object({
-    protocolVersion: z.literal(1),
+    protocolVersion: z.literal(2),
+    installationId: ExtensionInstallationIdSchema,
     browser: ExtensionBrowserSchema,
     extensionId: z.string().min(1).max(128),
     publicKey: ExtensionPublicKeySchema,

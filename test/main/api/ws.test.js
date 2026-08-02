@@ -21,7 +21,7 @@ const extensionRequest = {
   headers: {
     origin: 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf'
   },
-  url: '/?identity=frame-extension'
+  url: '/?identity=frame-extension&role=control'
 }
 
 const regularRequest = { headers: { origin: 'https://example.test' } }
@@ -36,6 +36,7 @@ const extensionPublicKey = {
   key_ops: ['verify']
 }
 const extensionFingerprint = extensionKeyFingerprint(extensionPublicKey)
+const extensionInstallationId = '7a86842f-7c01-4d0d-b0f7-fc04e0acfd8f'
 const flushPromises = async () => {
   for (let index = 0; index < 6; index += 1) await Promise.resolve()
 }
@@ -45,9 +46,10 @@ const authenticateExtension = async (socket) => {
     'message',
     JSON.stringify({
       type: 'frame-auth',
-      version: 1,
+      version: 2,
       step: 'hello',
       clientNonce: Buffer.alloc(32, 1).toString('base64url'),
+      installationId: extensionInstallationId,
       publicKey: extensionPublicKey
     })
   )
@@ -61,7 +63,7 @@ const authenticateExtension = async (socket) => {
     'message',
     JSON.stringify({
       type: 'frame-auth',
-      version: 1,
+      version: 2,
       step: 'proof',
       challengeId: challenge.challengeId,
       signature
@@ -88,7 +90,8 @@ beforeEach(async () => {
   store.setExtensionCredential = jest.fn()
   store.set('main.extensionCredentials', {
     [extensionFingerprint]: {
-      protocolVersion: 1,
+      protocolVersion: 2,
+      installationId: extensionInstallationId,
       browser: 'chrome',
       extensionId: 'ldcoohedfbjoobcadoglnnmmfbdlmmhf',
       publicKey: extensionPublicKey,
@@ -117,7 +120,7 @@ afterEach(() => mockSocket.emit('close'))
 it('requires and accepts a signed companion authentication handshake', () => {
   expect(authenticatedResponse).toEqual({
     type: 'frame-auth',
-    version: 1,
+    version: 2,
     step: 'authenticated',
     fingerprint: extensionFingerprint
   })
@@ -189,9 +192,10 @@ it('aborts pending consent when another authentication frame arrives', async () 
     'message',
     JSON.stringify({
       type: 'frame-auth',
-      version: 1,
+      version: 2,
       step: 'hello',
       clientNonce: Buffer.alloc(32, 3).toString('base64url'),
+      installationId: extensionInstallationId,
       publicKey
     })
   )
@@ -205,7 +209,7 @@ it('aborts pending consent when another authentication frame arrives', async () 
     'message',
     JSON.stringify({
       type: 'frame-auth',
-      version: 1,
+      version: 2,
       step: 'proof',
       challengeId: challenge.challengeId,
       signature
@@ -240,9 +244,10 @@ it('rate-limits challenge issuance across extension connections', async () => {
   limitedServer.emit('connection', second, extensionRequest)
   const hello = JSON.stringify({
     type: 'frame-auth',
-    version: 1,
+    version: 2,
     step: 'hello',
     clientNonce: Buffer.alloc(32, 2).toString('base64url'),
+    installationId: extensionInstallationId,
     publicKey: extensionPublicKey
   })
 

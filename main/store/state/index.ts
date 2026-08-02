@@ -102,7 +102,7 @@ const main = (path: string, def: unknown) => {
 }
 
 const mainState = {
-  _version: main('_version', 44),
+  _version: main('_version', 45),
   instanceId: main('instanceId', generateUuid()),
   colorway: main('colorway', 'dark'),
   colorwayPrimary: {

@@ -40,6 +40,7 @@ export interface OriginAccess {
 export interface FrameExtension {
   browser: ExtensionBrowser
   id: string
+  role: 'control' | 'page'
 }
 
 // allows the Frame extension to request specific methods
@@ -267,6 +268,8 @@ export function parseFrameExtension(req: IncomingMessage): FrameExtension | unde
   const origin = req.headers.origin || ''
   const query = queryString.parse((req.url || '').replace('/', ''))
   if (query['identity'] !== 'frame-extension') return
+  const role = query['role']
+  if (role !== 'control' && role !== 'page') return
 
   const match = /^(chrome-extension|moz-extension|safari-web-extension):\/\/([^/?#]+)$/iu.exec(origin)
   if (!match) return
@@ -275,16 +278,16 @@ export function parseFrameExtension(req: IncomingMessage): FrameExtension | unde
   const id = rawId.toLowerCase()
 
   if (scheme.toLowerCase() === 'chrome-extension' && /^[a-p]{32}$/u.test(id)) {
-    return { browser: 'chrome', id }
+    return { browser: 'chrome', id, role }
   }
   if (
     scheme.toLowerCase() === 'moz-extension' &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(id)
   ) {
-    return { browser: 'firefox', id }
+    return { browser: 'firefox', id, role }
   }
   if (dev && scheme.toLowerCase() === 'safari-web-extension' && /^[0-9a-z.-]{1,128}$/u.test(id)) {
-    return { browser: 'safari', id }
+    return { browser: 'safari', id, role }
   }
 
   return

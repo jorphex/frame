@@ -18,6 +18,7 @@ import {
 const clientNonce = Buffer.alloc(32, 1).toString('base64url')
 const serverNonce = Buffer.alloc(32, 2).toString('base64url')
 const challengeId = '18e73d72-3643-4cf6-846f-83854160f9f2'
+const installationId = '7a86842f-7c01-4d0d-b0f7-fc04e0acfd8f'
 
 function keyPair() {
   const pair = generateKeyPairSync('ec', { namedCurve: 'P-256' })
@@ -36,9 +37,10 @@ function keyPair() {
 function hello(publicKey: ExtensionPublicKey, overrides = {}) {
   return JSON.stringify({
     type: 'frame-auth',
-    version: 1,
+    version: 2,
     step: 'hello',
     clientNonce,
+    installationId,
     publicKey,
     ...overrides
   })
@@ -60,10 +62,10 @@ function session(authorize = jest.fn(async () => true), now = jest.fn(() => 1_00
   }
 }
 
-it('parses only exact bounded version-one authentication messages', () => {
+it('parses only exact bounded version-two authentication messages', () => {
   const { publicKey } = keyPair()
   expect(parseExtensionAuthMessage(hello(publicKey)).success).toBe(true)
-  expect(parseExtensionAuthMessage(hello(publicKey, { version: 2 }))).toEqual({
+  expect(parseExtensionAuthMessage(hello(publicKey, { version: 1 }))).toEqual({
     success: false,
     code: 'unsupported-version'
   })
@@ -86,17 +88,18 @@ it('derives stable fingerprints and six-digit pairing codes', () => {
   expect(
     extensionPairingCode({
       type: 'frame-auth',
-      version: 1,
+      version: 2,
       step: 'challenge',
       challengeId,
       clientNonce,
       serverNonce,
       browser: 'chrome',
       extensionId: 'a'.repeat(32),
-      fingerprint: 'f'.repeat(43),
+      installationId,
+      fingerprint: Buffer.alloc(32, 3).toString('base64url'),
       expiresAt: 61_000
     })
-  ).toBe('533220')
+  ).toBe('269231')
 })
 
 it('rejects non-canonical coordinates and inconsistent persisted identities', () => {
@@ -111,7 +114,8 @@ it('rejects non-canonical coordinates and inconsistent persisted identities', ()
   })
 
   const credential = {
-    protocolVersion: 1,
+    protocolVersion: 2,
+    installationId,
     browser: 'chrome',
     extensionId: 'a'.repeat(32),
     publicKey,
@@ -142,13 +146,14 @@ it('authorizes a candidate and verifies one replay-resistant proof', async () =>
   const challenge = await auth.receive(hello(publicKey))
   expect(challenge).toMatchObject({
     type: 'frame-auth',
-    version: 1,
+    version: 2,
     step: 'challenge',
     challengeId,
     clientNonce,
     serverNonce,
     browser: 'chrome',
     extensionId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    installationId,
     expiresAt: 1_000 + EXTENSION_AUTH_CHALLENGE_TTL_MS
   })
   if (challenge.step !== 'challenge') throw new Error('Expected challenge')
@@ -164,7 +169,7 @@ it('authorizes a candidate and verifies one replay-resistant proof', async () =>
     auth.receive(
       JSON.stringify({
         type: 'frame-auth',
-        version: 1,
+        version: 2,
         step: 'proof',
         challengeId,
         signature
@@ -172,7 +177,7 @@ it('authorizes a candidate and verifies one replay-resistant proof', async () =>
     )
   ).resolves.toEqual({
     type: 'frame-auth',
-    version: 1,
+    version: 2,
     step: 'authenticated',
     fingerprint: challenge.fingerprint
   })
@@ -180,6 +185,7 @@ it('authorizes a candidate and verifies one replay-resistant proof', async () =>
     expect.objectContaining({
       browser: 'chrome',
       extensionId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      installationId,
       publicKey,
       pairingCode: expect.stringMatching(/^\d{6}$/)
     }),
@@ -201,7 +207,7 @@ it('rejects denied, expired, mismatched, invalid, and replayed proofs', async ()
     denied.receive(
       JSON.stringify({
         type: 'frame-auth',
-        version: 1,
+        version: 2,
         step: 'proof',
         challengeId,
         signature: deniedSignature
@@ -219,7 +225,7 @@ it('rejects denied, expired, mismatched, invalid, and replayed proofs', async ()
   expiring.now.mockReturnValue(challenge.expiresAt)
   await expect(
     expiring.auth.receive(
-      JSON.stringify({ type: 'frame-auth', version: 1, step: 'proof', challengeId, signature })
+      JSON.stringify({ type: 'frame-auth', version: 2, step: 'proof', challengeId, signature })
     )
   ).resolves.toMatchObject({ step: 'error', code: 'expired' })
 
@@ -229,7 +235,7 @@ it('rejects denied, expired, mismatched, invalid, and replayed proofs', async ()
     invalid.receive(
       JSON.stringify({
         type: 'frame-auth',
-        version: 1,
+        version: 2,
         step: 'proof',
         challengeId,
         signature: Buffer.alloc(64).toString('base64url')
@@ -237,7 +243,7 @@ it('rejects denied, expired, mismatched, invalid, and replayed proofs', async ()
     )
   ).resolves.toMatchObject({ step: 'error', code: 'invalid-proof' })
   await expect(
-    invalid.receive(JSON.stringify({ type: 'frame-auth', version: 1, step: 'proof', challengeId, signature }))
+    invalid.receive(JSON.stringify({ type: 'frame-auth', version: 2, step: 'proof', challengeId, signature }))
   ).resolves.toMatchObject({ step: 'error', code: 'invalid-state' })
 })
 
@@ -259,7 +265,7 @@ it('serializes approval and rejects malformed public points before prompting', a
   }).toString('base64url')
   const proof = JSON.stringify({
     type: 'frame-auth',
-    version: 1,
+    version: 2,
     step: 'proof',
     challengeId,
     signature

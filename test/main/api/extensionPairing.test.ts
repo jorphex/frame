@@ -9,10 +9,12 @@ import {
 
 import type { ExtensionPairingCandidate } from '../../../main/api/extensionAuth'
 import { extensionKeyFingerprint } from '../../../main/api/extensionAuth'
+import { registerAuthenticatedExtension } from '../../../main/api/extensionConnections'
 
 jest.mock('../../../main/store')
 
 const publicKeys = new Map<string, ExtensionPairingCandidate['publicKey']>()
+const installationId = '7a86842f-7c01-4d0d-b0f7-fc04e0acfd8f'
 
 function publicKey(marker: string) {
   const existing = publicKeys.get(marker)
@@ -34,7 +36,8 @@ function candidate(marker: string, overrides = {}): ExtensionPairingCandidate {
   const key = publicKey(marker)
   const fingerprint = extensionKeyFingerprint(key)
   return {
-    protocolVersion: 1,
+    protocolVersion: 2,
+    installationId,
     browser: 'chrome',
     extensionId: marker.repeat(32),
     publicKey: key,
@@ -84,7 +87,8 @@ it('deduplicates concurrent consent and persists the approved credential', async
   expect(respondToExtensionPairing(request.requestId, true)).toBe(true)
   await expect(Promise.all([first, second])).resolves.toEqual([true, true])
   expect(store.setExtensionCredential).toHaveBeenCalledWith({
-    protocolVersion: 1,
+    protocolVersion: 2,
+    installationId: pairing.installationId,
     browser: pairing.browser,
     extensionId: pairing.extensionId,
     publicKey: pairing.publicKey,
@@ -107,6 +111,48 @@ it('rejects a competing key for an extension identity with an active prompt', as
   await expect(first).resolves.toBe(false)
 })
 
+it('revokes a previous key when the same extension identity approves a replacement', async () => {
+  const previous = candidate('l')
+  const { pairingCode: _pairingCode, ...previousCredential } = previous
+  store.set('main.extensionCredentials', previous.fingerprint, previousCredential)
+  const staleSocket = {
+    close: jest.fn(),
+    disposeSession: jest.fn(),
+    extensionFingerprint: undefined
+  }
+  registerAuthenticatedExtension(staleSocket, previous.fingerprint)
+
+  const replacement = candidate('m', { extensionId: previous.extensionId })
+  const waiting = authorizeExtension(replacement)
+  const request = store.notify.mock.calls[0][1]
+  expect(respondToExtensionPairing(request.requestId, true)).toBe(true)
+
+  await expect(waiting).resolves.toBe(true)
+  expect(store.removeExtensionCredential).toHaveBeenCalledWith(previous.fingerprint)
+  expect(staleSocket.disposeSession).toHaveBeenCalledTimes(1)
+  expect(staleSocket.close).toHaveBeenCalledWith(1008, 'Extension credential revoked')
+  expect(store.setExtensionCredential).toHaveBeenCalledWith(
+    expect.objectContaining({ fingerprint: replacement.fingerprint })
+  )
+})
+
+it('keeps credentials for another browser profile with the same extension id', async () => {
+  const firstProfile = candidate('o')
+  const { pairingCode: _pairingCode, ...credential } = firstProfile
+  store.set('main.extensionCredentials', firstProfile.fingerprint, credential)
+
+  const secondProfile = candidate('p', {
+    extensionId: firstProfile.extensionId,
+    installationId: '9c2853ac-706f-4d6b-ae25-297fc5e5dc48'
+  })
+  const waiting = authorizeExtension(secondProfile)
+  const request = store.notify.mock.calls[0][1]
+  respondToExtensionPairing(request.requestId, true)
+
+  await expect(waiting).resolves.toBe(true)
+  expect(store.removeExtensionCredential).not.toHaveBeenCalled()
+})
+
 it('allows only one visible pairing candidate at a time', async () => {
   const firstCandidate = candidate('i')
   const first = authorizeExtension(firstCandidate)
@@ -116,6 +162,17 @@ it('allows only one visible pairing candidate at a time', async () => {
 
   respondToExtensionPairing(store.notify.mock.calls[0][1].requestId, false)
   await expect(first).resolves.toBe(false)
+})
+
+it('allows page sessions to reuse trust but never create a pairing prompt', async () => {
+  const unknown = candidate('n')
+  await expect(authorizeExtension(unknown, undefined, false)).resolves.toBe(false)
+  expect(store.notify).not.toHaveBeenCalled()
+
+  const { pairingCode: _pairingCode, ...credential } = unknown
+  store.set('main.extensionCredentials', unknown.fingerprint, credential)
+  await expect(authorizeExtension(unknown, undefined, false)).resolves.toBe(true)
+  expect(store.notify).not.toHaveBeenCalled()
 })
 
 it('caches a rejection for the process lifetime and cancels abandoned consent', async () => {

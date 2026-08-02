@@ -22,6 +22,11 @@ import {
   type ExtensionAuthServerMessage
 } from './extensionAuth'
 import { authorizeExtension } from './extensionPairing'
+import {
+  disconnectExtensionCredential,
+  registerAuthenticatedExtension,
+  unregisterAuthenticatedExtension
+} from './extensionConnections'
 import parsePayload, { MAX_REQUEST_BYTES } from './validPayload'
 import protectedMethods from './protectedMethods'
 import { parseChainId } from '../provider/chainRequests'
@@ -63,36 +68,12 @@ interface FrameWebSocket extends WebSocket {
   frameExtension: FrameExtension | undefined
 }
 
-const authenticatedExtensionSockets = new Map<string, Set<FrameWebSocket>>()
-
-const registerAuthenticatedExtension = (socket: FrameWebSocket, fingerprint: string) => {
-  socket.extensionFingerprint = fingerprint
-  const sockets = authenticatedExtensionSockets.get(fingerprint) ?? new Set<FrameWebSocket>()
-  sockets.add(socket)
-  authenticatedExtensionSockets.set(fingerprint, sockets)
-}
-
-const unregisterAuthenticatedExtension = (socket: FrameWebSocket) => {
-  if (!socket.extensionFingerprint) return
-  const sockets = authenticatedExtensionSockets.get(socket.extensionFingerprint)
-  sockets?.delete(socket)
-  if (sockets?.size === 0) authenticatedExtensionSockets.delete(socket.extensionFingerprint)
-  socket.extensionFingerprint = undefined
-}
-
 const terminateSocket = (socket: FrameWebSocket, code: number, reason: string) => {
   socket.disposeSession()
   socket.close(code, reason)
 }
 
-export const disconnectExtensionCredential = (fingerprint: string) => {
-  const sockets = authenticatedExtensionSockets.get(fingerprint)
-  authenticatedExtensionSockets.delete(fingerprint)
-  sockets?.forEach((socket) => {
-    socket.disposeSession()
-    socket.close(1008, 'Extension credential revoked')
-  })
-}
+export { disconnectExtensionCredential }
 
 interface ExtensionPayload extends JSONRPCRequestPayload {
   __frameOrigin?: string
@@ -140,7 +121,10 @@ const handler = (
   socket.extensionFingerprint = undefined
   socket.authProcessing = false
   socket.authSession = socket.frameExtension
-    ? new ExtensionAuthSession(socket.frameExtension, { authorize: authorizeExtension })
+    ? new ExtensionAuthSession(socket.frameExtension, {
+        authorize: (candidate, signal) =>
+          authorizeExtension(candidate, signal, socket.frameExtension?.role === 'control')
+      })
     : undefined
   const authController = new AbortController()
   let authDeadline = socket.authSession

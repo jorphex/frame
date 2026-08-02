@@ -3,13 +3,14 @@ import { z } from 'zod'
 
 import {
   ExtensionPublicKeySchema,
+  ExtensionInstallationIdSchema,
   extensionPublicKeyFingerprint,
   type ExtensionBrowser,
   type ExtensionCredential,
   type ExtensionPublicKey
 } from '../store/state/types/extensionCredential'
 
-export const EXTENSION_AUTH_VERSION = 1
+export const EXTENSION_AUTH_VERSION = 2
 export const EXTENSION_AUTH_MAX_MESSAGE_BYTES = 8 * 1024
 export const EXTENSION_AUTH_CHALLENGE_TTL_MS = 60 * 1000
 
@@ -23,6 +24,7 @@ const AuthHelloSchema = z
     version: z.literal(EXTENSION_AUTH_VERSION),
     step: z.literal('hello'),
     clientNonce: NonceSchema,
+    installationId: ExtensionInstallationIdSchema,
     publicKey: ExtensionPublicKeySchema
   })
   .strict()
@@ -52,13 +54,14 @@ export interface ExtensionPairingCandidate extends ExtensionCredential {
 
 export interface ExtensionAuthChallenge {
   type: 'frame-auth'
-  version: 1
+  version: 2
   step: 'challenge'
   challengeId: string
   clientNonce: string
   serverNonce: string
   browser: ExtensionBrowser
   extensionId: string
+  installationId: string
   fingerprint: string
   expiresAt: number
 }
@@ -67,13 +70,13 @@ export type ExtensionAuthServerMessage =
   | ExtensionAuthChallenge
   | {
       type: 'frame-auth'
-      version: 1
+      version: 2
       step: 'authenticated'
       fingerprint: string
     }
   | {
       type: 'frame-auth'
-      version: 1
+      version: 2
       step: 'error'
       code:
         'denied' | 'expired' | 'invalid-message' | 'invalid-proof' | 'invalid-state' | 'unsupported-version'
@@ -135,7 +138,7 @@ export function extensionKeyFingerprint(publicKey: ExtensionPublicKey) {
 
 export function extensionPairingCode(challenge: ExtensionAuthChallenge) {
   const digest = createHash('sha256')
-    .update('frame-pairing-code-v1\0', 'utf8')
+    .update('frame-pairing-code-v2\0', 'utf8')
     .update(extensionAuthPayload(challenge))
     .digest()
   return (digest.readUInt32BE(0) % 1_000_000).toString().padStart(6, '0')
@@ -144,12 +147,13 @@ export function extensionPairingCode(challenge: ExtensionAuthChallenge) {
 export function extensionAuthPayload(challenge: ExtensionAuthChallenge) {
   return Buffer.from(
     [
-      'frame-extension-auth-v1',
+      'frame-extension-auth-v2',
       challenge.challengeId,
       challenge.clientNonce,
       challenge.serverNonce,
       challenge.browser,
       challenge.extensionId,
+      challenge.installationId,
       challenge.fingerprint,
       challenge.expiresAt.toString(10)
     ].join('\n'),
@@ -226,11 +230,13 @@ export class ExtensionAuthSession {
       serverNonce: this.randomNonce(),
       browser: this.extension.browser,
       extensionId: this.extension.id,
+      installationId: hello.installationId,
       fingerprint,
       expiresAt: this.now() + EXTENSION_AUTH_CHALLENGE_TTL_MS
     }
     const candidate: ExtensionPairingCandidate = {
       protocolVersion: EXTENSION_AUTH_VERSION,
+      installationId: hello.installationId,
       browser: this.extension.browser,
       extensionId: this.extension.id,
       publicKey: hello.publicKey,

@@ -4,6 +4,7 @@ import store from '../store'
 import { requireStoreAction } from '../store/action'
 import { ExtensionCredentialSchema, type ExtensionCredential } from '../store/state/types/extensionCredential'
 import type { ExtensionPairingCandidate } from './extensionAuth'
+import { disconnectExtensionCredential } from './extensionConnections'
 
 interface PendingPairing {
   candidate: ExtensionPairingCandidate
@@ -18,11 +19,13 @@ const activeByIdentity = new Map<string, PendingPairing>()
 const activeByRequest = new Map<string, PendingPairing>()
 const rejectedIdentities = new Set<string>()
 
-const pairingIdentity = ({ browser, extensionId }: ExtensionPairingCandidate) => `${browser}:${extensionId}`
+const pairingIdentity = ({ browser, extensionId, installationId }: ExtensionPairingCandidate) =>
+  `${browser}:${extensionId}:${installationId}`
 
 function credentialMatches(candidate: ExtensionPairingCandidate, credential: ExtensionCredential) {
   return (
     credential.protocolVersion === candidate.protocolVersion &&
+    credential.installationId === candidate.installationId &&
     credential.browser === candidate.browser &&
     credential.extensionId === candidate.extensionId &&
     credential.fingerprint === candidate.fingerprint &&
@@ -33,6 +36,23 @@ function credentialMatches(candidate: ExtensionPairingCandidate, credential: Ext
 
 function storedCredential(fingerprint: string) {
   return ExtensionCredentialSchema.safeParse(store('main.extensionCredentials', fingerprint))
+}
+
+function replaceIdentityCredentials(candidate: ExtensionPairingCandidate) {
+  const credentials: Record<string, unknown> = store('main.extensionCredentials') || {}
+  Object.entries(credentials).forEach(([fingerprint, value]) => {
+    const parsed = ExtensionCredentialSchema.safeParse(value)
+    if (
+      parsed.success &&
+      parsed.data.browser === candidate.browser &&
+      parsed.data.extensionId === candidate.extensionId &&
+      parsed.data.installationId === candidate.installationId &&
+      fingerprint !== candidate.fingerprint
+    ) {
+      requireStoreAction('removeExtensionCredential')(fingerprint)
+      disconnectExtensionCredential(fingerprint)
+    }
+  })
 }
 
 function finishPairing(pending: PendingPairing, approved: boolean) {
@@ -80,7 +100,8 @@ function waitForPairing(pending: PendingPairing, signal?: AbortSignal) {
 
 export async function authorizeExtension(
   candidate: ExtensionPairingCandidate,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  allowPairing = true
 ): Promise<boolean> {
   const { pairingCode: _pairingCode, ...candidateCredential } = candidate
   const parsedCandidate = ExtensionCredentialSchema.safeParse(candidateCredential)
@@ -88,6 +109,7 @@ export async function authorizeExtension(
 
   const existing = storedCredential(candidate.fingerprint)
   if (existing.success && credentialMatches(candidate, existing.data)) return true
+  if (!allowPairing) return false
 
   const identity = pairingIdentity(candidate)
   if (rejectedIdentities.has(identity)) return false
@@ -133,6 +155,7 @@ export function respondToExtensionPairing(requestId: string, approved: boolean) 
   const identity = pairingIdentity(pending.candidate)
   if (approved) {
     const { pairingCode: _pairingCode, ...credential } = pending.candidate
+    replaceIdentityCredentials(pending.candidate)
     requireStoreAction('setExtensionCredential')(credential)
     rejectedIdentities.delete(identity)
   } else {

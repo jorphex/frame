@@ -216,11 +216,12 @@ describe('#updateOrigin', () => {
 describe('#parseFrameExtension', () => {
   it('correctly identifies the Chrome extension', () => {
     const origin = 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf'
-    const req = { headers: { origin }, url: '/?identity=frame-extension' }
+    const req = { headers: { origin }, url: '/?identity=frame-extension&role=control' }
 
     expect(parseFrameExtension(req)).toStrictEqual({
       browser: 'chrome',
-      id: 'ldcoohedfbjoobcadoglnnmmfbdlmmhf'
+      id: 'ldcoohedfbjoobcadoglnnmmfbdlmmhf',
+      role: 'control'
     })
   })
 
@@ -240,11 +241,12 @@ describe('#parseFrameExtension', () => {
 
   it('correctly identifies the Firefox extension', () => {
     const origin = 'moz-extension://4be0643f-1d98-573b-97cd-ca98a65347dd'
-    const req = { headers: { origin }, url: '/?identity=frame-extension' }
+    const req = { headers: { origin }, url: '/?identity=frame-extension&role=page' }
 
     expect(parseFrameExtension(req)).toStrictEqual({
       browser: 'firefox',
-      id: '4be0643f-1d98-573b-97cd-ca98a65347dd'
+      id: '4be0643f-1d98-573b-97cd-ca98a65347dd',
+      role: 'page'
     })
   })
 
@@ -258,13 +260,14 @@ describe('#parseFrameExtension', () => {
   it('correctly identifies the Safari extension', async () => {
     return withEnvironment({ NODE_ENV: 'development' }, async () => {
       const origin = 'safari-web-extension://4be0643f-1d98-573b-97cd-ca98a65347dd'
-      const req = { headers: { origin }, url: '/?identity=frame-extension' }
+      const req = { headers: { origin }, url: '/?identity=frame-extension&role=control' }
 
       const { parseFrameExtension } = await import('../../../main/api/origins')
 
       expect(parseFrameExtension(req)).toStrictEqual({
         browser: 'safari',
-        id: expect.any(String)
+        id: expect.any(String),
+        role: 'control'
       })
     })
   })
@@ -272,7 +275,7 @@ describe('#parseFrameExtension', () => {
   it('does not recognize a Safari extension in production', () => {
     return withEnvironment({ NODE_ENV: 'production' }, async () => {
       const origin = 'safari-web-extension://4be0643f-1d98-573b-97cd-ca98a65347dd'
-      const req = { headers: { origin }, url: '/?identity=frame-extension' }
+      const req = { headers: { origin }, url: '/?identity=frame-extension&role=control' }
 
       const { parseFrameExtension } = await import('../../../main/api/origins')
 
@@ -296,6 +299,17 @@ describe('#parseFrameExtension', () => {
     const req = { headers: { origin } }
 
     expect(parseFrameExtension(req)).toBeUndefined()
+  })
+
+  it('requires a bounded companion connection role', () => {
+    const origin = 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf'
+    expect(parseFrameExtension({ headers: { origin }, url: '/?identity=frame-extension' })).toBeUndefined()
+    expect(
+      parseFrameExtension({
+        headers: { origin },
+        url: '/?identity=frame-extension&role=attacker'
+      })
+    ).toBeUndefined()
   })
 })
 
