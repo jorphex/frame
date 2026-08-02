@@ -3,9 +3,10 @@
 ## Current Release Boundary
 
 This fork currently produces Linux x64 AppImage and deb artifacts. The automated
-workflow is manual-only and creates a new GitHub **draft** release. It never
-updates or publishes a release automatically. Linux artifacts are currently unsigned;
-macOS notarization and Windows signing are not configured for this fork.
+workflow runs for an exact version tag or a manual dispatch and creates a new
+GitHub **draft** release. It never updates or publishes a release automatically.
+Linux artifacts are currently unsigned; macOS notarization and Windows signing
+are not configured for this fork.
 
 Dependency locking makes installation deterministic, but byte-for-byte
 reproducible artifacts have not yet been demonstrated.
@@ -49,14 +50,17 @@ reproducible artifacts have not yet been demonstrated.
 
 6. Inspect the final diff, dependency graph, test output, package names,
    `dist/SHA256SUMS`, and `dist/frame.cdx.json`. The checksum manifest must cover
-   both packages and the source-bound SBOM. Do not waive unexplained signing,
-   migration, native-module, or packaging failures.
+   both packages and the source-bound SBOM. Package verification must report the
+   exact clean source identity embedded during compilation. Do not waive
+   unexplained signing, migration, native-module, or packaging failures.
 
 ## Build The Draft
 
-Run the **Build a draft Linux release** workflow from GitHub Actions against the
-reviewed commit. The optional tag defaults to `v<package version>` and, when
-provided, must match that value exactly.
+Push the exact `v<package version>` tag on the reviewed commit, or run the **Build
+a draft Linux release** workflow from GitHub Actions against that commit. A
+manually supplied tag must match the package version exactly. The tag trigger is
+available even while this workflow is not on the repository default branch,
+because GitHub reads it from the tagged commit.
 
 The workflow performs the full quality gate, verifies required hardware native
 modules, generates SHA-256 checksums and a CycloneDX SBOM, creates build and SBOM

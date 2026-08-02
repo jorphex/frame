@@ -1,6 +1,9 @@
 name: Build a draft Linux release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -34,10 +37,11 @@ jobs:
         id: release
         env:
           REQUESTED_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
         run: |
           version=$(node --print "require('./package.json').version")
           expected_tag="v${version}"
-          tag="${REQUESTED_TAG:-$expected_tag}"
+          tag="${EVENT_TAG:-${REQUESTED_TAG:-$expected_tag}}"
           if [[ "$tag" != "$expected_tag" ]]; then
             echo "Release tag must exactly match package version: $expected_tag" >&2
             exit 1

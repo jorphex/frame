@@ -1,15 +1,21 @@
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
-import { access, readFile, readdir } from 'node:fs/promises'
+import { access, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
+import { assertReleaseBuildIdentity } from './build-identity.mjs'
+import { readSourceIdentity } from './source-identity.mjs'
 
 const dist = path.resolve('dist')
 const artifactWaitTimeout = 30_000
 const artifactPollInterval = 250
+const packageJson = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
+const packageLock = JSON.parse(await readFile(path.resolve('package-lock.json'), 'utf8'))
+const sourceIdentity = readSourceIdentity()
 
 const findArtifact = async (suffix) => {
   const deadline = Date.now() + artifactWaitTimeout
@@ -78,7 +84,7 @@ const ledgerPackages = [
   '@ledgerhq/hw-transport-node-hid-noevents',
   '@ledgerhq/hw-transport-node-hid-singleton'
 ]
-const appRoot = path.resolve('dist/linux-unpacked/resources/app.asar')
+const appRoot = path.join(process.resourcesPath, 'app.asar')
 const appModules = path.join(appRoot, 'node_modules')
 for (const module of modules) require(path.join(appModules, module))
 const ledgerModules = ledgerPackages.map((module) => require(path.join(appModules, module)))
@@ -138,6 +144,8 @@ const recoveredSignatureAddress = sigUtil.recoverTypedSignature({
 const modernModules = require(path.join(appRoot, 'compiled/main/nebula/modules.js'))
 const fetchUtils = require(path.join(appRoot, 'compiled/resources/utils/fetch.js'))
 const signerCrypto = require(path.join(appRoot, 'compiled/main/signers/hot/crypto.js'))
+const sandbox = require(path.join(appRoot, 'compiled/main/security/sandbox.js'))
+const buildIdentity = require(path.join(appRoot, 'compiled/main/build-identity.json'))
 const packagedMetadata = require(path.join(appRoot, 'package.json'))
 const { Wallet } = require(path.join(appModules, '@ethereumjs/wallet'))
 const walletAddress = Wallet.fromPrivateKey(Buffer.from('46'.repeat(32), 'hex')).getAddressString()
@@ -155,6 +163,12 @@ try {
 const zodPartialRecord = z.partialRecord(z.enum(['existing', 'future']), z.boolean()).parse({ existing: true })
 const zodPrefault = z.object({ enabled: z.boolean().default(true) }).prefault({}).parse(undefined)
 const zodUnsafeInteger = z.number().int().safeParse(Number.MAX_SAFE_INTEGER + 1)
+let noSandboxRejected = false
+try {
+  sandbox.assertSandboxEnabled({ hasSwitch: (name) => name === 'no-sandbox' }, 'production')
+} catch {
+  noSandboxRejected = true
+}
 Promise.all([
   Promise.all([modernModules.loadKuboModule(), modernModules.loadUnixFsModule()]),
   fetchUtils.readJsonWithLimit(new Response('{"runtime":"native"}'), 64)
@@ -163,6 +177,8 @@ Promise.all([
     electron: process.versions.electron,
     abi: process.versions.modules,
     desktopName: packagedMetadata.desktopName,
+    buildIdentity,
+    noSandboxRejected,
     modules,
     ledgerApis: ledgerModules.map((module) => typeof module.default),
     ledgerVersions,
@@ -208,17 +224,45 @@ Promise.all([
     process.exitCode = 1
   })
 `
-const probe = spawnSync(packagedExecutable, ['-e', packagedModuleProbe], {
-  cwd: process.cwd(),
-  encoding: 'utf8',
-  env: { ...process.env, ELECTRON_RUN_AS_NODE: 'true' },
-  timeout: 30_000
-})
+const runPackagedProbe = (description, executable) => {
+  const probe = spawnSync(executable, ['-e', packagedModuleProbe], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: 'true' },
+    timeout: 30_000
+  })
 
-assert.equal(probe.status, 0, `Packaged module probe failed:\n${probe.error || probe.stderr}`)
-const probeResult = JSON.parse(probe.stdout)
-const packageJson = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
-const packageLock = JSON.parse(await readFile(path.resolve('package-lock.json'), 'utf8'))
+  assert.equal(probe.status, 0, `${description} module probe failed:\n${probe.error || probe.stderr}`)
+  return JSON.parse(probe.stdout)
+}
+
+const probeResult = runPackagedProbe('linux-unpacked', packagedExecutable)
+const appImageExtraction = await mkdtemp(path.join(tmpdir(), 'frame-appimage-'))
+const debExtraction = await mkdtemp(path.join(tmpdir(), 'frame-deb-'))
+let appImageProbeResult
+let debProbeResult
+try {
+  execFileSync(path.join(dist, artifacts[0]), ['--appimage-extract'], {
+    cwd: appImageExtraction,
+    stdio: 'ignore',
+    timeout: 30_000
+  })
+  execFileSync('dpkg-deb', ['--extract', path.join(dist, artifacts[1]), debExtraction], {
+    stdio: 'ignore',
+    timeout: 30_000
+  })
+
+  appImageProbeResult = runPackagedProbe('AppImage', path.join(appImageExtraction, 'squashfs-root', 'frame'))
+  debProbeResult = runPackagedProbe('deb', path.join(debExtraction, 'opt', 'Frame', 'frame'))
+} finally {
+  await Promise.all([
+    rm(appImageExtraction, { recursive: true, force: true }),
+    rm(debExtraction, { recursive: true, force: true })
+  ])
+}
+
+assert.deepEqual(appImageProbeResult, probeResult, 'AppImage payload differs from package output')
+assert.deepEqual(debProbeResult, probeResult, 'deb payload differs from package output')
 const desktopEntry = await readDebFile(
   path.join(dist, artifacts[1]),
   `./usr/share/applications/${packageJson.desktopName}`
@@ -245,6 +289,8 @@ assert.equal(builderConfig.linux.category, 'Office;Finance')
 await notarizeHook({})
 assert.equal(probeResult.electron, packageJson.devDependencies.electron)
 assert.equal(probeResult.desktopName, packageJson.desktopName)
+assertReleaseBuildIdentity(probeResult.buildIdentity, sourceIdentity, packageJson.version)
+assert.equal(probeResult.noSandboxRejected, true)
 assert.match(desktopEntry, /^Exec=\/opt\/Frame\/frame %U$/m)
 assert.match(desktopEntry, /^StartupWMClass=frame$/m)
 assert.match(desktopEntry, /^Categories=Office;Finance;$/m)
@@ -302,5 +348,5 @@ console.log(
     probeResult.abi
   } hardware-wallet native, Ledger ${
     probeResult.ledgerVersions['@ledgerhq/hw-app-eth']
-  }, electron-builder 26/notarize 3, React 19/styled-components 6, SIWE, EIP-712, Zod 4, electron-log 5, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
+  }, source identity, sandbox enforcement, electron-builder 26/notarize 3, React 19/styled-components 6, SIWE, EIP-712, Zod 4, electron-log 5, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )
