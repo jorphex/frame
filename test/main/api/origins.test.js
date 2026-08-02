@@ -8,8 +8,7 @@ import {
   updateOrigin,
   isTrusted,
   requestOriginAccess,
-  parseFrameExtension,
-  isKnownExtension
+  parseFrameExtension
 } from '../../../main/api/origins'
 import accounts from '../../../main/accounts'
 import store from '../../../main/store'
@@ -297,77 +296,6 @@ describe('#parseFrameExtension', () => {
     const req = { headers: { origin } }
 
     expect(parseFrameExtension(req)).toBeUndefined()
-  })
-})
-
-describe('#isKnownExtension', () => {
-  beforeEach(() => {
-    store.set('main.knownExtensions', {})
-    store.notify = jest.fn()
-  })
-
-  it('prompts the user to trust the Chrome extension', () => {
-    const extension = { browser: 'chrome', id: 'ldcoohedfbjoobcadoglnnmmfbdlmmhf' }
-
-    isKnownExtension(extension)
-
-    expect(store.notify).toHaveBeenCalledWith('extensionConnect', extension)
-  })
-
-  it('prompts the user to trust a Safari extension', () => {
-    const extension = { browser: 'safari', id: 'test-frame' }
-
-    isKnownExtension(extension)
-
-    expect(store.notify).toHaveBeenCalledWith('extensionConnect', extension)
-  })
-
-  it('knows a previously trusted Firefox extension', async () => {
-    const extension = { browser: 'firefox', id: '4be0643f-1d98-573b-97cd-ca98a65347dd' }
-
-    store.set('main.knownExtensions', { [extension.id]: true })
-
-    return expect(isKnownExtension(extension)).resolves.toBe(true)
-  })
-
-  it('rejects a previously rejected Firefox extension', async () => {
-    const extension = { browser: 'firefox', id: '4be0643f-1d98-573b-97cd-ca98a65347dd' }
-
-    store.set('main.knownExtensions', { [extension.id]: false })
-
-    return expect(isKnownExtension(extension)).resolves.toBe(false)
-  })
-
-  it('prompts the user to trust a Firefox extension', async () => {
-    const extension = { browser: 'firefox', id: '4be0643f-1d98-573b-97cd-ca98a65347dd' }
-
-    isKnownExtension(extension)
-
-    expect(store.notify).toHaveBeenCalledWith('extensionConnect', extension)
-  })
-
-  it('allows a user to trust a Firefox extension', async () => {
-    const extension = { browser: 'firefox', id: '4ae0643f-1d98-573b-97cd-ca98a65347dd' }
-
-    store.notify.mockImplementationOnce(() => {
-      // simulate user accepting the request
-      store.set('main.knownExtensions', { [extension.id]: true })
-      store.getObserver('origins:requestExtension').fire()
-    })
-
-    return expect(isKnownExtension(extension)).resolves.toBe(true)
-  })
-
-  it('allows a user to reject a connection from a Firefox extension', async () => {
-    const extension = { browser: 'firefox', id: '4ce0643f-1d98-573b-97cd-ca98a65347dd' }
-
-    store.notify.mockImplementationOnce(() => {
-      // simulate user accepting the request
-      store.set('main.knownExtensions', { [extension.id]: false })
-      store.getObserver('origins:requestExtension').fire()
-    })
-
-    return expect(isKnownExtension(extension)).resolves.toBe(false)
   })
 })
 

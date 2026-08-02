@@ -11,7 +11,7 @@ import ExtensionConnectNotification from './ExtensionConnect'
 
 const FEE_WARNING_THRESHOLD_USD = 50
 
-class Notify extends React.Component {
+export class Notify extends React.Component {
   mainnet() {
     return (
       <div className='notifyBoxWrap' onMouseDown={(e) => e.stopPropagation()}>
@@ -602,9 +602,24 @@ class Notify extends React.Component {
         </div>
       )
     } else if (notify === 'extensionConnect') {
-      const { browser, id } = this.store('view.notifyData')
+      const { browser, extensionId, pairingCode, requestId } = this.store('view.notifyData')
 
-      return <ExtensionConnectNotification browser={browser} id={id} onClose={() => this.store.notify()} />
+      return (
+        <ExtensionConnectNotification
+          browser={browser}
+          extensionId={extensionId}
+          pairingCode={pairingCode}
+          requestId={requestId}
+          onClose={() => {
+            if (
+              this.store('view.notify') === 'extensionConnect' &&
+              this.store('view.notifyData.requestId') === requestId
+            ) {
+              this.store.notify()
+            }
+          }}
+        />
+      )
     } else {
       return null
     }

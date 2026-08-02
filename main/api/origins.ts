@@ -7,10 +7,10 @@ import store from '../store'
 import { requireStoreAction } from '../store/action'
 
 import type { Permission } from '../store/state'
+import type { ExtensionBrowser } from '../store/state/types/extensionCredential'
 
 const dev = process.env.NODE_ENV === 'development'
 
-const activeExtensionChecks: Record<string, Promise<boolean>> = {}
 interface ActivePermissionCheck {
   promise: Promise<Permission | undefined>
   request: AccessRequest
@@ -19,12 +19,6 @@ interface ActivePermissionCheck {
 }
 
 const activePermissionChecks: Record<string, ActivePermissionCheck> = {}
-const extensionPrefixes = {
-  chrome: 'chrome-extension',
-  firefox: 'moz-extension',
-  safari: 'safari-web-extension'
-}
-
 const sessionOriginPrefix = 'Unknown/'
 const MAX_ORIGIN_LENGTH = 2048
 const internalOrigins = new Set(['frame-extension', 'frame-internal'])
@@ -43,10 +37,8 @@ export interface OriginAccess {
   permission?: Permission
 }
 
-type Browser = 'chrome' | 'firefox' | 'safari'
-
 export interface FrameExtension {
-  browser: Browser
+  browser: ExtensionBrowser
   id: string
 }
 
@@ -60,8 +52,7 @@ const storeApi = {
   getPermission: (address: Address, origin: string) => {
     const permissions: Record<string, Permission> = store('main.permissions', address) || {}
     return Object.values(permissions).find((p) => p.origin === origin)
-  },
-  getKnownExtension: (id: string) => store('main.knownExtensions', id) as boolean
+  }
 }
 
 const currentAccountAddress = () => {
@@ -117,31 +108,6 @@ export function parseOrigin(origin?: string, sessionOrigin = 'Unknown') {
 
 function invalidOrigin(origin: string) {
   return origin !== origin.replace(/[^0-9a-z/:.[\]-]/gi, '')
-}
-
-async function requestExtensionPermission(extension: FrameExtension) {
-  if (extension.id in activeExtensionChecks) {
-    return activeExtensionChecks[extension.id]
-  }
-
-  const result = new Promise<boolean>((resolve) => {
-    const obs = store.observer(() => {
-      const isActive = extension.id in activeExtensionChecks
-      const isAllowed = store('main.knownExtensions', extension.id)
-
-      // wait for a response
-      if (isActive && typeof isAllowed !== 'undefined') {
-        delete activeExtensionChecks[extension.id]
-        obs.remove()
-        resolve(isAllowed)
-      }
-    }, 'origins:requestExtension')
-  })
-
-  activeExtensionChecks[extension.id] = result
-  requireStoreAction('notify')('extensionConnect', extension)
-
-  return result
 }
 
 function waitForPermission(permissionCheckId: string, check: ActivePermissionCheck, signal?: AbortSignal) {
@@ -299,33 +265,29 @@ export function updateOrigin(
 
 export function parseFrameExtension(req: IncomingMessage): FrameExtension | undefined {
   const origin = req.headers.origin || ''
-
   const query = queryString.parse((req.url || '').replace('/', ''))
-  const hasExtensionIdentity = query['identity'] === 'frame-extension'
+  if (query['identity'] !== 'frame-extension') return
 
-  if (origin === 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf' && hasExtensionIdentity) {
-    // Match production chrome
-    return { browser: 'chrome', id: 'ldcoohedfbjoobcadoglnnmmfbdlmmhf' }
-  } else if (origin.startsWith(`${extensionPrefixes.chrome}://`) && dev && hasExtensionIdentity) {
-    // Match Chrome in dev
-    const extensionId = origin.substring(extensionPrefixes.chrome.length + 3)
-    return { browser: 'chrome', id: extensionId }
-  } else if (origin.startsWith(`${extensionPrefixes.firefox}://`) && hasExtensionIdentity) {
-    // Match production Firefox
-    const extensionId = origin.substring(extensionPrefixes.firefox.length + 3)
-    return { browser: 'firefox', id: extensionId }
-  } else if (origin.startsWith(`${extensionPrefixes.safari}://`) && dev && hasExtensionIdentity) {
-    // Match Safari in dev only
-    return { browser: 'safari', id: 'frame-dev' }
+  const match = /^(chrome-extension|moz-extension|safari-web-extension):\/\/([^/?#]+)$/iu.exec(origin)
+  if (!match) return
+  const [, scheme, rawId] = match
+  if (!scheme || !rawId) return
+  const id = rawId.toLowerCase()
+
+  if (scheme.toLowerCase() === 'chrome-extension' && /^[a-p]{32}$/u.test(id)) {
+    return { browser: 'chrome', id }
+  }
+  if (
+    scheme.toLowerCase() === 'moz-extension' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(id)
+  ) {
+    return { browser: 'firefox', id }
+  }
+  if (dev && scheme.toLowerCase() === 'safari-web-extension' && /^[0-9a-z.-]{1,128}$/u.test(id)) {
+    return { browser: 'safari', id }
   }
 
-  return undefined
-}
-
-export async function isKnownExtension(extension: FrameExtension) {
-  const extensionPermission = storeApi.getKnownExtension(extension.id)
-
-  return extensionPermission ?? requestExtensionPermission(extension)
+  return
 }
 
 export async function isTrusted(payload: RPCRequestPayload, signal?: AbortSignal) {

@@ -524,8 +524,18 @@ module.exports = {
       return origins
     })
   },
-  trustExtension: (u, extensionId, trusted) => {
-    u('main.knownExtensions', (extensions = {}) => ({ ...extensions, [extensionId]: trusted }))
+  setExtensionCredential: (u, credential) => {
+    u('main.extensionCredentials', (credentials = {}) => ({
+      ...credentials,
+      [credential.fingerprint]: credential
+    }))
+  },
+  removeExtensionCredential: (u, fingerprint) => {
+    u('main.extensionCredentials', (credentials = {}) => {
+      const next = { ...credentials }
+      delete next[fingerprint]
+      return next
+    })
   },
   setBlockHeight: (u, chainId, blockHeight) => {
     u('main.networksMeta.ethereum', (chainsMeta) => {

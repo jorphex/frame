@@ -13,10 +13,15 @@ import {
   isTrusted,
   parseOrigin,
   createSessionOrigin,
-  isKnownExtension,
   FrameExtension,
   parseFrameExtension
 } from './origins'
+import {
+  ExtensionAuthSession,
+  parseExtensionAuthMessage,
+  type ExtensionAuthServerMessage
+} from './extensionAuth'
+import { authorizeExtension } from './extensionPairing'
 import parsePayload, { MAX_REQUEST_BYTES } from './validPayload'
 import protectedMethods from './protectedMethods'
 import { parseChainId } from '../provider/chainRequests'
@@ -36,16 +41,57 @@ export const WS_MAX_CLIENTS = 64
 export const WS_MESSAGE_RATE_LIMIT: RateLimitOptions = { maxRequests: 300, windowMs: 10 * 1000 }
 export const WS_MAX_SUBSCRIPTIONS_PER_CLIENT = 256
 export const WS_MAX_BUFFERED_SUBSCRIPTION_BYTES = 4 * 1024 * 1024
+export const WS_EXTENSION_CONSENT_TIMEOUT_MS = 5 * 60 * 1000
+export const WS_EXTENSION_CHALLENGE_RATE_LIMIT: RateLimitOptions = {
+  maxRequests: 128,
+  windowMs: 60 * 1000
+}
 
 interface WebSocketServerOptions {
+  extensionChallengeRateLimit?: RateLimitOptions
   maxClients?: number
   messageRateLimit?: RateLimitOptions
 }
 
 interface FrameWebSocket extends WebSocket {
+  authProcessing: boolean
+  authSession: ExtensionAuthSession | undefined
+  disposeSession: () => void
+  extensionFingerprint: string | undefined
   id: string
   origin: string | undefined
   frameExtension: FrameExtension | undefined
+}
+
+const authenticatedExtensionSockets = new Map<string, Set<FrameWebSocket>>()
+
+const registerAuthenticatedExtension = (socket: FrameWebSocket, fingerprint: string) => {
+  socket.extensionFingerprint = fingerprint
+  const sockets = authenticatedExtensionSockets.get(fingerprint) ?? new Set<FrameWebSocket>()
+  sockets.add(socket)
+  authenticatedExtensionSockets.set(fingerprint, sockets)
+}
+
+const unregisterAuthenticatedExtension = (socket: FrameWebSocket) => {
+  if (!socket.extensionFingerprint) return
+  const sockets = authenticatedExtensionSockets.get(socket.extensionFingerprint)
+  sockets?.delete(socket)
+  if (sockets?.size === 0) authenticatedExtensionSockets.delete(socket.extensionFingerprint)
+  socket.extensionFingerprint = undefined
+}
+
+const terminateSocket = (socket: FrameWebSocket, code: number, reason: string) => {
+  socket.disposeSession()
+  socket.close(code, reason)
+}
+
+export const disconnectExtensionCredential = (fingerprint: string) => {
+  const sockets = authenticatedExtensionSockets.get(fingerprint)
+  authenticatedExtensionSockets.delete(fingerprint)
+  sockets?.forEach((socket) => {
+    socket.disposeSession()
+    socket.close(1008, 'Extension credential revoked')
+  })
 }
 
 interface ExtensionPayload extends JSONRPCRequestPayload {
@@ -74,7 +120,7 @@ export const handleWebSocketSubscription = (payload: RPC.Susbcription.Response, 
         subscription.owner.bufferedAmount + Buffer.byteLength(event, 'utf8') >
           WS_MAX_BUFFERED_SUBSCRIPTION_BYTES
       ) {
-        subscription.owner.close(1013, 'Subscription delivery limit exceeded')
+        terminateSocket(subscription.owner, 1013, 'Subscription delivery limit exceeded')
         return
       }
       subscription.owner.send(event)
@@ -82,13 +128,50 @@ export const handleWebSocketSubscription = (payload: RPC.Susbcription.Response, 
   })
 }
 
-const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLimitOptions) => {
+const handler = (
+  socket: FrameWebSocket,
+  req: IncomingMessage,
+  rateLimit: RateLimitOptions,
+  extensionChallenges: FixedWindowRateLimiter
+) => {
   socket.id = uuid()
   socket.origin = req.headers.origin
   socket.frameExtension = parseFrameExtension(req)
+  socket.extensionFingerprint = undefined
+  socket.authProcessing = false
+  socket.authSession = socket.frameExtension
+    ? new ExtensionAuthSession(socket.frameExtension, { authorize: authorizeExtension })
+    : undefined
+  const authController = new AbortController()
+  let authDeadline = socket.authSession
+    ? setTimeout(() => terminateSocket(socket, 1008, 'Extension authentication timed out'), 5000)
+    : undefined
   const sessionOrigin = createSessionOrigin()
   const requests = new FixedWindowRateLimiter(rateLimit)
   const pendingRequests = new Set<AbortController>()
+  let disposed = false
+
+  socket.disposeSession = () => {
+    if (disposed) return
+    disposed = true
+    if (authDeadline) clearTimeout(authDeadline)
+    authDeadline = undefined
+    authController.abort()
+    unregisterAuthenticatedExtension(socket)
+    pendingRequests.forEach((controller) => controller.abort())
+    pendingRequests.clear()
+    subscriptions.forOwner(socket).forEach((subscription) => {
+      provider.send({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_unsubscribe',
+        _origin: subscription.originId,
+        chainId: subscription.chainId,
+        params: [subscription.upstreamId]
+      })
+      subscriptions.remove(subscription.id)
+    })
+  }
 
   const sendResponse = (payload: TransportResponse) => {
     if (socket.readyState === WebSocket.OPEN) {
@@ -98,9 +181,51 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
     }
   }
 
+  const sendAuthResponse = (payload: ExtensionAuthServerMessage) => {
+    if (disposed || socket.readyState !== WebSocket.OPEN) return
+    socket.send(JSON.stringify(payload), (err) => {
+      if (err) log.info(err)
+    })
+    if (payload.step === 'challenge') {
+      if (authDeadline) clearTimeout(authDeadline)
+      authDeadline = setTimeout(
+        () => terminateSocket(socket, 1008, 'Extension authentication proof timed out'),
+        Math.max(1, payload.expiresAt - Date.now())
+      )
+    } else {
+      if (authDeadline) clearTimeout(authDeadline)
+      authDeadline = undefined
+      if (payload.step === 'error') terminateSocket(socket, 1008, payload.code)
+      if (payload.step === 'authenticated') registerAuthenticatedExtension(socket, payload.fingerprint)
+    }
+  }
+
   socket.on('message', async (data) => {
+    if (disposed) return
     if (!requests.allow()) {
-      socket.close(1013, 'Request rate limit exceeded')
+      terminateSocket(socket, 1013, 'Request rate limit exceeded')
+      return
+    }
+
+    if (socket.authSession && !socket.authSession.authenticated) {
+      if (authDeadline) clearTimeout(authDeadline)
+      authDeadline = undefined
+      if (socket.authProcessing) {
+        terminateSocket(socket, 1008, 'Extension authentication already in progress')
+        return
+      }
+      const authMessage = parseExtensionAuthMessage(data.toString())
+      if (authMessage.success && authMessage.message.step === 'hello' && !extensionChallenges.allow()) {
+        terminateSocket(socket, 1013, 'Extension authentication rate limit exceeded')
+        return
+      }
+      socket.authProcessing = true
+      authDeadline = setTimeout(() => {
+        terminateSocket(socket, 1008, 'Extension authentication consent timed out')
+      }, WS_EXTENSION_CONSENT_TIMEOUT_MS)
+      const response = await socket.authSession.receive(data.toString(), authController.signal)
+      socket.authProcessing = false
+      sendAuthResponse(response)
       return
     }
 
@@ -118,24 +243,45 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
 
     let requestOrigin = socket.origin
     if (socket.frameExtension) {
-      if (!(await isKnownExtension(socket.frameExtension))) {
-        const error = {
-          message: `Permission denied, approve connection from Frame Companion with id ${socket.frameExtension.id} in Frame to continue`,
-          code: 4001
-        }
-
-        return res({ id: rawPayload.id, jsonrpc: rawPayload.jsonrpc, error })
-      }
-      if (controller.signal.aborted) return
-
       // Request from extension, swap origin
-      if (rawPayload.__frameOrigin) {
+      if (rawPayload.__frameOrigin !== undefined) {
+        if (
+          typeof rawPayload.__frameOrigin !== 'string' ||
+          !/^https?:\/\//u.test(rawPayload.__frameOrigin) ||
+          parseOrigin(rawPayload.__frameOrigin) !== rawPayload.__frameOrigin
+        ) {
+          return res({
+            id: rawPayload.id,
+            jsonrpc: rawPayload.jsonrpc,
+            error: { code: -32600, message: 'Invalid companion page origin' }
+          })
+        }
         requestOrigin = rawPayload.__frameOrigin
         delete rawPayload.__frameOrigin
       } else {
         requestOrigin = 'frame-extension'
       }
+      if (
+        rawPayload.__extensionConnecting !== undefined &&
+        (rawPayload.__extensionConnecting !== true ||
+          (rawPayload.method !== 'eth_chainId' && rawPayload.method !== 'net_version'))
+      ) {
+        return res({
+          id: rawPayload.id,
+          jsonrpc: rawPayload.jsonrpc,
+          error: { code: -32600, message: 'Invalid companion connection request' }
+        })
+      }
+    } else if (rawPayload.__frameOrigin !== undefined || rawPayload.__extensionConnecting !== undefined) {
+      return res({
+        id: rawPayload.id,
+        jsonrpc: rawPayload.jsonrpc,
+        error: { code: -32600, message: 'Extension metadata is not allowed' }
+      })
     }
+
+    const extensionConnecting = rawPayload.__extensionConnecting === true
+    delete rawPayload.__extensionConnecting
 
     const origin = parseOrigin(requestOrigin, sessionOrigin)
 
@@ -158,7 +304,7 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
       }
     }
 
-    const { payload, chainId } = updateOrigin(rawPayload, origin, rawPayload.__extensionConnecting)
+    const { payload, chainId } = updateOrigin(rawPayload, origin, extensionConnecting)
 
     try {
       parseChainId(chainId)
@@ -170,7 +316,7 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
       return res({ id: rawPayload.id, jsonrpc: rawPayload.jsonrpc, error })
     }
 
-    if (!rawPayload.__extensionConnecting) {
+    if (!extensionConnecting) {
       originSessions.extend(payload._origin)
     }
 
@@ -284,28 +430,20 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
       )
     }
   })
-  socket.on('error', (err) => log.error(err))
-  socket.on('close', () => {
-    pendingRequests.forEach((controller) => controller.abort())
-    pendingRequests.clear()
-    subscriptions.forOwner(socket).forEach((subscription) => {
-      provider.send({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'eth_unsubscribe',
-        _origin: subscription.originId,
-        chainId: subscription.chainId,
-        params: [subscription.upstreamId]
-      })
-      subscriptions.remove(subscription.id)
-    })
+  socket.on('error', (err) => {
+    log.error(err)
+    socket.disposeSession()
   })
+  socket.on('close', socket.disposeSession)
 }
 
 export default function (server: Server, options: WebSocketServerOptions = {}) {
   const clients = new Set<FrameWebSocket>()
   const maxClients = options.maxClients ?? WS_MAX_CLIENTS
   const messageRateLimit = options.messageRateLimit ?? WS_MESSAGE_RATE_LIMIT
+  const extensionChallenges = new FixedWindowRateLimiter(
+    options.extensionChallengeRateLimit ?? WS_EXTENSION_CHALLENGE_RATE_LIMIT
+  )
   const ws = new WebSocket.Server({ server, maxPayload: MAX_REQUEST_BYTES, perMessageDeflate: false })
   ws.on('connection', (socket: FrameWebSocket, req: IncomingMessage) => {
     if (clients.size >= maxClients) {
@@ -316,7 +454,7 @@ export default function (server: Server, options: WebSocketServerOptions = {}) {
 
     clients.add(socket)
     socket.once('close', () => clients.delete(socket))
-    handler(socket, req, messageRateLimit)
+    handler(socket, req, messageRateLimit, extensionChallenges)
   })
 
   provider.on('data:subscription', handleWebSocketSubscription)

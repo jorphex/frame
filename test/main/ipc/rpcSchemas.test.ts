@@ -67,6 +67,13 @@ test('validates fee quantities and request identifiers', () => {
   expect(parseRendererRpcRequest(wire(1, 'setGasLimit', '0x5208', '1')).success).toBe(false)
 })
 
+test('validates companion credential revocation fingerprints', () => {
+  expect(parseRendererRpcRequest(wire(1, 'revokeExtensionCredential', 'a'.repeat(43))).success).toBe(true)
+  expect(parseRendererRpcRequest(wire(1, 'revokeExtensionCredential', 'not-a-fingerprint')).success).toBe(
+    false
+  )
+})
+
 test('validates and minimizes callback results', () => {
   expect(
     parseRendererRpcResponse('createFromPhrase', [null, { id: 'seed-id', secret: 'do not return' }])

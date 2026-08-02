@@ -1,14 +1,21 @@
+import { generateKeyPairSync, sign } from 'crypto'
 import WebSocket from 'ws'
 import { EventEmitter } from 'stream'
 
 import store from '../../../main/store'
 import provider from '../../../main/provider'
 import accounts from '../../../main/accounts'
-import ws, { handleWebSocketSubscription, WS_MAX_BUFFERED_SUBSCRIPTION_BYTES } from '../../../main/api/ws'
+import ws, {
+  disconnectExtensionCredential,
+  handleWebSocketSubscription,
+  WS_MAX_BUFFERED_SUBSCRIPTION_BYTES
+} from '../../../main/api/ws'
 import { MAX_REQUEST_BYTES } from '../../../main/api/validPayload'
 import { getRequestSignal } from '../../../main/provider/requestSignal'
+import { extensionAuthPayload, extensionKeyFingerprint } from '../../../main/api/extensionAuth'
+import { respondToExtensionPairing } from '../../../main/api/extensionPairing'
 
-let socketConnection, mockSocket
+let socketConnection, mockSocket, authenticatedResponse
 
 const extensionRequest = {
   headers: {
@@ -17,28 +24,237 @@ const extensionRequest = {
   url: '/?identity=frame-extension'
 }
 
+const regularRequest = { headers: { origin: 'https://example.test' } }
+const extensionKeyPair = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+const exportedExtensionKey = extensionKeyPair.publicKey.export({ format: 'jwk' })
+const extensionPublicKey = {
+  kty: 'EC',
+  crv: 'P-256',
+  x: exportedExtensionKey.x,
+  y: exportedExtensionKey.y,
+  ext: true,
+  key_ops: ['verify']
+}
+const extensionFingerprint = extensionKeyFingerprint(extensionPublicKey)
+const flushPromises = async () => {
+  for (let index = 0; index < 6; index += 1) await Promise.resolve()
+}
+
+const authenticateExtension = async (socket) => {
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'frame-auth',
+      version: 1,
+      step: 'hello',
+      clientNonce: Buffer.alloc(32, 1).toString('base64url'),
+      publicKey: extensionPublicKey
+    })
+  )
+  await flushPromises()
+  const challenge = JSON.parse(socket.send.mock.calls.at(-1)[0])
+  const signature = sign('sha256', extensionAuthPayload(challenge), {
+    key: extensionKeyPair.privateKey,
+    dsaEncoding: 'ieee-p1363'
+  }).toString('base64url')
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'frame-auth',
+      version: 1,
+      step: 'proof',
+      challengeId: challenge.challengeId,
+      signature
+    })
+  )
+  await flushPromises()
+  return JSON.parse(socket.send.mock.calls.at(-1)[0])
+}
+
 jest.mock('ws')
 jest.mock('../../../main/store')
 jest.mock('../../../main/provider', () => ({ on: jest.fn(), send: jest.fn() }))
 jest.mock('../../../main/accounts', () => ({ getSelectedAddresses: jest.fn(() => []) }))
 jest.mock('../../../main/windows', () => {})
 
-beforeEach(() => {
+beforeEach(async () => {
   provider.send.mockReset()
   provider.on.mockReset()
   store.initOrigin = jest.fn()
-  store.set('main.knownExtensions', { ldcoohedfbjoobcadoglnnmmfbdlmmhf: true })
+  store.notify = jest.fn((notification, data) => {
+    store.set('view.notify', notification)
+    store.set('view.notifyData', data)
+  })
+  store.setExtensionCredential = jest.fn()
+  store.set('main.extensionCredentials', {
+    [extensionFingerprint]: {
+      protocolVersion: 1,
+      browser: 'chrome',
+      extensionId: 'ldcoohedfbjoobcadoglnnmmfbdlmmhf',
+      publicKey: extensionPublicKey,
+      fingerprint: extensionFingerprint,
+      pairedAt: 1_000
+    }
+  })
   accounts.getSelectedAddresses.mockReturnValue([])
 
   socketConnection = new EventEmitter()
   mockSocket = new EventEmitter()
   mockSocket.readyState = WebSocket.OPEN
   mockSocket.close = jest.fn()
+  mockSocket.send = jest.fn()
 
   WebSocket.Server.mockReturnValueOnce(socketConnection)
 
   ws()
   socketConnection.emit('connection', mockSocket, extensionRequest)
+  authenticatedResponse = await authenticateExtension(mockSocket)
+  mockSocket.send.mockClear()
+})
+
+afterEach(() => mockSocket.emit('close'))
+
+it('requires and accepts a signed companion authentication handshake', () => {
+  expect(authenticatedResponse).toEqual({
+    type: 'frame-auth',
+    version: 1,
+    step: 'authenticated',
+    fingerprint: extensionFingerprint
+  })
+  expect(mockSocket.close).not.toHaveBeenCalled()
+})
+
+it('disconnects an authenticated companion when its credential is revoked', () => {
+  let callback
+  provider.send.mockImplementationOnce((_payload, response) => {
+    callback = response
+  })
+  mockSocket.emit(
+    'message',
+    JSON.stringify({ id: 12, jsonrpc: '2.0', method: 'eth_blockNumber', params: [] })
+  )
+  expect(getRequestSignal(callback).aborted).toBe(false)
+
+  disconnectExtensionCredential(extensionFingerprint)
+
+  expect(getRequestSignal(callback).aborted).toBe(true)
+  expect(mockSocket.close).toHaveBeenCalledWith(1008, 'Extension credential revoked')
+  provider.send.mockClear()
+  mockSocket.emit(
+    'message',
+    JSON.stringify({ id: 13, jsonrpc: '2.0', method: 'eth_blockNumber', params: [] })
+  )
+  expect(provider.send).not.toHaveBeenCalled()
+})
+
+it('rejects extension RPC before authentication', async () => {
+  const unauthenticated = new EventEmitter()
+  unauthenticated.readyState = WebSocket.OPEN
+  unauthenticated.close = jest.fn()
+  unauthenticated.send = jest.fn()
+  socketConnection.emit('connection', unauthenticated, extensionRequest)
+
+  unauthenticated.emit(
+    'message',
+    JSON.stringify({ id: 9, jsonrpc: '2.0', method: 'eth_chainId', params: [] })
+  )
+  await flushPromises()
+
+  expect(JSON.parse(unauthenticated.send.mock.calls[0][0])).toMatchObject({
+    type: 'frame-auth',
+    step: 'error',
+    code: 'invalid-message'
+  })
+  expect(unauthenticated.close).toHaveBeenCalledWith(1008, 'invalid-message')
+  expect(provider.send).not.toHaveBeenCalled()
+})
+
+it('aborts pending consent when another authentication frame arrives', async () => {
+  const pair = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+  const exported = pair.publicKey.export({ format: 'jwk' })
+  const publicKey = {
+    kty: 'EC',
+    crv: 'P-256',
+    x: exported.x,
+    y: exported.y,
+    ext: true,
+    key_ops: ['verify']
+  }
+  const socket = new EventEmitter()
+  socket.readyState = WebSocket.OPEN
+  socket.close = jest.fn()
+  socket.send = jest.fn()
+  socketConnection.emit('connection', socket, extensionRequest)
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'frame-auth',
+      version: 1,
+      step: 'hello',
+      clientNonce: Buffer.alloc(32, 3).toString('base64url'),
+      publicKey
+    })
+  )
+  await flushPromises()
+  const challenge = JSON.parse(socket.send.mock.calls[0][0])
+  const signature = sign('sha256', extensionAuthPayload(challenge), {
+    key: pair.privateKey,
+    dsaEncoding: 'ieee-p1363'
+  }).toString('base64url')
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'frame-auth',
+      version: 1,
+      step: 'proof',
+      challengeId: challenge.challengeId,
+      signature
+    })
+  )
+  await flushPromises()
+  const requestId = store.notify.mock.calls.at(-1)[1].requestId
+
+  socket.emit('message', '{}')
+  await flushPromises()
+
+  expect(socket.close).toHaveBeenCalledWith(1008, 'Extension authentication already in progress')
+  expect(respondToExtensionPairing(requestId, true)).toBe(false)
+  expect(store.setExtensionCredential).not.toHaveBeenCalled()
+  socket.emit('close')
+})
+
+it('rate-limits challenge issuance across extension connections', async () => {
+  const limitedServer = new EventEmitter()
+  WebSocket.Server.mockReturnValueOnce(limitedServer)
+  ws(undefined, { extensionChallengeRateLimit: { maxRequests: 1, windowMs: 60_000 } })
+
+  const first = new EventEmitter()
+  first.readyState = WebSocket.OPEN
+  first.close = jest.fn()
+  first.send = jest.fn()
+  const second = new EventEmitter()
+  second.readyState = WebSocket.OPEN
+  second.close = jest.fn()
+  second.send = jest.fn()
+  limitedServer.emit('connection', first, extensionRequest)
+  limitedServer.emit('connection', second, extensionRequest)
+  const hello = JSON.stringify({
+    type: 'frame-auth',
+    version: 1,
+    step: 'hello',
+    clientNonce: Buffer.alloc(32, 2).toString('base64url'),
+    publicKey: extensionPublicKey
+  })
+
+  first.emit('message', hello)
+  second.emit('message', hello)
+  await flushPromises()
+
+  expect(JSON.parse(first.send.mock.calls[0][0])).toMatchObject({ step: 'challenge' })
+  expect(second.send).not.toHaveBeenCalled()
+  expect(second.close).toHaveBeenCalledWith(1013, 'Extension authentication rate limit exceeded')
+  first.emit('close')
+  second.emit('close')
 })
 
 it('configures the shared request size limit', () => {
@@ -57,7 +273,7 @@ it('closes a client that exceeds its message rate without processing the excess 
   limitedSocket.send = jest.fn()
   WebSocket.Server.mockReturnValueOnce(limitedServer)
   ws(undefined, { messageRateLimit: { maxRequests: 1, windowMs: 1000 } })
-  limitedServer.emit('connection', limitedSocket, extensionRequest)
+  limitedServer.emit('connection', limitedSocket, regularRequest)
 
   limitedSocket.emit('message', '{')
   limitedSocket.emit('message', '{')
@@ -77,14 +293,14 @@ it('closes clients beyond the configured connection limit', () => {
   WebSocket.Server.mockReturnValueOnce(limitedServer)
   ws(undefined, { maxClients: 1 })
 
-  limitedServer.emit('connection', firstSocket, extensionRequest)
-  limitedServer.emit('connection', secondSocket, extensionRequest)
+  limitedServer.emit('connection', firstSocket, regularRequest)
+  limitedServer.emit('connection', secondSocket, regularRequest)
 
   expect(firstSocket.close).not.toHaveBeenCalled()
   expect(secondSocket.close).toHaveBeenCalledWith(1013, 'Server capacity exceeded')
 
   firstSocket.emit('close')
-  limitedServer.emit('connection', replacementSocket, extensionRequest)
+  limitedServer.emit('connection', replacementSocket, regularRequest)
   expect(replacementSocket.close).not.toHaveBeenCalled()
 })
 
@@ -314,9 +530,30 @@ it('responds to an invalid request with its valid id', (done) => {
   mockSocket.emit('message', JSON.stringify({ id: 'request-9', jsonrpc: '1.0', method: 'eth_chainId' }))
 })
 
-it('preserves and canonicalizes a companion-proxied page origin', async () => {
+it('preserves an exact canonical companion-proxied page origin', async () => {
   mockSocket.send = jest.fn()
 
+  mockSocket.emit(
+    'message',
+    JSON.stringify({
+      id: 9,
+      jsonrpc: '2.0',
+      method: 'eth_chainId',
+      params: [],
+      __frameOrigin: 'https://example.test'
+    })
+  )
+  await Promise.resolve()
+  await Promise.resolve()
+
+  expect(store.initOrigin).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ name: 'https://example.test' })
+  )
+})
+
+it('rejects non-canonical companion origins and extension metadata from local clients', async () => {
+  mockSocket.send = jest.fn()
   mockSocket.emit(
     'message',
     JSON.stringify({
@@ -327,13 +564,31 @@ it('preserves and canonicalizes a companion-proxied page origin', async () => {
       __frameOrigin: 'HTTPS://Example.TEST:443'
     })
   )
-  await Promise.resolve()
-  await Promise.resolve()
+  await flushPromises()
+  expect(JSON.parse(mockSocket.send.mock.calls[0][0])).toMatchObject({
+    id: 9,
+    error: { code: -32600, message: 'Invalid companion page origin' }
+  })
 
-  expect(store.initOrigin).toHaveBeenCalledWith(
-    expect.any(String),
-    expect.objectContaining({ name: 'https://example.test' })
+  const localSocket = new EventEmitter()
+  localSocket.readyState = WebSocket.OPEN
+  localSocket.close = jest.fn()
+  localSocket.send = jest.fn()
+  socketConnection.emit('connection', localSocket, regularRequest)
+  localSocket.emit(
+    'message',
+    JSON.stringify({
+      id: 10,
+      jsonrpc: '2.0',
+      method: 'eth_chainId',
+      params: [],
+      __frameOrigin: 'https://example.test'
+    })
   )
+  expect(JSON.parse(localSocket.send.mock.calls[0][0])).toMatchObject({
+    id: 10,
+    error: { code: -32600, message: 'Extension metadata is not allowed' }
+  })
 })
 
 it('isolates originless, reserved, and schemeless local identities by WebSocket connection', () => {

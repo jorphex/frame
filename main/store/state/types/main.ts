@@ -5,6 +5,7 @@ import { BalanceSchema } from './balance'
 import { ChainMetadataSchema, ChainSchema } from './chain'
 import { ColorwayPrimarySchema } from './colors'
 import { DappSchema } from './dapp'
+import { ExtensionCredentialsSchema } from './extensionCredential'
 import { OriginSchema } from './origin'
 import { PermissionSchema } from './permission'
 import { ShortcutSchema } from './shortcuts'
@@ -55,7 +56,7 @@ export const MainSchema = z.object({
     ethereum: z.record(z.coerce.number(), ChainMetadataSchema)
   }),
   origins: z.record(z.string().describe('Origin Id'), OriginSchema),
-  knownExtensions: z.record(z.string(), z.boolean()),
+  extensionCredentials: ExtensionCredentialsSchema,
   permissions: z.record(
     z.string().describe('Address'),
     z.record(z.string().describe('Origin Id'), PermissionSchema)

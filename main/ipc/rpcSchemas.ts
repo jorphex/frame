@@ -152,6 +152,10 @@ const rpcSchemas = {
     request: z.tuple([z.string().min(1).max(512), z.boolean()]),
     response: actionResult
   },
+  revokeExtensionCredential: {
+    request: z.tuple([z.string().regex(/^[A-Za-z0-9_-]{43}$/)]),
+    response: actionResult
+  },
   setBaseFee: { request: z.tuple([QuantitySchema, HandlerIdSchema]), response: actionResult },
   setGasLimit: { request: z.tuple([QuantitySchema, HandlerIdSchema]), response: actionResult },
   setGasPrice: { request: z.tuple([QuantitySchema, HandlerIdSchema]), response: actionResult },

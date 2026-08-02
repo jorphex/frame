@@ -16,6 +16,7 @@ export type { Account, AccountMetadata } from './types/account'
 export type { Balance } from './types/balance'
 export type { WithTokenId, Token } from './types/token'
 export type { Dapp } from './types/dapp'
+export type { ExtensionCredential } from './types/extensionCredential'
 export type { NativeCurrency } from './types/nativeCurrency'
 export type { Gas, GasFees } from './types/gas'
 export type { Rate } from './types/rate'
@@ -101,7 +102,7 @@ const main = (path: string, def: unknown) => {
 }
 
 const mainState = {
-  _version: main('_version', 43),
+  _version: main('_version', 44),
   instanceId: main('instanceId', generateUuid()),
   colorway: main('colorway', 'dark'),
   colorwayPrimary: {
@@ -157,7 +158,7 @@ const mainState = {
     derivation: main('trezor.derivation', 'standard')
   },
   origins: main('origins', {}),
-  knownExtensions: main('knownExtensions', {}),
+  extensionCredentials: main('extensionCredentials', {}),
   accounts: main('accounts', {}),
   accountsMeta: main('accountsMeta', {}),
   addresses: main('addresses', {}), // Should be removed after 0.5 release
@@ -862,10 +863,6 @@ function clearSessionState(state: z.infer<typeof StateSchema>) {
         }
       }
     ])
-  )
-
-  state.main.knownExtensions = Object.fromEntries(
-    Object.entries(state.main.knownExtensions).filter(([_id, allowed]) => allowed)
   )
 
   state.main.dapps = Object.fromEntries(

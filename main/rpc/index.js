@@ -5,6 +5,11 @@ import { isAddress } from 'ethers'
 import { openFileDialog } from '../windows/dialog'
 import { openBlockExplorer } from '../windows/window'
 import { routeWalletCallRequest } from './walletCalls'
+import {
+  respondToExtensionPairing,
+  revokeExtensionCredential as revokePairedExtension
+} from '../api/extensionPairing'
+import { disconnectExtensionCredential } from '../api/ws'
 
 const accounts = require('../accounts').default
 const signers = require('../signers').default
@@ -124,8 +129,18 @@ const rpc = {
   confirmRequestApproval(req, approvalType, approvalData, cb) {
     callbackWhenDone(() => accounts.confirmRequestApproval(req.handlerId, approvalType, approvalData), cb)
   },
-  respondToExtensionRequest(id, approved, cb) {
-    callbackWhenDone(() => store.trustExtension(id, approved), cb)
+  respondToExtensionRequest(requestId, approved, cb) {
+    callbackWhenDone(() => {
+      if (!respondToExtensionPairing(requestId, approved)) {
+        throw new Error('Extension pairing request is no longer active')
+      }
+    }, cb)
+  },
+  revokeExtensionCredential(fingerprint, cb) {
+    callbackWhenDone(() => {
+      revokePairedExtension(fingerprint)
+      disconnectExtensionCredential(fingerprint)
+    }, cb)
   },
   updateRequest(reqId, data, actionId, cb) {
     callbackWhenDone(() => accounts.updateRequest(reqId, data, actionId), cb)

@@ -50,6 +50,15 @@ const VCR = styled.div`
   letter-spacing: 0px;
 `
 
+const PairingCode = styled.div`
+  margin-top: 12px;
+  color: var(--good);
+  font-family: 'FiraCode';
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: 6px;
+`
+
 const ConfirmButton = styled.div`
   padding: 24px;
   font-weight: 400;
@@ -57,8 +66,8 @@ const ConfirmButton = styled.div`
   font-size: 16px;
 `
 
-const ExtensionConnectNotification = ({ id, browser, onClose }) => {
-  const respond = (accepted) => link.rpc('respondToExtensionRequest', id, accepted, onClose)
+const ExtensionConnectNotification = ({ extensionId, browser, pairingCode, requestId, onClose }) => {
+  const respond = (accepted) => link.rpc('respondToExtensionRequest', requestId, accepted, onClose)
   const browserName = capitalize(browser)
   const browserIcon = svg[browser] || svg.chrome
   const [copyId, setCopyId] = useState(false)
@@ -78,19 +87,20 @@ const ExtensionConnectNotification = ({ id, browser, onClose }) => {
                     <div style={{ paddingBottom: '24px' }}>
                       {`A new ${browserName} extension is attempting to connect as "Frame Companion"`}{' '}
                     </div>
-                    <div>{`If you did not recently add Frame Companion please verify the extension origin below`}</div>
+                    <div>{`Verify this code matches the code in the Frame Companion popup.`}</div>
+                    <PairingCode>{pairingCode}</PairingCode>
                   </NotifyMain>
                 </ClusterValue>
               </ClusterRow>
               <ClusterRow>
                 <ClusterValue
                   onClick={() => {
-                    link.send('tray:clipboardData', id)
+                    link.send('tray:clipboardData', extensionId)
                     setCopyId(true)
                     setTimeout(() => setCopyId(false), 2000)
                   }}
                 >
-                  <ExtensionId>{copyId ? 'extension origin copied' : <VCR>{id}</VCR>}</ExtensionId>
+                  <ExtensionId>{copyId ? 'extension origin copied' : <VCR>{extensionId}</VCR>}</ExtensionId>
                 </ClusterValue>
               </ClusterRow>
               <ClusterRow>

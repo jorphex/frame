@@ -28,6 +28,33 @@ const EditShortcut = styled.div`
   }
 `
 
+const CompanionDetails = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+`
+
+const CompanionIdentity = styled.div`
+  color: var(--moon);
+  font-family: 'FiraCode';
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const RevokeCompanion = styled.div`
+  color: ${({ $confirm }) => ($confirm ? 'var(--bad)' : 'var(--moon)')};
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  margin-left: 16px;
+  text-transform: uppercase;
+`
+
 class Settings extends Component {
   constructor(props, context) {
     super(props, context)
@@ -36,7 +63,8 @@ class Settings extends Component {
     this.state = {
       latticeEndpoint,
       latticeEndpointMode,
-      resetConfirm: false
+      resetConfirm: false,
+      revokeCompanionConfirm: undefined
     }
   }
 
@@ -55,6 +83,9 @@ class Settings extends Component {
   render() {
     const summonShortcut = this.store('main.shortcuts.summon')
     const platform = this.store('platform')
+    const companionCredentials = Object.values(this.store('main.extensionCredentials') || {}).sort(
+      (left, right) => right.pairedAt - left.pairedAt
+    )
 
     return (
       <div className={'localSettings cardShow'}>
@@ -350,6 +381,41 @@ class Settings extends Component {
             </div>
             <div className='signerPermissionDetails'>When should Frame relock your hot signers?</div>
           </div>
+          {companionCredentials.map((credential, index) => {
+            const confirm = this.state.revokeCompanionConfirm === credential.fingerprint
+            return (
+              <div
+                className='signerPermission localSetting'
+                key={credential.fingerprint}
+                style={{ zIndex: 198 - index }}
+              >
+                <div className='signerPermissionControls'>
+                  <CompanionDetails>
+                    <div className='signerPermissionSetting'>{`${credential.browser} companion`}</div>
+                    <CompanionIdentity>{credential.extensionId}</CompanionIdentity>
+                    <CompanionIdentity>{credential.fingerprint}</CompanionIdentity>
+                  </CompanionDetails>
+                  <RevokeCompanion
+                    $confirm={confirm}
+                    onClick={() => {
+                      if (!confirm) {
+                        this.setState({ revokeCompanionConfirm: credential.fingerprint })
+                        return
+                      }
+                      link.rpc('revokeExtensionCredential', credential.fingerprint, (error) => {
+                        if (!error) this.setState({ revokeCompanionConfirm: undefined })
+                      })
+                    }}
+                  >
+                    {confirm ? 'Confirm revoke' : 'Revoke'}
+                  </RevokeCompanion>
+                </div>
+                <div className='signerPermissionDetails'>
+                  Remove this pairing and require a new code confirmation on reconnect
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
     )
