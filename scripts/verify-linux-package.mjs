@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { once } from 'node:events'
 import { createReadStream } from 'node:fs'
 import { access, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 
@@ -26,6 +28,30 @@ const findArtifact = async (suffix) => {
 }
 
 const artifacts = await Promise.all([findArtifact('.AppImage'), findArtifact('_amd64.deb')])
+const readDebFile = async (deb, member) => {
+  const archive = spawn('dpkg-deb', ['--fsys-tarfile', deb], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const extract = spawn('tar', ['-xOf', '-', member], { stdio: ['pipe', 'pipe', 'pipe'] })
+  const output = []
+  const archiveErrors = []
+  const extractErrors = []
+
+  archive.stderr.on('data', (chunk) => archiveErrors.push(chunk))
+  extract.stdout.on('data', (chunk) => output.push(chunk))
+  extract.stderr.on('data', (chunk) => extractErrors.push(chunk))
+
+  await Promise.all([
+    pipeline(archive.stdout, extract.stdin),
+    once(archive, 'close').then(([code]) =>
+      assert.equal(code, 0, `dpkg-deb failed: ${Buffer.concat(archiveErrors).toString()}`)
+    ),
+    once(extract, 'close').then(([code]) =>
+      assert.equal(code, 0, `tar failed: ${Buffer.concat(extractErrors).toString()}`)
+    )
+  ])
+
+  return Buffer.concat(output).toString('utf8')
+}
+
 const unpackedModules = path.join(dist, 'linux-unpacked', 'resources', 'app.asar.unpacked', 'node_modules')
 const nativeModules = [
   path.join(unpackedModules, 'node-hid', 'build', 'Release', 'HID_hidraw.node'),
@@ -114,6 +140,7 @@ const recoveredSignatureAddress = sigUtil.recoverTypedSignature({
 const modernModules = require(path.join(appRoot, 'compiled/main/nebula/modules.js'))
 const fetchUtils = require(path.join(appRoot, 'compiled/resources/utils/fetch.js'))
 const signerCrypto = require(path.join(appRoot, 'compiled/main/signers/hot/crypto.js'))
+const packagedMetadata = require(path.join(appRoot, 'package.json'))
 const { Wallet } = require(path.join(appModules, '@ethereumjs/wallet'))
 const walletAddress = Wallet.fromPrivateKey(Buffer.from('46'.repeat(32), 'hex')).getAddressString()
 const signerSecret = 'packaged-software-signer-probe'
@@ -137,6 +164,7 @@ Promise.all([
   .then(([loaded, fetchProbe]) => process.stdout.write(JSON.stringify({
     electron: process.versions.electron,
     abi: process.versions.modules,
+    desktopName: packagedMetadata.desktopName,
     modules,
     ledgerApis: ledgerModules.map((module) => typeof module.default),
     ledgerVersions,
@@ -190,6 +218,10 @@ assert.equal(probe.status, 0, `Packaged module probe failed:\n${probe.error || p
 const probeResult = JSON.parse(probe.stdout)
 const packageJson = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
 const packageLock = JSON.parse(await readFile(path.resolve('package-lock.json'), 'utf8'))
+const desktopEntry = await readDebFile(
+  path.join(dist, artifacts[1]),
+  `./usr/share/applications/${packageJson.desktopName}`
+)
 const builderPackage = JSON.parse(
   await readFile(path.resolve('node_modules/electron-builder/package.json'), 'utf8')
 )
@@ -207,8 +239,15 @@ assert.equal(typeof notarize, 'function')
 assert.equal(typeof notarizeHook, 'function')
 assert.deepEqual(builderConfig.win.signtoolOptions.publisherName, 'Frame Labs, Inc.')
 assert.equal(builderConfig.win.publisherName, undefined)
+assert.equal(builderConfig.linux.syncDesktopName, true)
+assert.equal(builderConfig.linux.category, 'Office;Finance')
 await notarizeHook({})
 assert.equal(probeResult.electron, packageJson.devDependencies.electron)
+assert.equal(probeResult.desktopName, packageJson.desktopName)
+assert.match(desktopEntry, /^Exec=\/opt\/Frame\/frame %U$/m)
+assert.match(desktopEntry, /^StartupWMClass=frame$/m)
+assert.match(desktopEntry, /^Categories=Office;Finance;$/m)
+assert.doesNotMatch(desktopEntry, /^Categories=Utility;$/m)
 assert.deepEqual(probeResult.modules, ['node-hid', 'usb', '@trezor/transport/node_modules/usb'])
 assert.ok(probeResult.ledgerApis.every((api) => api === 'function'))
 assert.deepEqual(probeResult.ledgerVersions, {

@@ -6,6 +6,8 @@ const config = {
   ...baseConfig,
   afterSign: './build/notarize.js',
   linux: {
+    category: 'Office;Finance',
+    syncDesktopName: true,
     target: [
       {
         target: 'AppImage',
