@@ -3,7 +3,12 @@ import log from 'electron-log'
 
 import { BridgeMethod, RendererRole, hasRendererCapability } from '../../resources/bridge/roles'
 import { encodeRendererRpcValues, parseRendererRpcId, parseRendererRpcRequest } from './rpcSchemas'
-import { assertRendererIpcSchema, parseRendererIpcArgs } from './schemas'
+import {
+  assertRendererInvokeResultSchema,
+  assertRendererIpcSchema,
+  parseRendererIpcArgs,
+  parseRendererInvokeResult
+} from './schemas'
 
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 
@@ -56,11 +61,18 @@ export const onceRenderer = (channel: string, listener: RendererListener) => {
 
 export const handleRenderer = (channel: string, listener: RendererHandler) => {
   assertRendererIpcSchema('invoke', channel)
-  ipcMain.handle(channel, (event, ...args) => {
+  assertRendererInvokeResultSchema(channel)
+  ipcMain.handle(channel, async (event, ...args) => {
     if (!authorize(event, 'invoke', channel, args)) throw new Error('Unauthorized renderer IPC')
     const parsed = parseRendererIpcArgs('invoke', channel, args)
     if (!parsed.success) throw new Error('Invalid renderer IPC payload')
-    return listener(event, ...(parsed.data as unknown[]))
+    const result = await listener(event, ...(parsed.data as unknown[]))
+    const parsedResult = parseRendererInvokeResult(channel, result)
+    if (!parsedResult.success) {
+      log.warn('Rejected invalid renderer IPC result', { channel })
+      throw new Error('Invalid renderer IPC result')
+    }
+    return parsedResult.data
   })
 }
 

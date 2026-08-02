@@ -6,7 +6,8 @@ import {
   encodeBridgeMessage,
   getRendererTargetOrigin,
   getRendererRole,
-  isTrustedBridgeEvent
+  isTrustedBridgeEvent,
+  responseEventChannels
 } from '../../../resources/bridge/protocol'
 
 const id = '74b6f0b5-0396-4d91-b505-0fb66f00786a'
@@ -40,6 +41,14 @@ describe('renderer bridge protocol', () => {
   })
 
   test('accepts bridge replies and only known renderer event channels', () => {
+    const actions = JSON.stringify([
+      {
+        name: 'setColorway',
+        count: 1,
+        deferred: false,
+        updates: [{ path: 'main.colorway', value: 'dark' }]
+      }
+    ])
     expect(
       decodeBridgeMessage(
         encode({ source: BRIDGE_SOURCE, method: 'rpc', id, args: [null, 'ok'] }),
@@ -56,10 +65,32 @@ describe('renderer bridge protocol', () => {
 
     expect(
       decodeBridgeMessage(
-        encode({ source: BRIDGE_SOURCE, method: 'event', channel: 'action', args: ['stateSync'] }),
+        encode({
+          source: BRIDGE_SOURCE,
+          method: 'event',
+          channel: 'action',
+          args: ['stateSync', actions]
+        }),
         BRIDGE_SOURCE
       )
-    ).toEqual({ source: BRIDGE_SOURCE, method: 'event', channel: 'action', args: ['stateSync'] })
+    ).toEqual({
+      source: BRIDGE_SOURCE,
+      method: 'event',
+      channel: 'action',
+      args: ['stateSync', actions]
+    })
+
+    expect(
+      decodeBridgeMessage(
+        encode({
+          source: BRIDGE_SOURCE,
+          method: 'event',
+          channel: 'flex',
+          args: ['shortcutActivated']
+        }),
+        BRIDGE_SOURCE
+      )
+    ).not.toBeNull()
 
     expect(
       decodeBridgeMessage(
@@ -67,6 +98,21 @@ describe('renderer bridge protocol', () => {
         BRIDGE_SOURCE
       )
     ).toBeNull()
+    expect([...responseEventChannels].sort()).toEqual(['action', 'flex'])
+  })
+
+  test('rejects malformed state updates, unsafe paths, and dead response channels', () => {
+    const response = (channel, args) =>
+      decodeBridgeMessage(encode({ source: BRIDGE_SOURCE, method: 'event', channel, args }), BRIDGE_SOURCE)
+    const action = (path) =>
+      JSON.stringify([{ name: 'update', count: 1, deferred: false, updates: [{ path, value: true }] }])
+
+    expect(response('action', ['stateSync', action('main.ready')])).not.toBeNull()
+    expect(response('action', ['stateSync', action('__proto__.polluted')])).toBeNull()
+    expect(response('action', ['stateSync', '{'])).toBeNull()
+    expect(response('action', ['unknown', action('main.ready')])).toBeNull()
+    expect(response('flex', ['unknown'])).toBeNull()
+    expect(response('dapp', [])).toBeNull()
   })
 
   test.each([undefined, null, {}, '', '{', JSON.stringify(null), 'x'.repeat(MAX_MESSAGE_LENGTH + 1)])(

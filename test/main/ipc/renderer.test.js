@@ -59,16 +59,17 @@ test('enforces limited store actions in the main process', () => {
 })
 
 test('rejects unauthorized invokes and permits privileged invokes', async () => {
-  const handler = jest.fn().mockResolvedValue({ success: true })
+  const result = { decimals: 18, name: 'Token', symbol: 'TKN', totalSupply: '1000' }
+  const handler = jest.fn().mockResolvedValue(result)
   handleRenderer('tray:getTokenDetails', handler)
   const invoke = mockHandlers.get('tray:getTokenDetails')
 
-  expect(() => invoke(sender('dapp'), '0x0000000000000000000000000000000000000001', 1)).toThrow(
+  await expect(invoke(sender('dapp'), '0x0000000000000000000000000000000000000001', 1)).rejects.toThrow(
     'Unauthorized renderer IPC'
   )
-  await expect(invoke(sender('dash'), '0x0000000000000000000000000000000000000001', 1)).resolves.toEqual({
-    success: true
-  })
+  await expect(invoke(sender('dash'), '0x0000000000000000000000000000000000000001', 1)).resolves.toEqual(
+    result
+  )
   expect(handler).toHaveBeenCalledTimes(1)
 })
 
@@ -86,13 +87,26 @@ test('drops invalid events without calling application handlers', () => {
   )
 })
 
-test('returns a bounded error for invalid invokes', () => {
+test('returns a bounded error for invalid invokes', async () => {
   const handler = jest.fn()
   handleRenderer('tray:getTokenDetails', handler)
   const invoke = mockHandlers.get('tray:getTokenDetails')
 
-  expect(() => invoke(sender('dash'), 'invalid', '1')).toThrow('Invalid renderer IPC payload')
+  await expect(invoke(sender('dash'), 'invalid', '1')).rejects.toThrow('Invalid renderer IPC payload')
   expect(handler).not.toHaveBeenCalled()
+})
+
+test('rejects invalid invoke results before they cross back to the renderer', async () => {
+  const handler = jest.fn().mockResolvedValue({ symbol: 'x'.repeat(33) })
+  handleRenderer('tray:getTokenDetails', handler)
+  const invoke = mockHandlers.get('tray:getTokenDetails')
+
+  await expect(invoke(sender('dash'), '0x0000000000000000000000000000000000000001', 1)).rejects.toThrow(
+    'Invalid renderer IPC result'
+  )
+  expect(mockLog.warn).toHaveBeenCalledWith('Rejected invalid renderer IPC result', {
+    channel: 'tray:getTokenDetails'
+  })
 })
 
 test('refuses handler registration without a schema', () => {

@@ -264,13 +264,32 @@ const eventSchemas: Record<string, z.ZodType> = {
   'tray:updateRestart': noArgs
 }
 
-const invokeSchemas: Record<string, z.ZodType> = {
+const invokeSchemas = {
   'tray:addChain': z.tuple([AddChainSchema, AddChainRequestReferenceSchema.nullish()]),
   'tray:getTokenDetails': z.tuple([AddressSchema, ChainNumberSchema])
-}
+} satisfies Record<string, z.ZodType>
+
+const invokeResultSchemas = {
+  'tray:addChain': z.union([
+    z.object({ success: z.literal(true) }).strict(),
+    z.object({ success: z.literal(false), error: z.string().min(1).max(1024).optional() }).strict()
+  ]),
+  'tray:getTokenDetails': z
+    .object({
+      decimals: z.number().int().min(0).max(255).optional(),
+      name: z.string().max(128).optional(),
+      symbol: z.string().max(32).optional(),
+      totalSupply: z
+        .string()
+        .regex(/^(?:0|[1-9][0-9]{0,77})$/)
+        .optional()
+    })
+    .strict()
+} satisfies Record<keyof typeof invokeSchemas, z.ZodType>
 
 export const assertRendererIpcSchema = (method: Exclude<BridgeMethod, 'rpc'>, channel: string) => {
-  const schema = method === 'event' ? eventSchemas[channel] : invokeSchemas[channel]
+  const schema =
+    method === 'event' ? eventSchemas[channel] : invokeSchemas[channel as keyof typeof invokeSchemas]
   if (!schema) throw new Error(`Renderer IPC channel has no ${method} schema: ${channel}`)
   return schema
 }
@@ -280,6 +299,15 @@ export const parseRendererIpcArgs = (
   channel: string,
   args: unknown[]
 ) => assertRendererIpcSchema(method, channel).safeParse(args)
+
+export const assertRendererInvokeResultSchema = (channel: string) => {
+  const schema = invokeResultSchemas[channel as keyof typeof invokeResultSchemas]
+  if (!schema) throw new Error(`Renderer IPC channel has no invoke result schema: ${channel}`)
+  return schema
+}
+
+export const parseRendererInvokeResult = (channel: string, result: unknown) =>
+  assertRendererInvokeResultSchema(channel).safeParse(result)
 
 export const rendererIpcChannels = Object.freeze({
   event: Object.freeze(Object.keys(eventSchemas)),

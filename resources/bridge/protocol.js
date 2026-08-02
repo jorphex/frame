@@ -43,7 +43,7 @@ export const requestEventChannels = new Set([
 ])
 
 export const requestInvokeChannels = new Set(['tray:addChain', 'tray:getTokenDetails'])
-const responseEventChannels = new Set(['action', 'dapp', 'flex'])
+export const responseEventChannels = new Set(['action', 'flex'])
 const methods = new Set(['event', 'invoke', 'rpc'])
 
 const isRecord = (value) =>
@@ -58,6 +58,52 @@ const hasOnlyKeys = (message, allowedKeys) => Object.keys(message).every((key) =
 
 const hasRoleCapability = (message, rendererRole) => {
   return hasRendererCapability(rendererRole, message.method, message.args)
+}
+
+const hasOnlySafePathSegments = (path) =>
+  path === '*' ||
+  (typeof path === 'string' &&
+    path.length > 0 &&
+    path.length <= 1024 &&
+    path.split('.').every((part) => part && !['__proto__', 'constructor', 'prototype'].includes(part)))
+
+const isValidStateSync = (value) => {
+  if (typeof value !== 'string' || value.length > MAX_MESSAGE_LENGTH) return false
+
+  let actions
+  try {
+    actions = JSON.parse(value)
+  } catch {
+    return false
+  }
+  if (!Array.isArray(actions) || actions.length > 4096) return false
+
+  let updateCount = 0
+  return actions.every((action) => {
+    if (!isRecord(action)) return false
+    if (!hasOnlyKeys(action, new Set(['name', 'count', 'deferred', 'internal', 'updates']))) return false
+    if (typeof action.name !== 'string' || action.name.length === 0 || action.name.length > 256) return false
+    if (!Number.isSafeInteger(action.count) || action.count < 0) return false
+    if (typeof action.deferred !== 'boolean') return false
+    if ('internal' in action && typeof action.internal !== 'boolean') return false
+    if (!Array.isArray(action.updates) || action.updates.length > 4096) return false
+    updateCount += action.updates.length
+    if (updateCount > 16384) return false
+
+    return action.updates.every(
+      (update) =>
+        isRecord(update) &&
+        hasOnlyKeys(update, new Set(['path', 'value'])) &&
+        hasOnlySafePathSegments(update.path) &&
+        'value' in update
+    )
+  })
+}
+
+const isValidResponseEvent = (message) => {
+  if (!hasValidArgs(message) || !responseEventChannels.has(message.channel)) return false
+  if (message.channel === 'flex') return message.args.length === 1 && message.args[0] === 'shortcutActivated'
+  return message.args.length === 2 && message.args[0] === 'stateSync' && isValidStateSync(message.args[1])
 }
 
 const isValidRequest = (message, rendererRole) => {
@@ -88,10 +134,9 @@ const isValidRequest = (message, rendererRole) => {
 const isValidResponse = (message) => {
   if (message.method === 'event') {
     return (
-      hasValidArgs(message) &&
       !('id' in message) &&
       hasOnlyKeys(message, new Set(['args', 'channel', 'method', 'source'])) &&
-      responseEventChannels.has(message.channel)
+      isValidResponseEvent(message)
     )
   }
 

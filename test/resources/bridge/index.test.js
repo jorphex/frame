@@ -111,4 +111,25 @@ describe('preload renderer bridge', () => {
       '*'
     )
   })
+
+  test.each([
+    ['tray:addChain', { success: false, error: 'Main IPC invocation failed' }],
+    ['tray:getTokenDetails', {}]
+  ])('settles rejected %s invokes with its exact failure result', async (channel, result) => {
+    mockIpcRenderer.invoke.mockRejectedValue(new Error('sensitive internal failure'))
+    dispatch(JSON.stringify({ source: LINK_SOURCE, method: 'invoke', id, args: [channel, {}] }))
+    await Promise.resolve()
+
+    expect(rendererWindow.postMessage).toHaveBeenCalledWith(
+      JSON.stringify({ method: 'invoke', id, args: result, source: 'bridge:link' }),
+      '*'
+    )
+  })
+
+  test('registers only live outbound event channels', () => {
+    expect(mockIpcRenderer.on.mock.calls.map(([channel]) => channel).sort()).toEqual([
+      'main:action',
+      'main:flex'
+    ])
+  })
 })

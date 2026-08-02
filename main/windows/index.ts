@@ -751,7 +751,6 @@ const init = () => {
     }
   }, 'windows:notify')
 
-  store.observer(() => broadcast('permissions', JSON.stringify(store('permissions'))))
   store.observer(() => {
     let summonShortcut: Shortcut = store('main.shortcuts.summon')
     const summonHandler = (accelerator: string) => {

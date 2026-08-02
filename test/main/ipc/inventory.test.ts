@@ -4,7 +4,11 @@ import { parse } from '@babel/parser'
 
 import { rendererActionNames, rendererIpcChannels } from '../../../main/ipc/schemas'
 import { rendererRpcMethods } from '../../../main/ipc/rpcSchemas'
-import { requestEventChannels, requestInvokeChannels } from '../../../resources/bridge/protocol'
+import {
+  requestEventChannels,
+  requestInvokeChannels,
+  responseEventChannels
+} from '../../../resources/bridge/protocol'
 
 type Node = { type?: string; [key: string]: unknown }
 
@@ -125,6 +129,34 @@ test('every static renderer event, invoke, and store action has a schema', () =>
     [...rendererActionNames].sort()
   )
   expect(dynamicActions).toEqual(['app/dash/Chains/Chain/Connection/index.js:Identifier'])
+})
+
+test('main notifications, preload listeners, and renderer consumers have an exact inventory match', () => {
+  const mainCalls = callsIn([path.join(root, 'main')])
+  const mainChannels = mainCalls
+    .filter(
+      (call) =>
+        call.callee.type === 'Identifier' &&
+        ((call.callee.name === 'send' && staticString(call.args[1])?.startsWith('main:')) ||
+          (call.callee.name === 'broadcast' && staticString(call.args[0])?.startsWith('main:')))
+    )
+    .map((call) => {
+      const channel = staticString(call.args[call.callee.name === 'send' ? 1 : 0]) as string
+      return channel.slice('main:'.length)
+    })
+  const rendererCalls = callsIn([path.join(root, 'app'), path.join(root, 'resources')])
+  const consumedChannels = rendererCalls
+    .filter((call) => memberCall(call, 'link', 'on'))
+    .map((call) => staticString(call.args[0]))
+    .filter((channel): channel is string => Boolean(channel))
+  const bridgeSource = fs.readFileSync(path.join(root, 'resources/bridge/index.js'), 'utf8')
+  const preloadChannels = [...bridgeSource.matchAll(/ipcRenderer\.on\(['"]main:([^'"]+)['"]/g)].map(
+    (match) => match[1]
+  )
+
+  expect([...new Set(mainChannels)].sort()).toEqual([...responseEventChannels].sort())
+  expect([...new Set(consumedChannels)].sort()).toEqual([...responseEventChannels].sort())
+  expect([...new Set(preloadChannels)].sort()).toEqual([...responseEventChannels].sort())
 })
 
 test('renderer RPC callsites, handlers, and schemas have an exact inventory match', () => {

@@ -33,8 +33,19 @@ window.addEventListener(
     if (data.method === 'event') return ipcRenderer.send(...data.args)
     if (data.method === 'invoke') {
       ;(async () => {
-        const args = await ipcRenderer.invoke(...data.args)
-        postToRenderer({ method: 'invoke', id: data.id, args: args ?? [], source: BRIDGE_SOURCE })
+        try {
+          const args = await ipcRenderer.invoke(...data.args)
+          postToRenderer({ method: 'invoke', id: data.id, args: args ?? [], source: BRIDGE_SOURCE })
+        } catch {
+          const result =
+            data.args[0] === 'tray:addChain' ? { success: false, error: 'Main IPC invocation failed' } : {}
+          postToRenderer({
+            method: 'invoke',
+            id: data.id,
+            args: result,
+            source: BRIDGE_SOURCE
+          })
+        }
       })()
     }
   },
@@ -49,9 +60,4 @@ ipcRenderer.on('main:action', (...args) => {
 ipcRenderer.on('main:flex', (...args) => {
   args.shift()
   postToRenderer({ method: 'event', channel: 'flex', args, source: BRIDGE_SOURCE })
-})
-
-ipcRenderer.on('main:dapp', (...args) => {
-  args.shift()
-  postToRenderer({ method: 'event', channel: 'dapp', args, source: BRIDGE_SOURCE })
 })

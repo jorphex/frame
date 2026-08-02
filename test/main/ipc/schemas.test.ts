@@ -1,4 +1,9 @@
-import { assertRendererIpcSchema, parseRendererIpcArgs } from '../../../main/ipc/schemas'
+import {
+  assertRendererInvokeResultSchema,
+  assertRendererIpcSchema,
+  parseRendererIpcArgs,
+  parseRendererInvokeResult
+} from '../../../main/ipc/schemas'
 
 const address = '0x0000000000000000000000000000000000000001'
 const handlerId = '8073729a-5e59-53b7-9e69-5d9bcff94087'
@@ -93,6 +98,31 @@ test('validates complete add-chain invokes and strips their request reference', 
   expect(parseRendererIpcArgs('invoke', 'tray:addChain', [{ ...chain, id: '10' }]).success).toBe(false)
   expect(parseRendererIpcArgs('invoke', 'tray:addChain', [{ ...chain, unexpected: true }]).success).toBe(
     false
+  )
+})
+
+test('validates exact invoke result shapes', () => {
+  expect(parseRendererInvokeResult('tray:addChain', { success: true }).success).toBe(true)
+  expect(
+    parseRendererInvokeResult('tray:addChain', { success: false, error: 'Could not add chain' }).success
+  ).toBe(true)
+  expect(parseRendererInvokeResult('tray:addChain', { success: true, error: 'ignored' }).success).toBe(false)
+
+  expect(
+    parseRendererInvokeResult('tray:getTokenDetails', {
+      decimals: 18,
+      name: 'Token',
+      symbol: 'TKN',
+      totalSupply: '1000000'
+    }).success
+  ).toBe(true)
+  expect(parseRendererInvokeResult('tray:getTokenDetails', {}).success).toBe(true)
+  expect(parseRendererInvokeResult('tray:getTokenDetails', { totalSupply: '-1' }).success).toBe(false)
+  expect(() => parseRendererInvokeResult('missing', {})).toThrow(
+    'Renderer IPC channel has no invoke result schema: missing'
+  )
+  expect(() => assertRendererInvokeResultSchema('missing')).toThrow(
+    'Renderer IPC channel has no invoke result schema: missing'
   )
 })
 
