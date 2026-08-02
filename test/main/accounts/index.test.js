@@ -177,31 +177,31 @@ describe('#setBaseFee', () => {
     Accounts.setBaseFee(baseFee, requestId, userUpdate)
 
   it('does not set an undefined base fee', () => {
-    expect(() => setBaseFee(undefined)).toThrowError()
+    expect(() => setBaseFee(undefined)).toThrow()
   })
 
   it('does not set an invalid base fee', () => {
-    expect(() => setBaseFee('wrong')).toThrowError()
+    expect(() => setBaseFee('wrong')).toThrow()
   })
 
   it('does not set a negative base fee', () => {
-    expect(() => setBaseFee('-0x12a05f200')).toThrowError()
+    expect(() => setBaseFee('-0x12a05f200')).toThrow()
   })
 
   it('does not set a base fee for an inactive account', () => {
     Accounts.setSigner(undefined, jest.fn())
 
-    expect(() => setBaseFee('0x1dcd65000')).toThrowError(/no account selected/i)
+    expect(() => setBaseFee('0x1dcd65000')).toThrow(/no account selected/i)
   })
 
   it('fails to find the request', () => {
-    expect(() => setBaseFee('0x1dcd65000', 2)).toThrowError(/could not find transaction/i)
+    expect(() => setBaseFee('0x1dcd65000', 2)).toThrow(/could not find transaction/i)
   })
 
   it('does not set a base fee on a non-transaction request', () => {
     request.type = 'message'
 
-    expect(() => setBaseFee('0x1dcd65000')).toThrowError()
+    expect(() => setBaseFee('0x1dcd65000')).toThrow()
   })
 
   it('does not set a base fee on a legacy transaction', () => {
@@ -213,14 +213,14 @@ describe('#setBaseFee', () => {
   it('does not set a base fee on a locked request', () => {
     request.locked = true
 
-    expect(() => setBaseFee('0x1dcd65000')).toThrowError()
+    expect(() => setBaseFee('0x1dcd65000')).toThrow()
     expect(Accounts.current().requests[1].data.maxFeePerGas).toBe(request.data.maxFeePerGas)
   })
 
   it('does not set a base fee on an automatic update if fees were manually set by the user', () => {
     request.feesUpdatedByUser = true
 
-    expect(() => setBaseFee('0x1dcd65000')).toThrowError()
+    expect(() => setBaseFee('0x1dcd65000')).toThrow()
     expect(Accounts.current().requests[1].data.maxFeePerGas).toBe(request.data.maxFeePerGas)
   })
 
@@ -315,31 +315,31 @@ describe('#setPriorityFee', () => {
     Accounts.setPriorityFee(fee, requestId, userUpdate)
 
   it('does not set an undefined priority fee', () => {
-    expect(() => setPriorityFee(undefined)).toThrowError()
+    expect(() => setPriorityFee(undefined)).toThrow()
   })
 
   it('does not set an invalid priority fee', () => {
-    expect(() => setPriorityFee('incorrect')).toThrowError()
+    expect(() => setPriorityFee('incorrect')).toThrow()
   })
 
   it('does not set a negative priority fee', () => {
-    expect(() => setPriorityFee('-0x12a05f200')).toThrowError()
+    expect(() => setPriorityFee('-0x12a05f200')).toThrow()
   })
 
   it('does not set a priority fee if no account is active', () => {
     Accounts.setSigner(undefined, jest.fn())
 
-    expect(() => setPriorityFee('0x12a05f200')).toThrowError(/no account selected/i)
+    expect(() => setPriorityFee('0x12a05f200')).toThrow(/no account selected/i)
   })
 
   it('fails to find the request', () => {
-    expect(() => setPriorityFee('0x12a05f200', 2)).toThrowError(/could not find transaction/i)
+    expect(() => setPriorityFee('0x12a05f200', 2)).toThrow(/could not find transaction/i)
   })
 
   it('does not set a priority fee on a non-transaction request', () => {
     request.type = 'message'
 
-    expect(() => setPriorityFee('0x12a05f200')).toThrowError()
+    expect(() => setPriorityFee('0x12a05f200')).toThrow()
   })
 
   it('does not set a priority fee on a legacy transaction', () => {
@@ -351,14 +351,14 @@ describe('#setPriorityFee', () => {
   it('does not set a priority fee on a locked request', () => {
     request.locked = true
 
-    expect(() => setPriorityFee('0x12a05f200')).toThrowError()
+    expect(() => setPriorityFee('0x12a05f200')).toThrow()
     expect(Accounts.current().requests[1].data.maxFeePerGas).toBe(request.data.maxFeePerGas)
   })
 
   it('does not set a priority fee on an automatic update if fees were manually set by the user', () => {
     request.feesUpdatedByUser = true
 
-    expect(() => setPriorityFee('0x12a05f200')).toThrowError()
+    expect(() => setPriorityFee('0x12a05f200')).toThrow()
     expect(Accounts.current().requests[1].data.maxFeePerGas).toBe(request.data.maxFeePerGas)
   })
 
@@ -444,31 +444,31 @@ describe('#setGasPrice', () => {
     Accounts.setGasPrice(price, requestId, userUpdate)
 
   it('does not set an undefined gas price', () => {
-    expect(() => setGasPrice(undefined)).toThrowError()
+    expect(() => setGasPrice(undefined)).toThrow()
   })
 
   it('does not set an invalid gas price', () => {
-    expect(() => setGasPrice(Number.NaN)).toThrowError()
+    expect(() => setGasPrice(Number.NaN)).toThrow()
   })
 
   it('does not set a negative gas price', () => {
-    expect(() => setGasPrice('-0x23')).toThrowError()
+    expect(() => setGasPrice('-0x23')).toThrow()
   })
 
   it('does not set a gas price if no account is active', () => {
     Accounts.setSigner(undefined, jest.fn())
 
-    expect(() => setGasPrice('0x23')).toThrowError(/no account selected/i)
+    expect(() => setGasPrice('0x23')).toThrow(/no account selected/i)
   })
 
   it('fails to find the request', () => {
-    expect(() => setGasPrice('0x23', 2)).toThrowError(/could not find transaction/i)
+    expect(() => setGasPrice('0x23', 2)).toThrow(/could not find transaction/i)
   })
 
   it('does not set a gas price on a non-transaction request', () => {
     request.type = 'message'
 
-    expect(() => setGasPrice('0x23')).toThrowError()
+    expect(() => setGasPrice('0x23')).toThrow()
   })
 
   it('does not set a gas price on an EIP-1559 transaction', () => {
@@ -480,14 +480,14 @@ describe('#setGasPrice', () => {
   it('does not set a gas price on a locked request', () => {
     request.locked = true
 
-    expect(() => setGasPrice('0x23')).toThrowError()
+    expect(() => setGasPrice('0x23')).toThrow()
     expect(Accounts.current().requests[1].data.gasPrice).toBe(request.data.gasPrice)
   })
 
   it('does not set a gas price on an automatic update if fees were manually set by the user', () => {
     request.feesUpdatedByUser = true
 
-    expect(() => setGasPrice('0x23')).toThrowError()
+    expect(() => setGasPrice('0x23')).toThrow()
     expect(Accounts.current().requests[1].data.gasPrice).toBe(request.data.gasPrice)
   })
 
@@ -558,44 +558,44 @@ describe('#setGasLimit', () => {
     Accounts.setGasLimit(limit, requestId, userUpdate)
 
   it('does not set an undefined gas limit', () => {
-    expect(() => setGasLimit(undefined)).toThrowError()
+    expect(() => setGasLimit(undefined)).toThrow()
   })
 
   it('does not set an invalid gas limit', () => {
-    expect(() => setGasLimit(Number.NaN)).toThrowError()
+    expect(() => setGasLimit(Number.NaN)).toThrow()
   })
 
   it('does not set a negative gas limit', () => {
-    expect(() => setGasLimit('-0x61a8')).toThrowError()
+    expect(() => setGasLimit('-0x61a8')).toThrow()
   })
 
   it('does not set a gas limit if no account is active', () => {
     Accounts.setSigner(undefined, jest.fn())
 
-    expect(() => setGasLimit('0x61a8')).toThrowError(/no account selected/i)
+    expect(() => setGasLimit('0x61a8')).toThrow(/no account selected/i)
   })
 
   it('fails to find the request', () => {
-    expect(() => setGasLimit('0x61a8', 2)).toThrowError(/could not find transaction/i)
+    expect(() => setGasLimit('0x61a8', 2)).toThrow(/could not find transaction/i)
   })
 
   it('does not set a gas limit on a non-transaction request', () => {
     request.type = 'message'
 
-    expect(() => setGasLimit('0x61a8')).toThrowError()
+    expect(() => setGasLimit('0x61a8')).toThrow()
   })
 
   it('does not set a gas limit on a locked request', () => {
     request.locked = true
 
-    expect(() => setGasLimit('0x61a8')).toThrowError()
+    expect(() => setGasLimit('0x61a8')).toThrow()
     expect(Accounts.current().requests[1].data.gasLimit).toBe(request.data.gasLimit)
   })
 
   it('does not set a gas limit on an automatic update if fees were manually set by the user', () => {
     request.feesUpdatedByUser = true
 
-    expect(() => setGasLimit('0x61a8')).toThrowError()
+    expect(() => setGasLimit('0x61a8')).toThrow()
     expect(Accounts.current().requests[1].data.gasLimit).toBe(request.data.gasLimit)
   })
 

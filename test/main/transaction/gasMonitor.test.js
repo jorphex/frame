@@ -87,7 +87,7 @@ describe('#getFeeHistory', () => {
   it('requests the correct percentiles with the eth_feeHistory RPC call', async () => {
     const monitor = new GasMonitor(testConnection)
     await monitor.getFeeHistory(10, [10, 20, 30])
-    expect(requestHandlers['eth_feeHistory']).toBeCalledWith([intToHex(10), 'pending', [10, 20, 30]])
+    expect(requestHandlers['eth_feeHistory']).toHaveBeenCalledWith([intToHex(10), 'pending', [10, 20, 30]])
   })
 
   it.each([

@@ -277,7 +277,7 @@ describe('#getRawTx', () => {
   ]
   invalidNonces.forEach(({ description, nonce }) => {
     it(`should reject a ${description} nonce`, () => {
-      expect(() => getRawTx({ nonce })).toThrowError('Invalid nonce')
+      expect(() => getRawTx({ nonce })).toThrow('Invalid nonce')
     })
   })
 })

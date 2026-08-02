@@ -127,7 +127,7 @@ describe('#mapRequest', () => {
         }
       }
 
-      expect(() => mapRequest(req)).toThrowError(new Error('session parameter is required'))
+      expect(() => mapRequest(req)).toThrow(new Error('session parameter is required'))
     })
   })
 

@@ -56,7 +56,7 @@ describe('#normalizeChainId', () => {
   it('does not handle a hex chain id with no prefix', () => {
     const tx = { to: '0xframe', chainId: 'a' }
 
-    expect(() => normalizeChainId(tx)).toThrowError(/chain for transaction.*is not a hex-prefixed string/i)
+    expect(() => normalizeChainId(tx)).toThrow(/chain for transaction.*is not a hex-prefixed string/i)
   })
 
   it('normalizes a numeric chain id', () => {
@@ -74,7 +74,7 @@ describe('#normalizeChainId', () => {
   it('does not allow a chain id that does not match the target chain', () => {
     const tx = { to: '0xframe', chainId: '0xa' }
 
-    expect(() => normalizeChainId(tx, 11)).toThrowError(
+    expect(() => normalizeChainId(tx, 11)).toThrow(
       /chain for transaction.*does not match request target chain/i
     )
   })
