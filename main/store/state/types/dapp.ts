@@ -1,7 +1,6 @@
 import { z } from 'zod'
 
-// TODO: define manifest schema
-const ManifestSchema = z.any()
+const ManifestSchema = z.record(z.string(), z.unknown())
 
 export const DappSchema = z.object({
   id: z.string().optional(),

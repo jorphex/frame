@@ -25,7 +25,7 @@ const storeApi = {
 
     return rate || { usd: { price: 0 } }
   },
-  getLastUpdated: (account: Address): number => {
+  getLastUpdated: (account: Address): number | undefined => {
     return store('main.accounts', account, 'balances.lastUpdated')
   }
 }
