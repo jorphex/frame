@@ -115,18 +115,19 @@ window, an expected packaged/development origin, and the expected protocol sourc
 label. One-way and invoke messages are limited to explicitly registered IPC
 channels, request identifiers and argument counts are bounded, and malformed or
 oversized messages are ignored without reaching Electron IPC. Main RPC methods
-remain a broad first-party renderer capability and their individual payloads are
-not yet described by a typed per-method schema. A renderer compromise must
-therefore still be treated as a privileged wallet-process compromise.
+remain a broad tray/dashboard capability and their individual payloads are not
+yet described by a typed per-method schema. A privileged renderer compromise
+must therefore still be treated as a privileged wallet-process compromise.
 
 The main process assigns each shared-preload window a renderer role. Tray and
 dashboard windows retain the full bridge surface; onboarding, notification, and
 local dapp-shell windows are restricted to their enumerated RPC methods, IPC
 channels, and store actions. Missing, unknown, or duplicate role arguments fail
 closed. Remote dapp content runs in separate WebContentsViews and does not receive
-this bridge. Main IPC handlers do not yet independently verify the assigned role,
-so the preload capability check is defense at the context-isolation boundary, not
-a substitute for typed main-process authorization.
+this bridge. Main IPC registrations independently resolve `event.sender` through
+a main-owned role map and apply the same capability policy; unregistered remote
+views and role-incompatible requests are rejected. Individual handler payloads
+still require typed schemas and semantic validation.
 
 Some renderer policies allow broad network or image sources. Embedded dapp views
 load separately partitioned content and depend on session checks and request

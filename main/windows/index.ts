@@ -1,7 +1,6 @@
 import {
   app as electronApp,
   BrowserWindow,
-  ipcMain,
   screen,
   globalShortcut,
   IpcMainEvent,
@@ -19,6 +18,7 @@ import { createWindow } from './window'
 import { SystemTray, SystemTrayEventHandlers } from './systemTray'
 import { registerShortcut } from '../keyboardShortcuts'
 import { Shortcut } from '../store/state/types/shortcuts'
+import { onRenderer, onceRenderer } from '../ipc/renderer'
 
 type Windows = {
   tray?: BrowserWindow
@@ -222,6 +222,7 @@ export class Tray {
   private gasObserver: Observer
   private ready = false
   private readyHandler: () => void
+  private removeReadyHandler: () => void
 
   constructor() {
     this.gasObserver = store.observer(() => {
@@ -273,7 +274,7 @@ export class Tray {
         }, 600)
       }
     }
-    ipcMain.once('tray:ready', this.readyHandler)
+    this.removeReadyHandler = onceRenderer('tray:ready', this.readyHandler)
     initTrayWindow()
   }
 
@@ -375,7 +376,7 @@ export class Tray {
 
   destroy() {
     this.gasObserver.remove()
-    ipcMain.off('tray:ready', this.readyHandler)
+    this.removeReadyHandler()
   }
 }
 
@@ -655,8 +656,8 @@ class Notify {
   }
 }
 
-ipcMain.on('tray:quit', () => electronApp.quit())
-ipcMain.on('tray:mouseout', () => {
+onRenderer('tray:quit', () => electronApp.quit())
+onRenderer('tray:mouseout', () => {
   if (glide && !(windows.dash && windows.dash.isVisible())) {
     glide = false
     app.hide()
@@ -689,7 +690,7 @@ if (isDev) {
   })
 }
 
-ipcMain.on('*:contextmenu', (e, x, y) => {
+onRenderer('*:contextmenu', (e, x, y) => {
   if (isDev) {
     e.sender.inspectElement(x, y)
   }

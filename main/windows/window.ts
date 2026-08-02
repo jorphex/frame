@@ -5,15 +5,8 @@ import path from 'path'
 import store from '../store'
 
 import type { ChainId } from '../store/state'
-
-export type RendererRole = 'dash' | 'dapp' | 'notify' | 'onboard' | 'tray'
-
-const rendererRoleForWindow = (name: string): RendererRole => {
-  if (name === 'frameInstance') return 'dapp'
-  if (name === 'dash' || name === 'notify' || name === 'onboard' || name === 'tray') return name
-
-  throw new Error(`Window "${name}" has no renderer IPC role`)
-}
+import { rendererRoleForWindow } from '../../resources/bridge/roles'
+import { registerRendererRole } from '../ipc/renderer'
 
 export function createWindow(
   name: string,
@@ -50,6 +43,7 @@ export function createWindow(
       disableBlinkFeatures: 'Auxclick'
     }
   })
+  registerRendererRole(browserWindow.webContents, rendererRole)
 
   browserWindow.webContents.once('did-finish-load', () => {
     log.info(`Created ${name} renderer process, pid:`, browserWindow.webContents.getOSProcessId())

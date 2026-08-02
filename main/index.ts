@@ -1,4 +1,4 @@
-import { app, ipcMain, protocol, clipboard, powerMonitor, BrowserWindow } from 'electron'
+import { app, protocol, clipboard, powerMonitor, BrowserWindow } from 'electron'
 import path from 'path'
 import log from 'electron-log'
 import url from 'url'
@@ -23,6 +23,7 @@ import { FrameInstance } from './windows/frames/frameInstances'
 import Erc20Contract from './contracts/erc20'
 import { getErrorCode } from '../resources/utils'
 import walletCallEvidenceRuntime from './provider/walletCallEvidenceRuntime'
+import { handleRenderer, onRenderer } from './ipc/renderer'
 
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
@@ -113,7 +114,7 @@ global.eval = () => {
   throw new Error(`This app does not support global.eval()`)
 }
 
-ipcMain.on('tray:resetAllSettings', () => {
+onRenderer('tray:resetAllSettings', () => {
   persist.clear()
 
   if (updater.updateReady) {
@@ -124,7 +125,7 @@ ipcMain.on('tray:resetAllSettings', () => {
   app.exit(0)
 })
 
-ipcMain.on('tray:replaceTx', async (e, id, type) => {
+onRenderer('tray:replaceTx', async (e, id, type) => {
   requireStoreAction('navBack')('panel')
   setTimeout(async () => {
     try {
@@ -135,17 +136,17 @@ ipcMain.on('tray:replaceTx', async (e, id, type) => {
   }, 1000)
 })
 
-ipcMain.on('tray:clipboardData', (e, data) => {
+onRenderer('tray:clipboardData', (e, data) => {
   if (data) clipboard.writeText(data)
 })
 
-ipcMain.on('tray:installAvailableUpdate', () => {
+onRenderer('tray:installAvailableUpdate', () => {
   requireStoreAction('updateBadge')('')
 
   updater.fetchUpdate()
 })
 
-ipcMain.on('tray:dismissUpdate', (e, version, remind) => {
+onRenderer('tray:dismissUpdate', (e, version, remind) => {
   if (!remind) {
     requireStoreAction('dontRemind')(version)
   }
@@ -155,53 +156,53 @@ ipcMain.on('tray:dismissUpdate', (e, version, remind) => {
   updater.dismissUpdate()
 })
 
-ipcMain.on('tray:removeAccount', (e, id) => {
+onRenderer('tray:removeAccount', (e, id) => {
   accounts.remove(id)
 })
 
-ipcMain.on('tray:renameAccount', (e, id, name) => {
+onRenderer('tray:renameAccount', (e, id, name) => {
   accounts.rename(id, name)
 })
 
-ipcMain.on('dash:removeSigner', (e, id) => {
+onRenderer('dash:removeSigner', (e, id) => {
   signers.remove(id)
 })
 
-ipcMain.on('dash:reloadSigner', (e, id) => {
+onRenderer('dash:reloadSigner', (e, id) => {
   signers.reload(id)
 })
 
-ipcMain.on('tray:resolveRequest', (e, req, result) => {
+onRenderer('tray:resolveRequest', (e, req, result) => {
   accounts.resolveRequest(req, result)
 })
 
-ipcMain.on('tray:rejectRequest', (e, req) => {
+onRenderer('tray:rejectRequest', (e, req) => {
   const err = { code: 4001, message: 'User rejected the request' }
   accounts.rejectRequest(req, err)
 })
 
-ipcMain.on('tray:clearRequestsByOrigin', (e, account, origin) => {
+onRenderer('tray:clearRequestsByOrigin', (e, account, origin) => {
   accounts.clearRequestsByOrigin(account, origin)
 })
 
-ipcMain.on('tray:openExternal', (e, url) => {
+onRenderer('tray:openExternal', (e, url) => {
   openExternal(url)
   requireStoreAction('setDash')({ showing: false })
 })
 
-ipcMain.on('tray:openExplorer', (e, chain, hash, account) => {
+onRenderer('tray:openExplorer', (e, chain, hash, account) => {
   openBlockExplorer(chain, hash, account)
 })
 
-ipcMain.on('tray:copyTxHash', (e, hash) => {
+onRenderer('tray:copyTxHash', (e, hash) => {
   if (hash) clipboard.writeText(hash)
 })
 
-ipcMain.on('tray:giveAccess', (e, req, access) => {
+onRenderer('tray:giveAccess', (e, req, access) => {
   accounts.setAccess(req, access)
 })
 
-ipcMain.handle('tray:addChain', async (e, chain, requestReference) => {
+handleRenderer('tray:addChain', async (e, chain, requestReference) => {
   try {
     if (requestReference) {
       await addRequestedChain(chain, requestReference)
@@ -216,7 +217,7 @@ ipcMain.handle('tray:addChain', async (e, chain, requestReference) => {
   }
 })
 
-ipcMain.handle('tray:getTokenDetails', async (e, contractAddress, chainId) => {
+handleRenderer('tray:getTokenDetails', async (e, contractAddress, chainId) => {
   try {
     const contract = new Erc20Contract(contractAddress, chainId)
     return await contract.getTokenData()
@@ -226,7 +227,7 @@ ipcMain.handle('tray:getTokenDetails', async (e, contractAddress, chainId) => {
   }
 })
 
-ipcMain.on('tray:addToken', (e, token, req) => {
+onRenderer('tray:addToken', (e, token, req) => {
   if (token) {
     log.info('adding custom token', token)
     requireStoreAction('addCustomTokens')([token])
@@ -234,7 +235,7 @@ ipcMain.on('tray:addToken', (e, token, req) => {
   if (req) accounts.resolveRequest(req)
 })
 
-ipcMain.on('tray:removeToken', (e, token) => {
+onRenderer('tray:removeToken', (e, token) => {
   if (token) {
     log.info('removing custom token', token)
 
@@ -243,31 +244,31 @@ ipcMain.on('tray:removeToken', (e, token) => {
   }
 })
 
-ipcMain.on('tray:adjustNonce', (e, handlerId, nonceAdjust) => {
+onRenderer('tray:adjustNonce', (e, handlerId, nonceAdjust) => {
   accounts.adjustNonce(handlerId, nonceAdjust)
 })
 
-ipcMain.on('tray:resetNonce', (e, handlerId) => {
+onRenderer('tray:resetNonce', (e, handlerId) => {
   accounts.resetNonce(handlerId)
 })
 
-ipcMain.on('tray:removeOrigin', (e, handlerId) => {
+onRenderer('tray:removeOrigin', (e, handlerId) => {
   accounts.removeRequests(handlerId)
   requireStoreAction('removeOrigin')(handlerId)
 })
 
-ipcMain.on('tray:clearOrigins', () => {
+onRenderer('tray:clearOrigins', () => {
   Object.keys(store('main.origins')).forEach((handlerId) => {
     accounts.removeRequests(handlerId)
   })
   requireStoreAction('clearOrigins')()
 })
 
-ipcMain.on('tray:syncPath', (e, path, value) => {
+onRenderer('tray:syncPath', (e, path, value) => {
   requireStoreAction('syncPath')(path, value)
 })
 
-ipcMain.on('tray:ready', () => {
+onRenderer('tray:ready', () => {
   require('./api')
   startWalletCallEvidenceRuntime()
 
@@ -276,23 +277,23 @@ ipcMain.on('tray:ready', () => {
   }
 })
 
-ipcMain.on('tray:updateRestart', () => {
+onRenderer('tray:updateRestart', () => {
   updater.quitAndInstall()
 })
 
-ipcMain.on('frame:close', (e) => {
+onRenderer('frame:close', (e) => {
   windows.close(e)
 })
 
-ipcMain.on('frame:min', (e) => {
+onRenderer('frame:min', (e) => {
   windows.min(e)
 })
 
-ipcMain.on('frame:max', (e) => {
+onRenderer('frame:max', (e) => {
   windows.max(e)
 })
 
-ipcMain.on('frame:unmax', (e) => {
+onRenderer('frame:unmax', (e) => {
   windows.unmax(e)
 })
 
@@ -306,12 +307,12 @@ dapps.add({
   status: 'initial'
 })
 
-ipcMain.on('unsetCurrentView', async (e) => {
+onRenderer('unsetCurrentView', async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender) as FrameInstance
   dapps.unsetCurrentView(win.frameId as string)
 })
 
-ipcMain.on('*:addFrame', (e, id) => {
+onRenderer('*:addFrame', (e, id) => {
   const existingFrame = store('main.frames', id)
 
   if (existingFrame) {
@@ -348,7 +349,7 @@ app.on('ready', () => {
   })
 })
 
-ipcMain.on('tray:action', (e, action, ...args) => {
+onRenderer('tray:action', (e, action, ...args) => {
   const storeAction = typeof action === 'string' ? store[action] : undefined
   if (typeof storeAction === 'function') return storeAction(...args)
   log.info('Tray sent unrecognized action: ', action)

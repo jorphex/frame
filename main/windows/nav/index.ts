@@ -1,8 +1,7 @@
 // Manage navigation states for each window
 
-import { ipcMain } from 'electron'
-
 import { requireStoreAction } from '../../store/action'
+import { onRenderer } from '../../ipc/renderer'
 import type { Breadcrumb } from './breadcrumb'
 
 const nav = {
@@ -22,15 +21,15 @@ const nav = {
   }
 }
 
-ipcMain.on('nav:forward', (e, windowId: string, crumb: Breadcrumb) => {
+onRenderer('nav:forward', (e, windowId: string, crumb: Breadcrumb) => {
   nav.forward(windowId, crumb)
 })
 
-ipcMain.on('nav:back', (e, windowId: string, steps = 1) => {
+onRenderer('nav:back', (e, windowId: string, steps = 1) => {
   nav.back(windowId, steps)
 })
 
-ipcMain.on('nav:update', (e, windowId: string, crumb: Breadcrumb, navigate: boolean) => {
+onRenderer('nav:update', (e, windowId: string, crumb: Breadcrumb, navigate: boolean) => {
   nav.update(windowId, crumb, navigate)
 })
 

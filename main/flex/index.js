@@ -1,11 +1,11 @@
 // Flex is a reverse RPC interface for calling into the renderer's chromium process and recieving callbacks/events
 
 const EventEmitter = require('events')
-const { ipcMain } = require('electron')
 const { v4: uuid } = require('uuid')
 const log = require('electron-log')
 
 const windows = require('../windows')
+const { onRenderer } = require('../ipc/renderer')
 
 const defined = (value) => value !== undefined && value !== null
 
@@ -31,19 +31,19 @@ flex.setMaxListeners(128)
 
 const handlers = {}
 
-ipcMain.on('tray:flex:res', (sender, id, ...args) => {
+onRenderer('tray:flex:res', (sender, id, ...args) => {
   if (!handlers[id]) return log.warn('Message from main RPC had no handler')
   args = args.map((arg) => (defined(arg) ? JSON.parse(arg) : arg))
   handlers[id](...args)
   delete handlers[id]
 })
 
-ipcMain.on('tray:flex:event', (sender, eventName, ...args) => {
+onRenderer('tray:flex:event', (sender, eventName, ...args) => {
   args = args.map((arg) => (defined(arg) ? JSON.parse(arg) : arg))
   flex.emit(eventName, ...args)
 })
 
-ipcMain.on('tray:ready', () => flex.setReady())
+onRenderer('tray:ready', () => flex.setReady())
 
 // If flex is already ready, trigger new 'ready' listeners
 flex.on('newListener', (e, listener) => {

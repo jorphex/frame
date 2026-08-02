@@ -1,6 +1,6 @@
 export const BRIDGE_SOURCE = 'bridge:link'
 export const LINK_SOURCE = 'tray:link'
-export const RENDERER_ROLE_ARGUMENT = '--frame-renderer-role='
+import { RENDERER_ROLE_ARGUMENT, hasRendererCapability, isRendererRole } from './roles'
 
 export const MAX_MESSAGE_LENGTH = 16 * 1024 * 1024
 const MAX_ARGUMENTS = 64
@@ -52,33 +52,6 @@ const requestEventChannels = new Set([
 const requestInvokeChannels = new Set(['tray:addChain', 'tray:getTokenDetails'])
 const responseEventChannels = new Set(['action', 'dapp', 'flex'])
 const methods = new Set(['event', 'invoke', 'rpc'])
-const privilegedRoles = new Set(['dash', 'tray'])
-const rendererRoles = new Set(['dash', 'dapp', 'notify', 'onboard', 'tray'])
-const limitedCapabilities = {
-  dapp: {
-    actions: new Set(['navDash']),
-    events: new Set(['*:contextmenu', 'frame:close', 'frame:max', 'frame:min', 'frame:unmax', 'tray:action']),
-    rpc: new Set(['getFrameId', 'getState'])
-  },
-  notify: {
-    actions: new Set(['mutePylonMigrationNotice']),
-    events: new Set(['*:contextmenu', 'frame:close', 'frame:max', 'frame:min', 'frame:unmax', 'tray:action']),
-    rpc: new Set(['getState'])
-  },
-  onboard: {
-    actions: new Set(['navDash', 'navReplace', 'setKeyboardLayout']),
-    events: new Set([
-      '*:contextmenu',
-      'frame:close',
-      'frame:max',
-      'frame:min',
-      'frame:unmax',
-      'tray:action',
-      'tray:openExternal'
-    ]),
-    rpc: new Set(['getState'])
-  }
-}
 
 const isRecord = (value) =>
   value !== null &&
@@ -91,16 +64,7 @@ const hasValidArgs = (message) => Array.isArray(message.args) && message.args.le
 const hasOnlyKeys = (message, allowedKeys) => Object.keys(message).every((key) => allowedKeys.has(key))
 
 const hasRoleCapability = (message, rendererRole) => {
-  if (privilegedRoles.has(rendererRole)) return true
-
-  const capabilities = limitedCapabilities[rendererRole]
-  if (!capabilities) return false
-  if (message.method === 'rpc') return capabilities.rpc.has(message.args[0])
-  if (message.method === 'invoke') return false
-
-  const channel = message.args[0]
-  if (!capabilities.events.has(channel)) return false
-  return channel !== 'tray:action' || capabilities.actions.has(message.args[1])
+  return hasRendererCapability(rendererRole, message.method, message.args)
 }
 
 const isValidRequest = (message, rendererRole) => {
@@ -172,7 +136,7 @@ export const getRendererRole = (args) => {
   if (roleArguments.length !== 1) return null
 
   const role = roleArguments[0].slice(RENDERER_ROLE_ARGUMENT.length)
-  return rendererRoles.has(role) ? role : null
+  return isRendererRole(role) ? role : null
 }
 
 export const isTrustedBridgeEvent = (event, currentWindow, safeOrigins) =>

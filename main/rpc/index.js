@@ -1,5 +1,4 @@
 const fs = require('fs')
-const { ipcMain } = require('electron')
 const log = require('electron-log')
 const { randomBytes } = require('crypto')
 import { isAddress } from 'ethers'
@@ -19,6 +18,7 @@ const { arraysEqual, randomLetters } = require('../../resources/utils')
 const { isSignatureRequest } = require('../signatures')
 const { default: TrezorBridge } = require('../../main/signers/trezor/bridge')
 const { createAccountCodeReader } = require('../accounts/accountCode')
+const { onRendererRpc } = require('../ipc/renderer')
 
 const accountCodeReader = createAccountCodeReader(provider.connection)
 
@@ -359,7 +359,7 @@ const rpc = {
 const unwrap = (v) => (v !== undefined && v !== null ? JSON.parse(v) : v)
 const wrap = (v) => (v !== undefined && v !== null ? JSON.stringify(v) : v)
 
-ipcMain.on('main:rpc', (event, id, method, ...args) => {
+onRendererRpc((event, id, method, ...args) => {
   id = unwrap(id)
   method = unwrap(method)
   args = args.map((arg) => unwrap(arg))
