@@ -1,5 +1,5 @@
 import Restore from 'react-restore'
-import { screen, render } from '../../../../../componentSetup'
+import { act, screen, render } from '../../../../../componentSetup'
 
 import store from '../../../../../../main/store'
 import link from '../../../../../../resources/link'
@@ -34,6 +34,10 @@ describe('selecting a keystore', () => {
     await user.click(selectKeystoreButton)
 
     expect(screen.getAllByRole('button')[index].textContent).toBe('ERROR HERE')
+
+    act(() => jest.advanceTimersByTime(1_500))
+
+    expect(screen.getAllByRole('button')[index].textContent).toBe('Locate Keystore File (json)')
   })
 
   it('should update the navigation with the keystore password entry screen when a keystore file is located', async () => {

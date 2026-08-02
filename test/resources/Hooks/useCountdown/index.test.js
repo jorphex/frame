@@ -29,6 +29,14 @@ it('updates the countdown time after a second', () => {
   expect(screen.getByRole('timer').textContent).toBe('23h 59m 59s')
 })
 
+it('reschedules when the target changes', () => {
+  const { rerender } = render(<TestComponent end={nextDay.getTime()} />)
+
+  rerender(<TestComponent end={nextDay.getTime() + 1_000} />)
+
+  expect(screen.getByRole('timer').textContent).toBe('24h 1s')
+})
+
 it('uses the correct extension for seconds', () => {
   render(<TestComponent end={startDate.getTime() + 1_000} />)
   expect(screen.getByRole('timer').textContent).toBe('1s')
@@ -52,6 +60,7 @@ it('sets the value correctly when the countdown has been completed', () => {
   })
 
   expect(screen.getByRole('timer').textContent).toBe('EXPIRED')
+  expect(jest.getTimerCount()).toBe(0)
 })
 
 it('sets the value to the completed state when a past date in passed in', () => {

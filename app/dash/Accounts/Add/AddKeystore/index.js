@@ -16,10 +16,12 @@ const navForward = (accountData) =>
 const LocateKeystore = ({ addKeystore, error, setError }) => {
   useEffect(() => {
     if (!error) return
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
       setError('')
     }, 1_500)
-  }, [error])
+
+    return () => clearTimeout(timeout)
+  }, [error, setError])
   return (
     <div className='addAccountItemOptionSetupFrame'>
       {error ? (

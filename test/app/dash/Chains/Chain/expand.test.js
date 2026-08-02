@@ -52,6 +52,30 @@ describe('rendering', () => {
 })
 
 describe('updating', () => {
+  it('updates the latest chain identity when editing a field', async () => {
+    const chainConfig = {
+      id: 1337,
+      type: 'ethereum',
+      name: 'Leetnet',
+      explorer: 'https://etherscan.io',
+      symbol: 'ETH',
+      on: true
+    }
+
+    const { user } = render(<Chain view='expanded' {...chainConfig} />)
+    link.send.mockClear()
+
+    await user.clear(screen.getByLabelText('Chain Name'))
+    await user.type(screen.getByLabelText('Chain Name'), 'Updated')
+
+    expect(link.send).toHaveBeenLastCalledWith(
+      'tray:action',
+      'updateNetwork',
+      expect.objectContaining({ id: 1337, type: 'ethereum' }),
+      expect.objectContaining({ id: 1337, type: 'ethereum', name: 'Updated' })
+    )
+  })
+
   it('opens a confirmation when removing a chain', async () => {
     const chainConfig = {
       id: 1337,
