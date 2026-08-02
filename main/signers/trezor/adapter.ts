@@ -25,7 +25,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
     super('trezor')
   }
 
-  open() {
+  override open() {
     this.observer = store.observer(() => {
       const trezorDerivation = store('main.trezor.derivation')
 
@@ -243,7 +243,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
       })
   }
 
-  close() {
+  override close() {
     if (this.observer) {
       this.observer.remove()
       this.observer = undefined
@@ -254,7 +254,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
     super.close()
   }
 
-  remove(trezor: Trezor) {
+  override remove(trezor: Trezor) {
     if (trezor.id in this.knownSigners) {
       log.info(`removing Trezor ${trezor.id}`)
 
@@ -264,7 +264,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
     }
   }
 
-  reload(trezor: Trezor) {
+  override reload(trezor: Trezor) {
     log.info(`reloading Trezor ${trezor.id}`)
 
     trezor.status = Status.INITIAL

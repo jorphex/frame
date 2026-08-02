@@ -65,7 +65,7 @@ export default class Trezor extends Signer {
     return uuid('Trezor' + path, ns)
   }
 
-  async open(device: TrezorDevice) {
+  override async open(device: TrezorDevice) {
     this.device = device
     this.status = Status.INITIAL
     this.emit('update')
@@ -103,7 +103,7 @@ export default class Trezor extends Signer {
     }
   }
 
-  close() {
+  override close() {
     this.device = undefined
 
     this.emit('close')
@@ -112,7 +112,7 @@ export default class Trezor extends Signer {
     super.close()
   }
 
-  summary() {
+  override summary() {
     const summary = super.summary()
 
     return {
@@ -155,7 +155,12 @@ export default class Trezor extends Signer {
     this.emit('update')
   }
 
-  async verifyAddress(index: number, currentAddress: string = '', display = false, cb: Callback<boolean>) {
+  override async verifyAddress(
+    index: number,
+    currentAddress: string = '',
+    display = false,
+    cb: Callback<boolean>
+  ) {
     const waitForInput = setTimeout(() => {
       log.error('Trezor address verification timed out')
       cb(new Error('Address verification timed out'))
@@ -242,7 +247,7 @@ export default class Trezor extends Signer {
     }
   }
 
-  async signMessage(index: number, rawMessage: string, cb: Callback<string>) {
+  override async signMessage(index: number, rawMessage: string, cb: Callback<string>) {
     try {
       if (!this.device) {
         throw new Error('Trezor is not connected')
@@ -258,7 +263,7 @@ export default class Trezor extends Signer {
     }
   }
 
-  async signTypedData(
+  override async signTypedData(
     index: number,
     typedMessage: TypedMessage<SignTypedDataVersion.V4>,
     cb: Callback<string>
@@ -307,7 +312,7 @@ export default class Trezor extends Signer {
     }
   }
 
-  async signTransaction(index: number, rawTx: TransactionData, cb: Callback<string>) {
+  override async signTransaction(index: number, rawTx: TransactionData, cb: Callback<string>) {
     try {
       const compatibility = signerCompatibility(rawTx, this.summary())
       const compatibleTx = compatibility.compatible ? { ...rawTx } : londonToLegacy(rawTx)

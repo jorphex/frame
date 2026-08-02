@@ -39,7 +39,7 @@ export default class LedgerSignerAdapter extends SignerAdapter {
     this.disconnections = []
   }
 
-  open() {
+  override open() {
     this.observer = store.observer(() => {
       const ledgerDerivation = store('main.ledger.derivation')
       const liveAccountLimit = store('main.ledger.liveAccountLimit')
@@ -82,7 +82,7 @@ export default class LedgerSignerAdapter extends SignerAdapter {
     super.open()
   }
 
-  close() {
+  override close() {
     if (this.observer) {
       this.observer.remove()
       this.observer = null
@@ -96,7 +96,7 @@ export default class LedgerSignerAdapter extends SignerAdapter {
     super.close()
   }
 
-  remove(ledger: Ledger) {
+  override remove(ledger: Ledger) {
     if (ledger.devicePath in this.knownSigners) {
       log.info(`removing Ledger ${ledger.model} attached at ${ledger.devicePath}`)
 
@@ -106,7 +106,7 @@ export default class LedgerSignerAdapter extends SignerAdapter {
     }
   }
 
-  reload(ledger: Ledger) {
+  override reload(ledger: Ledger) {
     log.info(`reloading  Ledger ${ledger.model} attached at ${ledger.devicePath}`)
 
     const signer = this.knownSigners[ledger.devicePath]

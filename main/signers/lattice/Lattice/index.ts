@@ -176,7 +176,7 @@ export default class Lattice extends Signer {
     this.addresses = []
   }
 
-  close() {
+  override close() {
     this.emit('close')
     this.removeAllListeners()
 
@@ -268,7 +268,7 @@ export default class Lattice extends Signer {
     }
   }
 
-  async verifyAddress(index: number, currentAddress: string, display = true, cb: Callback<boolean>) {
+  override async verifyAddress(index: number, currentAddress: string, display = true, cb: Callback<boolean>) {
     const connection = this.connection as Client
 
     log.info(`verifying address ${currentAddress} for Lattice ${connection.getAppName()}`)
@@ -295,7 +295,7 @@ export default class Lattice extends Signer {
     }
   }
 
-  async signMessage(index: number, message: string, cb: Callback<string>) {
+  override async signMessage(index: number, message: string, cb: Callback<string>) {
     try {
       const signature = await this.sign(index, 'signPersonal', message)
 
@@ -306,7 +306,7 @@ export default class Lattice extends Signer {
     }
   }
 
-  async signTypedData(
+  override async signTypedData(
     index: number,
     typedMessage: TypedMessage<SignTypedDataVersion.V4>,
     cb: Callback<string>
@@ -321,7 +321,7 @@ export default class Lattice extends Signer {
     }
   }
 
-  async signTransaction(index: number, rawTx: TransactionData, cb: Callback<string>) {
+  override async signTransaction(index: number, rawTx: TransactionData, cb: Callback<string>) {
     try {
       const connection = this.connection as Client
       const compatibility = signerCompatibility(rawTx, this.summary())
@@ -342,7 +342,7 @@ export default class Lattice extends Signer {
     }
   }
 
-  summary() {
+  override summary() {
     const summary = super.summary()
 
     return {
