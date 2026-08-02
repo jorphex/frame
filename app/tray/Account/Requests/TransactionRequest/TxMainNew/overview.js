@@ -129,6 +129,22 @@ export function getSimulationEffectsPresentation(simulation, account) {
   }
 }
 
+export function getNativeBalanceChangesPresentation(simulation) {
+  const evidence = simulation?.nativeBalanceChanges
+  if (!evidence) return null
+  if (evidence.status !== 'succeeded') {
+    return { className: '_txMainTagWarning', label: 'Native balance-change preview unavailable' }
+  }
+
+  const count = evidence.changes.length
+  return {
+    className: count || evidence.truncated ? '_txMainTagWarning' : '_txMainTagGood',
+    label: `${count} RPC-reported native balance change${count === 1 ? '' : 's'}${
+      evidence.truncated ? ' (truncated)' : ''
+    }`
+  }
+}
+
 export function getAllowancePresentation(simulation) {
   const allowance = simulation?.allowance
   if (!allowance) return null
@@ -191,6 +207,7 @@ const TxOverview = ({
   const { data: calldata } = tx
   const simulation = getSimulationPresentation(req.simulation)
   const simulationEffects = getSimulationEffectsPresentation(req.simulation, req.account)
+  const nativeBalanceChanges = getNativeBalanceChangesPresentation(req.simulation)
   const allowance = getAllowancePresentation(req.simulation)
   const delegation = getDelegationPresentation(req.simulation)
   const accessList = getAccessListPresentation(req.data)
@@ -269,6 +286,15 @@ const TxOverview = ({
           <ClusterRow>
             <ClusterValue>
               <div className='_txMainTag _txMainTagWarning'>{simulationEffects.label}</div>
+            </ClusterValue>
+          </ClusterRow>
+        )}
+        {nativeBalanceChanges && (
+          <ClusterRow>
+            <ClusterValue>
+              <div className={`_txMainTag ${nativeBalanceChanges.className}`}>
+                {nativeBalanceChanges.label}
+              </div>
             </ClusterValue>
           </ClusterRow>
         )}

@@ -2,6 +2,7 @@ import {
   buildEthCall,
   buildSimulationCall,
   parseDelegationIndicator,
+  parseNativeBalanceChanges,
   parseSimulateCallsResult,
   parseSimulateResult,
   simulateTransaction,
@@ -35,15 +36,25 @@ const simulateSuccess = [
   }
 ]
 
+const unsupportedNativeBalanceChanges = {
+  status: 'unavailable',
+  source: 'debug_traceCall',
+  reason: 'Configured RPC does not support native balance-change tracing'
+}
+
 function rpcError(code, message) {
   return { id: 1, jsonrpc: '2.0', error: { code, message } }
 }
 
 const withAccountCode =
-  (send, response = { result: '0x' }) =>
+  (send, response = { result: '0x' }, traceResponse = rpcError(-32601, 'Method not found')) =>
   (payload, callback, targetChain) => {
     if (payload.method === 'eth_getCode') {
       callback({ id: payload.id, jsonrpc: '2.0', ...response })
+      return
+    }
+    if (payload.method === 'debug_traceCall') {
+      callback(traceResponse)
       return
     }
 
@@ -93,6 +104,74 @@ it('preserves an exact access list in configured-RPC simulation input', () => {
 
   expect(buildSimulationCall({ ...transaction, accessList })).toMatchObject({ accessList })
   expect(buildEthCall({ ...transaction, accessList })).toMatchObject({ accessList })
+})
+
+it('strictly parses bounded native balance changes, creations, and deletions', () => {
+  const created = '0x3333333333333333333333333333333333333333'
+  const deleted = '0x4444444444444444444444444444444444444444'
+  const mixedCaseSender = `0x${transaction.from.slice(2).toUpperCase()}`
+
+  expect(
+    parseNativeBalanceChanges({
+      pre: {
+        [mixedCaseSender]: { balance: '0xa', nonce: 1 },
+        [transaction.to]: { balance: '0x5' },
+        [deleted]: { balance: '0x2' }
+      },
+      post: {
+        [mixedCaseSender]: { balance: '0x7' },
+        [transaction.to]: { nonce: 2 },
+        [created]: { balance: '0x5' }
+      }
+    })
+  ).toEqual({
+    changes: [
+      { account: transaction.from, before: '10', after: '7', change: '-3' },
+      { account: created, before: '0', after: '5', change: '5' },
+      { account: deleted, before: '2', after: '0', change: '-2' }
+    ],
+    truncated: false
+  })
+})
+
+it('fails closed on malformed native balance changes and bounds account output', () => {
+  expect(parseNativeBalanceChanges({ pre: [], post: {} })).toBeUndefined()
+  expect(parseNativeBalanceChanges({ pre: { invalid: { balance: '0x1' } }, post: {} })).toBeUndefined()
+  expect(
+    parseNativeBalanceChanges({ pre: { [transaction.from]: { balance: '0x01' } }, post: {} })
+  ).toBeUndefined()
+  expect(
+    parseNativeBalanceChanges({
+      pre: { [transaction.from]: { nonce: 1 } },
+      post: { [transaction.from]: { balance: '0x1' } }
+    })
+  ).toBeUndefined()
+  expect(
+    parseNativeBalanceChanges({
+      pre: {
+        '0xaabbccddaabbccddaabbccddaabbccddaabbccdd': { balance: '0x1' },
+        '0xAABBCCDDAABBCCDDAABBCCDDAABBCCDDAABBCCDD': { balance: '0x1' }
+      },
+      post: {}
+    })
+  ).toBeUndefined()
+
+  const pre = {}
+  const post = {}
+  for (let index = 0; index < 129; index += 1) {
+    const address = `0x${index.toString(16).padStart(40, '0')}`
+    pre[address] = { balance: '0x0' }
+    post[address] = { balance: '0x1' }
+  }
+  const bounded = parseNativeBalanceChanges({ pre, post })
+  expect(bounded).toMatchObject({ truncated: true })
+  expect(bounded.changes).toHaveLength(128)
+
+  const oversized = {}
+  for (let index = 0; index < 1025; index += 1) {
+    oversized[`0x${index.toString(16).padStart(40, '0')}`] = { balance: '0x0' }
+  }
+  expect(parseNativeBalanceChanges({ pre: oversized, post: {} })).toBeUndefined()
 })
 
 it('strictly parses one successful simulation call', () => {
@@ -191,7 +270,8 @@ it('uses eth_simulateV1 without falling back when it succeeds', async () => {
   await expect(simulateTransaction(transaction, { send: withAccountCode(send) })).resolves.toEqual({
     status: 'succeeded',
     source: 'eth_simulateV1',
-    gasUsed: '0x5208'
+    gasUsed: '0x5208',
+    nativeBalanceChanges: unsupportedNativeBalanceChanges
   })
   expect(send).toHaveBeenCalledTimes(1)
   expect(send).toHaveBeenCalledWith(
@@ -210,6 +290,120 @@ it('uses eth_simulateV1 without falling back when it succeeds', async () => {
     expect.any(Function),
     { type: 'ethereum', id: 1 }
   )
+})
+
+it('attaches exact configured-RPC native balance changes after execution succeeds', async () => {
+  const send = jest.fn((payload, callback) => {
+    const result =
+      payload.method === 'eth_getCode'
+        ? '0x'
+        : payload.method === 'debug_traceCall'
+          ? {
+              pre: { [transaction.from]: { balance: '0xa' } },
+              post: { [transaction.from]: { balance: '0x7' } }
+            }
+          : simulateSuccess
+    callback({ id: payload.id, jsonrpc: '2.0', result })
+  })
+
+  await expect(simulateTransaction(transaction, { send })).resolves.toMatchObject({
+    status: 'succeeded',
+    nativeBalanceChanges: {
+      status: 'succeeded',
+      source: 'debug_traceCall',
+      changes: [{ account: transaction.from, before: '10', after: '7', change: '-3' }]
+    }
+  })
+  expect(send).toHaveBeenCalledWith(
+    {
+      id: 4,
+      jsonrpc: '2.0',
+      method: 'debug_traceCall',
+      params: [
+        buildEthCall(transaction),
+        'latest',
+        {
+          tracer: 'prestateTracer',
+          timeout: expect.stringMatching(/^[1-9][0-9]*ms$/),
+          tracerConfig: { diffMode: true, disableCode: true, disableStorage: true }
+        }
+      ]
+    },
+    expect.any(Function),
+    { type: 'ethereum', id: 1 }
+  )
+})
+
+it('qualifies malformed and unsupported native balance traces without weakening execution evidence', async () => {
+  const malformed = withAccountCode(
+    jest.fn((_payload, callback) => callback({ result: simulateSuccess })),
+    {
+      result: '0x'
+    },
+    {
+      id: 4,
+      jsonrpc: '2.0',
+      result: { pre: [], post: {} }
+    }
+  )
+  await expect(simulateTransaction(transaction, { send: malformed })).resolves.toMatchObject({
+    status: 'succeeded',
+    nativeBalanceChanges: {
+      status: 'failed',
+      source: 'debug_traceCall',
+      reason: 'RPC returned an invalid native balance-change result'
+    }
+  })
+
+  const unsupported = withAccountCode(
+    jest.fn((_payload, callback) => callback({ result: simulateSuccess })),
+    { result: '0x' },
+    rpcError(-32004, 'Trace method unavailable')
+  )
+  await expect(simulateTransaction(transaction, { send: unsupported })).resolves.toMatchObject({
+    status: 'succeeded',
+    nativeBalanceChanges: unsupportedNativeBalanceChanges
+  })
+})
+
+it('shares the execution timeout budget with native balance tracing', async () => {
+  const send = jest.fn((payload, callback) => {
+    if (payload.method === 'eth_simulateV1') {
+      setTimeout(() => callback({ id: payload.id, jsonrpc: '2.0', result: simulateSuccess }), 20)
+    } else if (payload.method === 'eth_getCode') {
+      callback({ id: payload.id, jsonrpc: '2.0', result: '0x' })
+    }
+  })
+  const pending = simulateTransaction(transaction, { send, timeoutMs: 25 })
+
+  jest.advanceTimersByTime(20)
+  await Promise.resolve()
+  jest.advanceTimersByTime(5)
+
+  await expect(pending).resolves.toMatchObject({
+    status: 'succeeded',
+    nativeBalanceChanges: {
+      status: 'unavailable',
+      source: 'debug_traceCall',
+      reason: 'Native balance-change trace exceeded the simulation time budget'
+    }
+  })
+})
+
+it('does not request native balance tracing when execution does not succeed', async () => {
+  const send = jest.fn((payload, callback) => {
+    const response =
+      payload.method === 'eth_getCode'
+        ? { id: payload.id, jsonrpc: '2.0', result: '0x' }
+        : rpcError(3, 'execution reverted: denied')
+    callback(response)
+  })
+
+  await expect(simulateTransaction(transaction, { send })).resolves.toMatchObject({
+    status: 'reverted',
+    source: 'eth_simulateV1'
+  })
+  expect(send.mock.calls.map(([payload]) => payload.method)).not.toContain('debug_traceCall')
 })
 
 it('attaches exact configured-RPC delegation evidence for the selected sender', async () => {
@@ -291,7 +485,8 @@ it.each([-32601, -32004])('falls back to eth_call for unsupported-method code %s
 
   await expect(simulateTransaction(transaction, { send: withAccountCode(send) })).resolves.toEqual({
     status: 'succeeded',
-    source: 'eth_call'
+    source: 'eth_call',
+    nativeBalanceChanges: unsupportedNativeBalanceChanges
   })
   expect(send.mock.calls[1][0]).toEqual({
     id: 1,
@@ -641,7 +836,8 @@ it('attaches an exact configured-RPC allowance read to an approval simulation', 
       spender: approvalSpender,
       currentAmount: '7',
       requestedAmount: '42'
-    }
+    },
+    nativeBalanceChanges: unsupportedNativeBalanceChanges
   })
   expect(send).toHaveBeenCalledTimes(2)
   expect(send.mock.calls[1][0]).toEqual({
@@ -676,7 +872,8 @@ it.each([
   await expect(simulateTransaction(approvalTransaction, { send: withAccountCode(send) })).resolves.toEqual({
     status: 'succeeded',
     source: 'eth_simulateV1',
-    gasUsed: '0x5208'
+    gasUsed: '0x5208',
+    nativeBalanceChanges: unsupportedNativeBalanceChanges
   })
 })
 
@@ -696,6 +893,11 @@ it('bounds a missing allowance response without changing a successful execution 
   await expect(pending).resolves.toEqual({
     status: 'succeeded',
     source: 'eth_simulateV1',
-    gasUsed: '0x5208'
+    gasUsed: '0x5208',
+    nativeBalanceChanges: {
+      status: 'unavailable',
+      source: 'debug_traceCall',
+      reason: 'Native balance-change trace exceeded the simulation time budget'
+    }
   })
 })

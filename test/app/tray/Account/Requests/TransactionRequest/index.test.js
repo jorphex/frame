@@ -8,13 +8,15 @@ import {
   getAllowancePresentation,
   getAccessListPresentation,
   getDelegationPresentation,
+  getNativeBalanceChangesPresentation,
   getSimulationEffectsPresentation,
   getSimulationPresentation
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
 import {
   SimulationAllowance,
   SimulationDelegation,
-  SimulationEffects
+  SimulationEffects,
+  SimulationNativeBalanceChanges
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData/effects'
 import { ViewData } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData'
 import {
@@ -270,6 +272,70 @@ describe('simulation review', () => {
     expect(getSimulationEffectsPresentation(simulation, '0x1')).toBeNull()
     render(<SimulationEffects account='0x1' simulation={simulation} />)
     expect(screen.queryByText('RPC-Reported Effects')).toBeNull()
+  })
+
+  it('summarizes and renders qualified native balance changes in Wei', () => {
+    const evidence = {
+      status: 'succeeded',
+      source: 'debug_traceCall',
+      truncated: true,
+      changes: [
+        { account: account.toLowerCase(), before: '10', after: '7', change: '-3' },
+        {
+          account: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          before: '0',
+          after: '3',
+          change: '3'
+        }
+      ]
+    }
+
+    expect(getNativeBalanceChangesPresentation({ nativeBalanceChanges: evidence })).toEqual({
+      className: '_txMainTagWarning',
+      label: '2 RPC-reported native balance changes (truncated)'
+    })
+    render(<SimulationNativeBalanceChanges simulation={{ nativeBalanceChanges: evidence }} />)
+
+    expect(screen.getByText('RPC-Reported Native Balance Changes')).toBeTruthy()
+    expect(screen.getByRole('note').textContent).toMatch(/configured RPC/i)
+    expect(screen.getByRole('note').textContent).toMatch(/may omit gas fees/i)
+    expect(screen.getByText('Native Balance Decrease')).toBeTruthy()
+    expect(screen.getByText('Native Balance Increase')).toBeTruthy()
+    expect(screen.getByText('-3')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toMatch(/preview truncated/i)
+  })
+
+  it('shows unavailable native balance evidence without changing execution status', () => {
+    const evidence = {
+      status: 'unavailable',
+      source: 'debug_traceCall',
+      reason: 'Configured RPC does not support native balance-change tracing'
+    }
+
+    expect(getNativeBalanceChangesPresentation({ nativeBalanceChanges: evidence })).toEqual({
+      className: '_txMainTagWarning',
+      label: 'Native balance-change preview unavailable'
+    })
+    render(
+      <SimulationNativeBalanceChanges simulation={{ status: 'succeeded', nativeBalanceChanges: evidence }} />
+    )
+
+    expect(screen.getByRole('note').textContent).toMatch(/could not derive/i)
+    expect(screen.getByRole('note').textContent).toMatch(/does not support/i)
+    expect(screen.queryByText(/Native Balance Increase/i)).toBeNull()
+  })
+
+  it('renders a successful empty native balance diff without claiming a change', () => {
+    const evidence = { status: 'succeeded', source: 'debug_traceCall', changes: [] }
+
+    expect(getNativeBalanceChangesPresentation({ nativeBalanceChanges: evidence })).toEqual({
+      className: '_txMainTagGood',
+      label: '0 RPC-reported native balance changes'
+    })
+    render(<SimulationNativeBalanceChanges simulation={{ nativeBalanceChanges: evidence }} />)
+
+    expect(screen.getByText('No native balance changes were reported.')).toBeTruthy()
+    expect(screen.queryByText(/Native Balance Increase/i)).toBeNull()
   })
 
   it.each([

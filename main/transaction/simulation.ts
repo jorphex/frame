@@ -13,7 +13,10 @@ const DEFAULT_TIMEOUT_MS = 15_000
 const MAX_ERROR_MESSAGE_LENGTH = 240
 const MAX_RETURN_DATA_BYTES = 128 * 1024
 const MAX_WALLET_CALLS = 16
+const MAX_BALANCE_CHANGE_ACCOUNTS = 128
+const MAX_TRACE_ACCOUNTS = 1024
 const MAX_UINT64 = (1n << 64n) - 1n
+const MAX_UINT256 = (1n << 256n) - 1n
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
 const EIP_7702_DELEGATION = /^0xef0100([0-9a-f]{40})$/i
 
@@ -37,6 +40,26 @@ export interface AccountDelegationCheck {
   reason?: string
 }
 
+export interface NativeBalanceChange {
+  account: string
+  before: string
+  after: string
+  change: string
+}
+
+export type NativeBalanceChanges =
+  | {
+      status: 'succeeded'
+      source: 'debug_traceCall'
+      changes: NativeBalanceChange[]
+      truncated?: boolean
+    }
+  | {
+      status: 'unavailable' | 'failed'
+      source: 'debug_traceCall'
+      reason: string
+    }
+
 export interface TransactionSimulation {
   status: SimulationStatus
   source?: SimulationSource
@@ -46,6 +69,7 @@ export interface TransactionSimulation {
   effectsTruncated?: boolean
   allowance?: TokenAllowanceSnapshot
   delegation?: AccountDelegationCheck
+  nativeBalanceChanges?: NativeBalanceChanges
 }
 
 export interface SimulationCallData {
@@ -105,6 +129,10 @@ interface BuiltSimulationCall extends Record<string, unknown> {
 
 function isRecord(value: unknown): value is RpcCandidate {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasOwn(value: object, property: PropertyKey) {
+  return Object.prototype.hasOwnProperty.call(value, property)
 }
 
 function boundedMessage(value: unknown, fallback: string) {
@@ -214,6 +242,152 @@ export function buildEthCall(transaction: SimulationCallData) {
 
   if (input !== undefined) ethCall.data = input
   return ethCall
+}
+
+function parseBalance(value: unknown) {
+  const balance = parseRpcQuantity(value)
+  return balance !== undefined && balance <= MAX_UINT256 ? balance : undefined
+}
+
+function parseTraceAccounts(value: unknown) {
+  if (!isRecord(value)) return
+
+  const entries = Object.entries(value)
+  if (entries.length > MAX_TRACE_ACCOUNTS) return
+
+  const accounts = new Map<string, RpcCandidate>()
+  for (const [address, state] of entries) {
+    if (!ADDRESS.test(address) || !isRecord(state)) return
+
+    const normalizedAddress = address.toLowerCase()
+    if (accounts.has(normalizedAddress)) return
+    accounts.set(normalizedAddress, state)
+  }
+  return accounts
+}
+
+export function parseNativeBalanceChanges(result: unknown):
+  | {
+      changes: NativeBalanceChange[]
+      truncated: boolean
+    }
+  | undefined {
+  if (!isRecord(result)) return
+  const preAccounts = parseTraceAccounts(result['pre'])
+  const postAccounts = parseTraceAccounts(result['post'])
+  if (!preAccounts || !postAccounts) return
+
+  const addresses = [...new Set([...preAccounts.keys(), ...postAccounts.keys()])].sort()
+
+  const truncated = addresses.length > MAX_BALANCE_CHANGE_ACCOUNTS
+  const changes: NativeBalanceChange[] = []
+  for (const address of addresses.slice(0, MAX_BALANCE_CHANGE_ACCOUNTS)) {
+    const pre = preAccounts.get(address)
+    const post = postAccounts.get(address)
+
+    const preHasBalance = pre !== undefined && hasOwn(pre, 'balance')
+    const postHasBalance = post !== undefined && hasOwn(post, 'balance')
+    if (!postHasBalance && post !== undefined) continue
+    if (!preHasBalance && pre !== undefined && postHasBalance) return
+
+    const before = pre === undefined ? 0n : parseBalance(pre['balance'])
+    const after = post === undefined ? 0n : parseBalance(post['balance'])
+    if (before === undefined || after === undefined) return
+    if (before === after) continue
+
+    changes.push({
+      account: address.toLowerCase(),
+      before: before.toString(10),
+      after: after.toString(10),
+      change: (after - before).toString(10)
+    })
+  }
+
+  return { changes, truncated }
+}
+
+async function readNativeBalanceChanges(
+  transaction: SimulationCallData,
+  send: ChainSend,
+  targetChain: Chain,
+  timeoutMs: number
+): Promise<NativeBalanceChanges> {
+  if (timeoutMs <= 0) {
+    return {
+      status: 'unavailable',
+      source: 'debug_traceCall',
+      reason: 'Native balance-change trace exceeded the simulation time budget'
+    }
+  }
+
+  const outcome = await requestRpc(
+    send,
+    {
+      id: 4,
+      jsonrpc: '2.0',
+      method: 'debug_traceCall',
+      params: [
+        buildEthCall(transaction),
+        'latest',
+        {
+          tracer: 'prestateTracer',
+          timeout: `${Math.ceil(timeoutMs)}ms`,
+          tracerConfig: { diffMode: true, disableCode: true, disableStorage: true }
+        }
+      ]
+    },
+    targetChain,
+    timeoutMs
+  )
+
+  if ('timedOut' in outcome) {
+    return {
+      status: 'unavailable',
+      source: 'debug_traceCall',
+      reason: 'Native balance-change trace timed out'
+    }
+  }
+  if (!isRecord(outcome.response)) {
+    return {
+      status: 'failed',
+      source: 'debug_traceCall',
+      reason: 'RPC returned an invalid native balance-change response'
+    }
+  }
+  if (outcome.response.error !== undefined) {
+    const error = normalizeRpcError(outcome.response.error)
+    if (!error) {
+      return {
+        status: 'failed',
+        source: 'debug_traceCall',
+        reason: 'RPC returned an invalid native balance-change error'
+      }
+    }
+
+    return {
+      status: isUnsupportedMethod(error) ? 'unavailable' : 'failed',
+      source: 'debug_traceCall',
+      reason: isUnsupportedMethod(error)
+        ? 'Configured RPC does not support native balance-change tracing'
+        : boundedMessage(error.message, 'Native balance-change trace failed')
+    }
+  }
+
+  const parsed = parseNativeBalanceChanges(outcome.response.result)
+  if (!parsed) {
+    return {
+      status: 'failed',
+      source: 'debug_traceCall',
+      reason: 'RPC returned an invalid native balance-change result'
+    }
+  }
+
+  return {
+    status: 'succeeded',
+    source: 'debug_traceCall',
+    changes: parsed.changes,
+    ...(parsed.truncated ? { truncated: true } : {})
+  }
 }
 
 async function readTokenAllowance(
@@ -449,16 +623,30 @@ export async function simulateTransaction(
   }
 
   const targetChain: Chain = { type: 'ethereum', id: Number(chainId) }
-  const [simulation, allowance, delegation] = await Promise.all([
-    simulateExecution(transaction, send, targetChain, timeoutMs),
+  const startedAt = Date.now()
+  const simulationPromise = simulateExecution(transaction, send, targetChain, timeoutMs)
+  const nativeBalanceChangesPromise = simulationPromise.then((simulation) => {
+    if (simulation.status !== 'succeeded') return undefined
+
+    return readNativeBalanceChanges(
+      transaction,
+      send,
+      targetChain,
+      Math.max(0, timeoutMs - (Date.now() - startedAt))
+    )
+  })
+  const [simulation, allowance, delegation, nativeBalanceChanges] = await Promise.all([
+    simulationPromise,
     readTokenAllowance(transaction, send, targetChain, timeoutMs),
-    readAccountDelegation(transaction.from, send, targetChain, timeoutMs)
+    readAccountDelegation(transaction.from, send, targetChain, timeoutMs),
+    nativeBalanceChangesPromise
   ])
 
   return {
     ...simulation,
     ...(allowance ? { allowance } : {}),
-    ...(delegation.status === 'undelegated' ? {} : { delegation })
+    ...(delegation.status === 'undelegated' ? {} : { delegation }),
+    ...(nativeBalanceChanges ? { nativeBalanceChanges } : {})
   }
 }
 

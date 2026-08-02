@@ -112,6 +112,53 @@ export const SimulationEffects = ({ account, simulation }) => {
   )
 }
 
+export const SimulationNativeBalanceChanges = ({ simulation }) => {
+  const evidence = simulation?.nativeBalanceChanges
+  if (!evidence) return null
+
+  const unavailable = evidence.status !== 'succeeded'
+  return (
+    <div className='txViewData'>
+      <div className='txViewDataHeader'>RPC-Reported Native Balance Changes</div>
+      <div className='simulationEffectsNotice' role='note'>
+        {unavailable
+          ? `Frame could not derive native balance changes. ${evidence.reason || ''}`.trim()
+          : 'Derived from a prestateTracer diff returned by your configured RPC. Amounts are Wei, may omit gas fees, and are not independently verified.'}
+      </div>
+      {!unavailable &&
+        (evidence.changes.length ? (
+          evidence.changes.map((change) => (
+            <section className='simulationEffect' key={change.account}>
+              <div className='simulationEffectTitle'>
+                {String(change.change).startsWith('-')
+                  ? 'Native Balance Decrease'
+                  : 'Native Balance Increase'}
+              </div>
+              <SimpleJSON
+                humanizeKeys
+                quoteStrings={false}
+                json={{
+                  account: change.account,
+                  beforeWei: change.before,
+                  afterWei: change.after,
+                  changeWei: change.change
+                }}
+              />
+            </section>
+          ))
+        ) : (
+          <div className='simulationEffectsEmpty'>No native balance changes were reported.</div>
+        ))}
+      {evidence.status === 'succeeded' && evidence.truncated && (
+        <div className='simulationEffectsTruncated' role='alert'>
+          Native balance-change preview truncated. Review the transaction through another trusted source
+          before signing.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export const SimulationAllowance = ({ simulation }) => {
   const allowance = simulation?.allowance
   if (!allowance) return null

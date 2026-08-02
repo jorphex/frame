@@ -2,7 +2,12 @@ import React from 'react'
 import Restore from 'react-restore'
 import svg from '../../../../../../resources/svg'
 import link from '../../../../../../resources/link'
-import { SimulationAllowance, SimulationDelegation, SimulationEffects } from './effects'
+import {
+  SimulationAllowance,
+  SimulationDelegation,
+  SimulationEffects,
+  SimulationNativeBalanceChanges
+} from './effects'
 
 const txFieldPriority = [
   'chainId',
@@ -178,6 +183,7 @@ export class ViewData extends React.Component {
       <div className='accountViewScroll cardShow'>
         <SimulationDelegation simulation={req.simulation} />
         <SimulationAllowance simulation={req.simulation} />
+        <SimulationNativeBalanceChanges simulation={req.simulation} />
         <SimulationEffects account={req.account} simulation={req.simulation} />
         {/* <div className='txViewData'>
           <div className='txViewDataHeader'>{'Decoded Data'}</div>
