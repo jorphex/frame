@@ -14,10 +14,13 @@ const monitored = (data, overrides = {}) => ({
   ...overrides
 })
 
-it('calculates the inclusive 10% policy exactly', () => {
+it('calculates and accepts the exact rounded-up 10% minimum', () => {
   expect(increaseByTenPercent(101n)).toBe(112n)
   expect(minimumReplacementFee(0n)).toBe(1n)
-  expect(requiresReplacementFeeBump(100n, 110n)).toBe(true)
+  expect(requiresReplacementFeeBump(0n, 0n)).toBe(true)
+  expect(requiresReplacementFeeBump(0n, 1n)).toBe(false)
+  expect(requiresReplacementFeeBump(100n, 109n)).toBe(true)
+  expect(requiresReplacementFeeBump(100n, 110n)).toBe(false)
   expect(requiresReplacementFeeBump(100n, 111n)).toBe(false)
 })
 
@@ -64,9 +67,22 @@ it('uses the exact maximum legacy fee and 10% threshold', () => {
   expect(getReplacementStatus(request, requests)).toEqual({ replacement: true, possible: true })
 })
 
-it('requires both EIP-1559 fields to clear the threshold', () => {
+it('accepts the exact generated legacy replacement minimum', () => {
+  const request = { data: { nonce, gasPrice: '0x6e' } }
+  const requests = [monitored({ gasPrice: '0x64' })]
+
+  expect(getReplacementStatus(request, requests)).toEqual({ replacement: true, possible: true })
+  request.data.gasPrice = '0x6d'
+  expect(getReplacementStatus(request, requests)).toEqual({
+    replacement: true,
+    possible: false,
+    reason: 'gas-price-too-low'
+  })
+})
+
+it('requires both EIP-1559 fields to reach the exact generated minimum', () => {
   const request = {
-    data: { nonce, maxPriorityFeePerGas: '0xc', maxFeePerGas: '0x6e' }
+    data: { nonce, maxPriorityFeePerGas: '0xb', maxFeePerGas: '0x6d' }
   }
   const requests = [monitored({ maxPriorityFeePerGas: '0xa', maxFeePerGas: '0x64' })]
 
@@ -76,8 +92,15 @@ it('requires both EIP-1559 fields to clear the threshold', () => {
     reason: 'gas-fees-too-low'
   })
 
-  request.data.maxFeePerGas = '0x6f'
+  request.data.maxFeePerGas = '0x6e'
   expect(getReplacementStatus(request, requests)).toEqual({ replacement: true, possible: true })
+
+  request.data.maxPriorityFeePerGas = '0xa'
+  expect(getReplacementStatus(request, requests)).toEqual({
+    replacement: true,
+    possible: false,
+    reason: 'gas-fees-too-low'
+  })
 })
 
 it('uses independent EIP-1559 maxima consistently with the main process', () => {

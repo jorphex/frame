@@ -27,7 +27,7 @@ export function minimumReplacementFee(value: bigint) {
 }
 
 export const requiresReplacementFeeBump = (current: bigint, requested: bigint) =>
-  current * 11n >= requested * 10n
+  requested < minimumReplacementFee(current)
 
 export function maximumRpcQuantity<T>(values: readonly T[], getValue: (value: T) => unknown) {
   return values.reduce<bigint | undefined>((maximum, value) => {

@@ -61,6 +61,15 @@ describe('#checkExistingNonceGas', () => {
     expect(tx).toEqual({ from, nonce, gasPrice: '0x6f' })
   })
 
+  it('preserves the exact generated legacy replacement minimum', () => {
+    setRequests(monitoredRequest({ gasPrice: '0x64' }))
+    const tx = { from, nonce, gasPrice: '0x6e' }
+
+    checkExistingNonceGas(tx)
+
+    expect(tx).toEqual({ from, nonce, gasPrice: '0x6e' })
+  })
+
   it('bumps large legacy quantities exactly', () => {
     const existing = 9007199254740993n
     setRequests(monitoredRequest({ gasPrice: toRpcQuantity(existing) }))
@@ -106,6 +115,25 @@ describe('#checkExistingNonceGas', () => {
       maxFeePerGas: toRpcQuantity(bumpedPriority + bumpedBase),
       gasFeesSource: 'Frame',
       feesUpdated: true
+    })
+  })
+
+  it('preserves exact generated EIP-1559 replacement minimums', () => {
+    setRequests(monitoredRequest({ maxPriorityFeePerGas: '0xa', maxFeePerGas: '0x64' }))
+    const tx = {
+      from,
+      nonce,
+      maxPriorityFeePerGas: '0xb',
+      maxFeePerGas: '0x6e'
+    }
+
+    checkExistingNonceGas(tx)
+
+    expect(tx).toEqual({
+      from,
+      nonce,
+      maxPriorityFeePerGas: '0xb',
+      maxFeePerGas: '0x6e'
     })
   })
 

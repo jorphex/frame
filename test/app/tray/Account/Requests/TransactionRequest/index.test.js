@@ -506,8 +506,8 @@ describe('simulation review', () => {
 })
 
 describe('replacement status', () => {
-  it('maps the shared fee assessment to the existing transaction-card notice', () => {
-    const req = { data: { nonce: '0x7', gasPrice: '0x6e' } }
+  it('maps a below-minimum fee assessment to the existing transaction-card notice', () => {
+    const req = { data: { nonce: '0x7', gasPrice: '0x6d' } }
     const requests = {
       existing: { mode: 'monitor', status: 'sent', data: { nonce: '0x7', gasPrice: '0x64' } }
     }
@@ -517,6 +517,19 @@ describe('replacement status', () => {
       possible: false,
       reason: 'gas-price-too-low',
       notice: 'gas price too low'
+    })
+  })
+
+  it('accepts the exact generated replacement minimum in transaction review', () => {
+    const req = { data: { nonce: '0x7', gasPrice: '0x6e' } }
+    const requests = {
+      existing: { mode: 'monitor', status: 'sent', data: { nonce: '0x7', gasPrice: '0x64' } }
+    }
+
+    expect(new TxMain({}).getReplacementStatus(req, requests)).toEqual({
+      replacement: true,
+      possible: true,
+      notice: ''
     })
   })
 })
