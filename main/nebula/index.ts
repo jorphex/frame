@@ -51,7 +51,8 @@ export default function (provider = mainnetProvider) {
       const record = await ens.resolve(ensName)
       const ethAddress = record.addresses.eth
       const address = ethAddress && (await ens.verifyAddress(ensName, ethAddress)) ? ethAddress : ''
-      const manifest = record.text.manifest ? await resolveManifest(ipfs, record.text.manifest) : {}
+      const manifestPath = record.text['manifest']
+      const manifest = manifestPath ? await resolveManifest(ipfs, manifestPath) : {}
 
       return { name: ensName, address, record, manifest }
     }

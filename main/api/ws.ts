@@ -22,7 +22,7 @@ import originSessions from './originSessions'
 import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
 
 const logTraffic = (origin: string) =>
-  process.env.LOG_TRAFFIC === 'true' || process.env.LOG_TRAFFIC === origin
+  process.env['LOG_TRAFFIC'] === 'true' || process.env['LOG_TRAFFIC'] === origin
 
 const subs: Record<string, Subscription> = {}
 

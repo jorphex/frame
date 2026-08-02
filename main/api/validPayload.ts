@@ -18,16 +18,23 @@ export interface ValidPayload<T extends JSONRPCRequestPayload> {
 
 export type PayloadResult<T extends JSONRPCRequestPayload> = ValidPayload<T> | InvalidPayload
 
+interface JsonRpcCandidate extends Record<string, unknown> {
+  id?: unknown
+  jsonrpc?: unknown
+  method?: unknown
+  params?: unknown
+}
+
 const invalidRequest = (id: string | number | null, message = 'Invalid Request'): InvalidPayload => ({
   success: false,
   id,
   error: { code: -32600, message }
 })
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
+const isObject = (value: unknown): value is JsonRpcCandidate =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const getRequestId = (payload: Record<string, unknown>) => {
+const getRequestId = (payload: JsonRpcCandidate) => {
   const id = payload.id
   return typeof id === 'string' || (typeof id === 'number' && Number.isFinite(id)) ? id : null
 }

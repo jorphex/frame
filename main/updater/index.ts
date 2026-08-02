@@ -14,7 +14,7 @@ export interface VersionUpdate {
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
 
-const UPDATE_INTERVAL = parseInt(process.env.UPDATE_INTERVAL || '') || 60 * 60_000
+const UPDATE_INTERVAL = parseInt(process.env['UPDATE_INTERVAL'] || '') || 60 * 60_000
 const useAutoUpdater = isMac || isWindows
 
 class Updater {

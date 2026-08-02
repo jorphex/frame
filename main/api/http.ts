@@ -11,7 +11,7 @@ import { parseChainId } from '../provider/chainRequests'
 import originSessions from './originSessions'
 import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
 
-const logTraffic = process.env.LOG_TRAFFIC
+const logTraffic = process.env['LOG_TRAFFIC']
 
 interface PendingRequest {
   send: () => void

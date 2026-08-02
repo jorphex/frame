@@ -32,7 +32,7 @@ export const Status = {
   ENTERING_PASSPHRASE: 'waiting for input on device'
 }
 
-type TrezorPairing = {
+export type TrezorPairing = {
   availableMethods: Array<string | number>
   selectedMethod: string | number
   nfcData?: string

@@ -3,7 +3,7 @@ import log from 'electron-log'
 import type { DeviceUniquePath, Device as TrezorDevice } from '@trezor/connect'
 
 import { SignerAdapter } from '../adapters'
-import Trezor, { Status } from './Trezor'
+import Trezor, { Status, TrezorPairing } from './Trezor'
 import store from '../../store'
 import { requireStoreAction } from '../../store/action'
 import TrezorBridge from './bridge'
@@ -15,6 +15,10 @@ interface KnownSigners {
       [event: string]: (...args: any) => void
     }
   }
+}
+
+interface TrezorPairingRequest extends TrezorPairing {
+  device: TrezorDevice
 }
 
 export default class TrezorSignerAdapter extends SignerAdapter {
@@ -154,7 +158,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
       })
     })
 
-    TrezorBridge.on('trezor:needPairing', (payload: TrezorDevice & Record<string, any>) => {
+    TrezorBridge.on('trezor:needPairing', (payload: TrezorPairingRequest) => {
       this.withSigner(payload.device, (signer) => {
         log.verbose(`Trezor ${signer.id} needs pairing`, {
           methods: payload.availableMethods,
@@ -172,7 +176,7 @@ export default class TrezorSignerAdapter extends SignerAdapter {
         signer.pairing = {
           availableMethods: payload.availableMethods,
           selectedMethod: payload.selectedMethod,
-          nfcData: payload.nfcData
+          ...(payload.nfcData !== undefined ? { nfcData: payload.nfcData } : {})
         }
         signer.status = Status.NEEDS_PAIRING
         this.emit('update', signer)

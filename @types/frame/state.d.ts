@@ -2,6 +2,7 @@ type HexAmount = string
 
 type InventoryAsset = {
   name: string
+  tokenId?: string
   [field: string]: any
 }
 

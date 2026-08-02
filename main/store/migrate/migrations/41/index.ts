@@ -153,7 +153,7 @@ function removeBaseGoerliConnection(connection: v38Connection) {
 
   return {
     ...connection,
-    on: isPylon ? false : connection.on,
+    on: isPylon ? false : connection['on'],
     current: isPylon ? 'custom' : connection.current,
     custom: isPylon ? '' : connection.custom
   }

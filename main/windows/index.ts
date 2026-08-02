@@ -20,13 +20,19 @@ import { SystemTray, SystemTrayEventHandlers } from './systemTray'
 import { registerShortcut } from '../keyboardShortcuts'
 import { Shortcut } from '../store/state/types/shortcuts'
 
-type Windows = { [key: string]: BrowserWindow }
+type Windows = {
+  tray?: BrowserWindow
+  dash?: BrowserWindow
+  onboard?: BrowserWindow
+  notify?: BrowserWindow
+  [key: string]: BrowserWindow | undefined
+}
 
 const events = new EventEmitter()
 const frameManager = new FrameManager()
 const isDev = process.env.NODE_ENV === 'development'
-const devToolsEnabled = isDev || process.env.ENABLE_DEV_TOOLS === 'true'
-const fullheight = !!process.env.FULL_HEIGHT
+const devToolsEnabled = isDev || process.env['ENABLE_DEV_TOOLS'] === 'true'
+const fullheight = !!process.env['FULL_HEIGHT']
 const openedAtLogin =
   electronApp?.getLoginItemSettings() && electronApp.getLoginItemSettings().wasOpenedAtLogin
 const windows: Windows = {}

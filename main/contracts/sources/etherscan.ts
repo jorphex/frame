@@ -93,7 +93,7 @@ export async function fetchEtherscanContract(
       return {
         abi: source.ABI,
         name: source.ContractName,
-        source: endpoint.match(sourceCapture)?.groups?.source || ''
+        source: endpoint.match(sourceCapture)?.groups?.['source'] || ''
       }
     }
   } catch (e) {

@@ -206,7 +206,7 @@ export function parseFrameExtension(req: IncomingMessage): FrameExtension | unde
   const origin = req.headers.origin || ''
 
   const query = queryString.parse((req.url || '').replace('/', ''))
-  const hasExtensionIdentity = query.identity === 'frame-extension'
+  const hasExtensionIdentity = query['identity'] === 'frame-extension'
 
   if (origin === 'chrome-extension://ldcoohedfbjoobcadoglnnmmfbdlmmhf') {
     // Match production chrome

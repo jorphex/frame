@@ -80,8 +80,10 @@ export default function (eth: EthereumProvider) {
     })
 
     const result = erc20Interface.decodeFunctionResult('balanceOf', response)
+    const balance = result[0]
+    if (balance === undefined) throw new Error('balanceOf returned no balance')
 
-    return toBeHex(result.balance)
+    return toBeHex(balance)
   }
 
   async function getTokenBalancesFromContracts(owner: string, tokens: TokenDefinition[]) {

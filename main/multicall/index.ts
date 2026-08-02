@@ -77,7 +77,7 @@ function getFunctionNameFromSignature(signature: string) {
     throw new Error(`could not parse function name from signature: ${signature}`)
   }
 
-  const name = m.groups?.signature
+  const name = m.groups?.['signature']
   if (!name) throw new Error(`could not parse function name from signature: ${signature}`)
   return name
 }
@@ -93,9 +93,13 @@ function getInterface(functionSignature: string) {
 async function aggregate<R, T>(calls: Call<R, T>[], config: MulticallConfig): Promise<CallResult<T>[]> {
   const aggData = buildCallData(calls)
   const response = await makeCall('aggregate', [aggData], config)
+  const returndata = response[1]
+  if (!Array.isArray(returndata)) throw new Error('multicall aggregate returned malformed data')
 
   return calls.map(({ call, returns, target }, i) => {
-    const resultData = getResultData(response.returndata[i], call, target)
+    const result = returndata[i]
+    if (result === undefined) throw new Error(`multicall aggregate omitted result ${i}`)
+    const resultData = getResultData(result, call, target)
 
     return { success: true, returnValues: returns.map((handler, j) => handler(resultData[j])) }
   })
@@ -104,15 +108,20 @@ async function aggregate<R, T>(calls: Call<R, T>[], config: MulticallConfig): Pr
 async function tryAggregate<R, T>(calls: Call<R, T>[], config: MulticallConfig) {
   const aggData = buildCallData(calls)
   const response = await makeCall('tryAggregate', [false, aggData], config)
+  const results = response[0]
+  if (!Array.isArray(results)) throw new Error('multicall tryAggregate returned malformed data')
 
   return calls.map(({ call, returns, target }, i) => {
-    const results = response.result[i]
+    const result = results[i]
+    if (!Array.isArray(result)) throw new Error(`multicall tryAggregate omitted result ${i}`)
+    const [success, returndata] = result
 
-    if (!results.success) {
+    if (!success) {
       return { success: false, returnValues: [] }
     }
 
-    const resultData = getResultData(results.returndata, call, target)
+    if (returndata === undefined) throw new Error(`multicall tryAggregate result ${i} omitted returndata`)
+    const resultData = getResultData(returndata, call, target)
 
     return { success: true, returnValues: returns.map((handler, j) => handler(resultData[j])) }
   })

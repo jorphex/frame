@@ -9,7 +9,7 @@ const DEFAULT_MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
 type ClientFactory = () => Promise<KuboClient>
 
 export function getKuboOptions(env: NodeJS.ProcessEnv = process.env) {
-  const url = new URL(env.FRAME_IPFS_API_URL || DEFAULT_IPFS_API_URL)
+  const url = new URL(env['FRAME_IPFS_API_URL'] || DEFAULT_IPFS_API_URL)
 
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new Error(`Unsupported IPFS API protocol: ${url.protocol}`)
@@ -20,8 +20,9 @@ export function getKuboOptions(env: NodeJS.ProcessEnv = process.env) {
   }
 
   const headers: Record<string, string> = {}
-  if (env.NEBULA_AUTH_TOKEN) {
-    headers.authorization = `Basic ${Buffer.from(`${env.NEBULA_AUTH_TOKEN}:`).toString('base64')}`
+  const authToken = env['NEBULA_AUTH_TOKEN']
+  if (authToken) {
+    headers['authorization'] = `Basic ${Buffer.from(`${authToken}:`).toString('base64')}`
   }
 
   return { url: url.toString(), headers }
