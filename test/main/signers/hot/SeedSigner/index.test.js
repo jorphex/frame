@@ -2,11 +2,25 @@ import path from 'path'
 import fs from 'fs'
 import crypto from 'crypto'
 import { remove } from 'fs-extra'
-import { generateMnemonic, mnemonicToSeedSync } from 'bip39'
+import { mnemonicToSeedSync } from 'bip39'
+import { SignTypedDataVersion } from '@metamask/eth-sig-util'
 import log from 'electron-log'
 
 const PASSWORD = 'fr@///3_password'
+const PHRASE = 'test test test test test test test test test test test junk'
 const SIGNER_PATH = path.resolve(__dirname, '../.userData/signers')
+const ADDRESS_HASH = 'a7e66a7d4449b33d6cee47576c58733426bc35f39a0884865e0c8f873a5281cb'
+const MESSAGE_SIGNATURES = {
+  0: '0xf755d9a72d5b7386765e7f0e833af68795b739a267122dae933f41b781b5aed0626ce3263308ebd4c37bed84319b66da2794368771046825bd89b98ba68c4e871b',
+  1: '0x4bbcd833f8fc48eee8a8ead81e5d54f9347a51da179067c80d2932e7ea901e612409666c6816eb693d5b23da422433ef4367b653a8351dbcd5e9b12b58aa61ab1b',
+  99: '0x820428668a5079fe8d97f0e27488ddd083e8b6feab532868b8662eeaed3aef8e4461691a8c19c082c2e80b2d69e9a7533f04c39ad55e5109d96bebc477382b5d1b'
+}
+const TYPED_SIGNATURE =
+  '0xfef8e26e62dc18aa6255ef0fbd9ff1122978bae3660954ef2acb14343c5507e12d570c5fdc137b88a760932a94b3e3bb77c7bc262abd43b8cc61b8ba010507a81b'
+const TRANSACTION_SIGNATURE =
+  '0xf866068609184e72a0008303000094fa3caabc8eefec2b5e2895e5afbf79379e7268a7' +
+  '808025a0d89321513e12a3a8918ee6bf1946d6e868acb4579a3251fa3e92fde1a1e91e23' +
+  'a01aa93afdcbed8f708122ccae8e00c51adbc5ba74cc625a6a4409239952d21c0e'
 
 const legacyEncrypt = (plaintext, password) => {
   const salt = crypto.randomBytes(16)
@@ -76,13 +90,21 @@ describe('Seed signer', () => {
 
   test('Create from phrase', (done) => {
     try {
-      const mnemonic = generateMnemonic()
+      const mnemonic = PHRASE
       seed = mnemonicToSeedSync(mnemonic).toString('hex')
       hot.createFromPhrase(signers, mnemonic, PASSWORD, (err, result) => {
         signer = result
         expect(err).toBe(null)
         expect(signer.status).toBe('ok')
         expect(signer.addresses.length).toBe(100)
+        expect(crypto.createHash('sha256').update(signer.addresses.join('\n')).digest('hex')).toBe(
+          ADDRESS_HASH
+        )
+        expect([signer.addresses[0], signer.addresses[1], signer.addresses[99]]).toEqual([
+          '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+          '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+          '0x98D08079928FcCB30598c6C6382ABfd7dbFaA1cD'
+        ])
         expect(store(`main.signers.${signer.id}.id`)).toBe(signer.id)
         done()
       })
@@ -175,18 +197,34 @@ describe('Seed signer', () => {
     }
   }, 500)
 
-  test('Sign message', (done) => {
-    try {
-      const message = '0x' + Buffer.from('test').toString('hex')
+  test('Sign message with frozen private derivation indices', async () => {
+    const message = '0x' + Buffer.from('test').toString('hex')
 
-      signer.signMessage(0, message, (err, result) => {
-        expect(err).toBe(null)
-        expect(result.length).toBe(132)
-        done()
-      })
-    } catch (e) {
-      done(e)
+    for (const index of [0, 1, 99]) {
+      const signature = await waitForCallback((cb) => signer.signMessage(index, message, cb))
+      expect(signature).toBe(MESSAGE_SIGNATURES[index])
     }
+  }, 500)
+
+  test('Sign typed data', (done) => {
+    const typedMessage = {
+      version: SignTypedDataVersion.V4,
+      data: {
+        types: {
+          EIP712Domain: [],
+          Mail: [{ name: 'contents', type: 'string' }]
+        },
+        primaryType: 'Mail',
+        domain: {},
+        message: { contents: 'hello' }
+      }
+    }
+
+    signer.signTypedData(0, typedMessage, (err, result) => {
+      expect(err).toBe(null)
+      expect(result).toBe(TYPED_SIGNATURE)
+      done()
+    })
   }, 500)
 
   test('Sign transaction', (done) => {
@@ -202,8 +240,7 @@ describe('Seed signer', () => {
     try {
       signer.signTransaction(0, rawTx, (err, result) => {
         expect(err).toBe(null)
-        expect(result.length).not.toBe(0)
-        expect(result.slice(0, 2)).toBe('0x')
+        expect(result).toBe(TRANSACTION_SIGNATURE)
         done()
       })
     } catch (e) {

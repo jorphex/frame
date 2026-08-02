@@ -1,4 +1,30 @@
-import { Derivation, getDerivationPath } from '../../../../main/signers/Signer/derive'
+import crypto from 'crypto'
+
+import { Derivation, deriveHDAccounts, getDerivationPath } from '../../../../main/signers/Signer/derive'
+
+const PUBLIC_KEY = '025a12d6cbcea3e8c6e6a5e2292db88d1b26c4b660f7dfcd052185711b5d0a28f0'
+const CHAIN_CODE = '34e048e8ceb78ae0edebd325268e82f9ddbaf1303072ecd0a35beb54ac03d439'
+const ADDRESS_HASH = 'eaebca3f7f72518cb25c480408ff28b2393518804e4211a0737a976c9bd82df4'
+
+describe('#deriveHDAccounts', () => {
+  it('preserves the complete hardware public-key derivation set', (done) => {
+    deriveHDAccounts(PUBLIC_KEY, CHAIN_CODE, (error, addresses) => {
+      try {
+        expect(error).toBe(null)
+        expect(addresses).toHaveLength(100)
+        expect(crypto.createHash('sha256').update(addresses.join('\n')).digest('hex')).toBe(ADDRESS_HASH)
+        expect([addresses[0], addresses[1], addresses[99]]).toEqual([
+          '0x255482b10cea431d6aF9ea4fcD9E4de262E8c341',
+          '0xf39f0372c01aD568076B748B74B96ef4225BDCa5',
+          '0x25667784683b969153bcc39B3a8eCE83098cFA67'
+        ])
+        done()
+      } catch (assertionError) {
+        done(assertionError)
+      }
+    })
+  })
+})
 
 describe('#getDerivationPath', () => {
   it('provides a legacy derivation path with no index', () => {

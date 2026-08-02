@@ -81,6 +81,7 @@
     "@ledgerhq/hw-transport-node-hid-noevents": "6.30.5",
     "@ledgerhq/hw-transport-node-hid-singleton": "6.31.5",
     "@metamask/eth-sig-util": "5.0.2",
+    "@scure/bip32": "1.7.0",
     "@trezor/connect": "9.7.3",
     "auto-launch": "5.0.5",
     "bip39": "3.1.0",
@@ -98,7 +99,6 @@
     "fs-extra": "11.1.0",
     "getos": "3.2.1",
     "gridplus-sdk": "4.0.0",
-    "hdkey": "2.1.0",
     "hotkeys-js": "3.10.1",
     "ipfs-unixfs-importer": "17.0.1",
     "isutf8": "4.0.0",
@@ -151,7 +151,6 @@
     "@testing-library/react": "14.0.0",
     "@testing-library/user-event": "14.4.3",
     "@types/deep-equal": "1.0.1",
-    "@types/hdkey": "2.0.1",
     "@types/jest": "29.4.0",
     "@types/node": "24.13.3",
     "@types/node-fetch": "2.6.2",
@@ -336,8 +335,7 @@
       "parcel>@parcel/package-manager>@swc/core": false,
       "@babel/node>core-js#3.40.0": true,
       "@parcel/core>@parcel/cache>lmdb#2.8.5": true,
-      "hardhat>keccak#3.0.4": true,
-      "hdkey>secp256k1#4.0.4": true
+      "hardhat>keccak#3.0.4": true
     }
   }
 }

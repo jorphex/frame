@@ -1,7 +1,7 @@
 const path = require('path')
 const HotSigner = require('../HotSigner')
 const bip39 = require('bip39')
-const hdKey = require('hdkey')
+const { HDKey } = require('@scure/bip32')
 const { computeAddress } = require('ethers').utils
 
 const WORKER_PATH = path.resolve(__dirname, 'worker.js')
@@ -21,14 +21,16 @@ class SeedSigner extends HotSigner {
     this._callWorker({ method: 'encryptSeed', params: { seed, password } }, (err, encryptedSeed) => {
       if (err) return cb(err)
 
-      // Derive addresses
-      const wallet = hdKey.fromMasterSeed(Buffer.from(seed, 'hex'))
-
-      const addresses = []
-      for (let i = 0; i < 100; i++) {
-        const publicKey = wallet.derive("m/44'/60'/0'/0/" + i).publicKey
-        const address = computeAddress(publicKey)
-        addresses.push(address)
+      let addresses
+      try {
+        const wallet = HDKey.fromMasterSeed(Buffer.from(seed, 'hex'))
+        addresses = Array.from({ length: 100 }, (_, index) => {
+          const publicKey = wallet.derive(`m/44'/60'/0'/0/${index}`).publicKey
+          if (!publicKey) throw new Error(`Unable to derive public key at index ${index}`)
+          return computeAddress(publicKey)
+        })
+      } catch (error) {
+        return cb(error)
       }
 
       // Update signer

@@ -1,4 +1,4 @@
-const hdKey = require('hdkey')
+const { HDKey } = require('@scure/bip32')
 const { computeAddress } = require('ethers').utils
 const HotSignerWorker = require('../HotSigner/worker')
 const { decryptSecret } = require('../crypto')
@@ -16,11 +16,13 @@ class SeedSignerWorker extends HotSignerWorker {
       if (!/^[0-9a-f]{128}$/i.test(plaintext)) throw new Error('Invalid seed')
 
       if (!Array.isArray(addresses) || addresses.length !== 100) throw new Error('Invalid seed addresses')
-      const wallet = hdKey.fromMasterSeed(Buffer.from(plaintext, 'hex'))
+      const wallet = HDKey.fromMasterSeed(Buffer.from(plaintext, 'hex'))
       const addressesMatch = addresses.every((address, index) => {
         const publicKey = wallet.derive(`m/44'/60'/0'/0/${index}`).publicKey
         return (
-          typeof address === 'string' && computeAddress(publicKey).toLowerCase() === address.toLowerCase()
+          publicKey &&
+          typeof address === 'string' &&
+          computeAddress(publicKey).toLowerCase() === address.toLowerCase()
         )
       })
       if (!addressesMatch) throw new Error('Seed does not match addresses')
@@ -76,9 +78,10 @@ class SeedSignerWorker extends HotSignerWorker {
   }
 
   _derivePrivateKey(index) {
-    let key = hdKey.fromMasterSeed(Buffer.from(this.seed, 'hex'))
+    let key = HDKey.fromMasterSeed(Buffer.from(this.seed, 'hex'))
     key = key.derive("m/44'/60'/0'/0/" + index)
-    return key.privateKey
+    if (!key.privateKey) throw new Error(`Unable to derive private key at index ${index}`)
+    return Buffer.from(key.privateKey)
   }
 }
 
