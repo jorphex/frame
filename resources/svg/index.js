@@ -1,4 +1,38 @@
-import Octicon, { getIconByName } from '@githubprimer/octicons-react'
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronUpIcon,
+  CircleSlashIcon,
+  DotFillIcon,
+  GearIcon,
+  KebabHorizontalIcon,
+  PulseIcon,
+  ServerIcon,
+  ShieldIcon,
+  SyncIcon
+} from '@primer/octicons-react'
+
+const octicons = {
+  check: CheckIcon,
+  'chevron-down': ChevronDownIcon,
+  'chevron-left': ChevronLeftIcon,
+  'chevron-up': ChevronUpIcon,
+  'circle-slash': CircleSlashIcon,
+  'kebab-horizontal': KebabHorizontalIcon,
+  'primitive-dot': DotFillIcon,
+  pulse: PulseIcon,
+  server: ServerIcon,
+  settings: GearIcon,
+  shield: ShieldIcon,
+  sync: SyncIcon
+}
+
+const renderOcticon = (name, settings) => {
+  const Icon = octicons[name]
+  if (!Icon) throw new Error(`Unknown Octicon: ${name}`)
+  return <Icon size={settings.height} />
+}
 
 export default {
   logo: (size) => {
@@ -1102,5 +1136,5 @@ export default {
       </div>
     )
   },
-  octicon: (name, settings) => <Octicon icon={getIconByName(name)} height={settings.height} />
+  octicon: renderOcticon
 }
