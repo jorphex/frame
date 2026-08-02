@@ -9,8 +9,23 @@ export enum Type {
   Lattice = 'lattice'
 }
 
+export const WatchOnlyType = 'address' as const
+export const WATCH_ONLY_SIGNING_ERROR = 'Watch-only accounts cannot sign'
+export type AccountSignerType = Type | typeof WatchOnlyType
+
 export function getSignerType(typeValue: string) {
   return Object.values(Type).find((type) => type === typeValue)
+}
+
+export function getAccountSignerType(typeValue: unknown): AccountSignerType {
+  if (typeof typeValue !== 'string') return WatchOnlyType
+
+  const normalized = typeValue.toLowerCase()
+  return getSignerType(normalized) || WatchOnlyType
+}
+
+export function isWatchOnlyAccountType(typeValue: unknown) {
+  return getAccountSignerType(typeValue) === WatchOnlyType
 }
 
 export function getSignerDisplayType(typeOrSigner: string | Signer = '') {

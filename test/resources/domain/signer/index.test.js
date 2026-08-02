@@ -1,4 +1,29 @@
-import { isHardwareSigner } from '../../../../resources/domain/signer'
+import {
+  getAccountSignerType,
+  isHardwareSigner,
+  isWatchOnlyAccountType
+} from '../../../../resources/domain/signer'
+
+describe('watch-only account types', () => {
+  it.each([
+    ['address', 'address'],
+    ['Address', 'address'],
+    ['ledger', 'ledger'],
+    ['TREZOR', 'trezor']
+  ])('normalizes %s to %s', (input, expected) => {
+    expect(getAccountSignerType(input)).toBe(expected)
+  })
+
+  it.each([undefined, null, '', 'future-signer'])('fails closed for %p', (input) => {
+    expect(getAccountSignerType(input)).toBe('address')
+    expect(isWatchOnlyAccountType(input)).toBe(true)
+  })
+
+  it('does not classify real signer types as watch-only', () => {
+    expect(isWatchOnlyAccountType('seed')).toBe(false)
+    expect(isWatchOnlyAccountType('ledger')).toBe(false)
+  })
+})
 
 describe('#isHardwareSigner', () => {
   const hardwareSigners = ['lattice', 'trezor', 'ledger']

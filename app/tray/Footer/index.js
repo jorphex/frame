@@ -2,7 +2,7 @@ import React from 'react'
 import Restore from 'react-restore'
 
 import link from '../../../resources/link'
-import { isHardwareSigner } from '../../../resources/domain/signer'
+import { isHardwareSigner, isWatchOnlyAccountType } from '../../../resources/domain/signer'
 import { isSignatureRequest } from '../../../resources/domain/request'
 
 import RequestCommand from './RequestCommand'
@@ -15,8 +15,9 @@ const measure = (ref) => {
 
 let lastHeight
 
-export const canApproveWalletCalls = (req, actionRequestId) =>
+export const canApproveWalletCalls = (req, actionRequestId, accountSignerType) =>
   req?.type === 'walletCalls' &&
+  !isWatchOnlyAccountType(accountSignerType) &&
   req.handlerId !== actionRequestId &&
   req.status === undefined &&
   !req.locked &&
@@ -73,7 +74,12 @@ class Footer extends React.Component {
           )
         } else if (req.type === 'walletCalls' && crumb.data.step === 'confirm') {
           const actionPending = this.state.walletCallsActionId === req.handlerId
-          const canApprove = canApproveWalletCalls(req, this.state.walletCallsActionId)
+          const watchOnly = isWatchOnlyAccountType(account.lastSignerType)
+          const canApprove = canApproveWalletCalls(
+            req,
+            this.state.walletCallsActionId,
+            account.lastSignerType
+          )
           return (
             <div className='requestApprove'>
               <div
@@ -101,7 +107,7 @@ class Footer extends React.Component {
                 }}
               >
                 <div className='requestSignButton _txButton'>
-                  <span>Submit Batch</span>
+                  <span>{watchOnly ? 'Watch-only' : 'Submit Batch'}</span>
                 </div>
               </div>
             </div>

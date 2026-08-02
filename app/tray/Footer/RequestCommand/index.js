@@ -12,6 +12,7 @@ import link from '../../../../resources/link'
 
 import { usesBaseFee } from '../../../../resources/domain/transaction'
 import { isCancelableRequest, isSignatureRequest } from '../../../../resources/domain/request'
+import { WATCH_ONLY_SIGNING_ERROR } from '../../../../resources/domain/signer'
 
 const FEE_WARNING_THRESHOLD_USD = 50
 
@@ -21,6 +22,10 @@ export function canApproveTransaction(allowInput, simulation) {
 
 export function getRequiredRequestApproval(req) {
   return !req?.status && (req?.approvals || []).find((approval) => !approval.approved)
+}
+
+export function isNoSignerError(error) {
+  return error === 'No signer' || error === WATCH_ONLY_SIGNING_ERROR
 }
 
 class RequestCommand extends React.Component {
@@ -255,7 +260,7 @@ class RequestCommand extends React.Component {
             onClick={() => {
               if (allowApproval) {
                 link.rpc('signerCompatibility', req.handlerId, (e, compatibility) => {
-                  if (e === 'No signer') {
+                  if (isNoSignerError(e)) {
                     this.store.notify('noSignerWarning', { req })
                   } else if (e === 'Signer unavailable') {
                     this.setState({ signerLocked: true })
@@ -434,7 +439,7 @@ class RequestCommand extends React.Component {
               onClick={() => {
                 if (this.state.allowInput) {
                   link.rpc('signerCompatibility', req.handlerId, (e) => {
-                    if (e === 'No signer') {
+                    if (isNoSignerError(e)) {
                       this.store.notify('noSignerWarning', { req })
                     } else if (e === 'Signer unavailable') {
                       this.setState({ signerLocked: true })

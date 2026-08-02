@@ -3,14 +3,14 @@ import Restore from 'react-restore'
 
 import link from '../../../../../resources/link'
 import svg from '../../../../../resources/svg'
-import { findUnavailableSigners, isHardwareSigner } from '../../../../../resources/domain/signer'
+import {
+  findUnavailableSigners,
+  isHardwareSigner,
+  isWatchOnlyAccountType
+} from '../../../../../resources/domain/signer'
 import { accountPanelCrumb, signerPanelCrumb } from '../../../../../resources/domain/nav'
 
 import { Cluster, ClusterRow, ClusterColumn, ClusterValue } from '../../../../../resources/Components/Cluster'
-
-const isWatchOnly = (account = {}) => {
-  return ['address'].includes(account.lastSignerType.toLowerCase())
-}
 
 class Signer extends React.Component {
   constructor(...args) {
@@ -137,7 +137,7 @@ class Signer extends React.Component {
     }
 
     const hardwareSigner = isHardwareSigner(activeAccount.lastSignerType)
-    const watchOnly = isWatchOnly(activeAccount)
+    const watchOnly = isWatchOnlyAccountType(activeAccount.lastSignerType)
 
     return (
       <div className='balancesBlock' ref={this.moduleRef}>

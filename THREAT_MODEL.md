@@ -179,6 +179,8 @@ boundaries. See [`RELEASE.md`](RELEASE.md).
 - Keep renderer privileges minimal and validate IPC payloads and senders.
 - Fail closed when origin, chain, signer capability, simulation, or decoding is
   ambiguous.
+- Keep watch-only accounts non-signing at main-process request state transitions;
+  renderer controls and signer lookup failures are not security boundaries.
 - Preserve user data through tested, versioned migrations with rollback guidance.
 - Keep pull-request CI unable to publish or access release credentials.
 - Do not claim hardware or platform support based only on mocks or compilation.

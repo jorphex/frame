@@ -58,7 +58,8 @@ const accounts = { update: jest.fn() }
 
 const accountState = {
   address: '0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990',
-  name: 'Test Account'
+  name: 'Test Account',
+  lastSignerType: 'ledger'
 }
 
 const tokenInterface = new Interface([
@@ -202,6 +203,12 @@ beforeEach(() => {
   )
   account = new Account(accountState, accounts)
   fetchContract.mockResolvedValueOnce(undefined)
+})
+
+it('normalizes legacy watch-only account casing in its persisted summary', () => {
+  const watchAccount = new Account({ ...accountState, lastSignerType: 'Address' }, accounts)
+
+  expect(watchAccount.summary().lastSignerType).toBe('address')
 })
 
 describe('#addRequest', () => {
@@ -1317,6 +1324,20 @@ describe('#addRequest', () => {
 })
 
 describe('#claimWalletCallsRequest', () => {
+  it('rejects a watch-only batch before changing request state', () => {
+    const request = readyWalletCallsRequest('watch-only-wallet-calls')
+    account.lastSignerType = 'address'
+    account.requests[request.handlerId] = request
+    const expected = JSON.parse(JSON.stringify(request))
+    accounts.update.mockClear()
+
+    expect(() => account.claimWalletCallsRequest(request.handlerId)).toThrow(
+      /watch-only accounts cannot sign/i
+    )
+    expect(request).toEqual(expected)
+    expect(accounts.update).not.toHaveBeenCalled()
+  })
+
   it('atomically claims a detached snapshot of the reviewed batch', () => {
     const request = readyWalletCallsRequest()
     account.requests[request.handlerId] = request

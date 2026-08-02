@@ -16,7 +16,13 @@ import { signerCompatibility as transactionCompatibility, maxFee, SignerCompatib
 import { weiIntToEthInt, hexToInt } from '../../resources/utils'
 import { accountPanelCrumb, signerPanelCrumb } from '../../resources/domain/nav'
 import { usesBaseFee, TransactionData, GasFeesSource } from '../../resources/domain/transaction'
-import { findUnavailableSigners, isSignerReady } from '../../resources/domain/signer'
+import {
+  WATCH_ONLY_SIGNING_ERROR,
+  findUnavailableSigners,
+  isSignerReady,
+  isWatchOnlyAccountType
+} from '../../resources/domain/signer'
+import { isSignatureRequest } from '../../resources/domain/request'
 
 import {
   AccountRequest,
@@ -871,6 +877,10 @@ export class Accounts extends EventEmitter {
     const request = currentAccount.requests[handlerId]
     if (!request) return cb(new Error(`Could not locate request ${handlerId}`))
 
+    if (isWatchOnlyAccountType(currentAccount.lastSignerType)) {
+      return cb(new Error(WATCH_ONLY_SIGNING_ERROR))
+    }
+
     const signer = currentAccount.getSigner()
 
     const signerUnavailable = (knownSigner?: Signer) => {
@@ -1067,6 +1077,14 @@ export class Accounts extends EventEmitter {
     log.info('setRequestPending', handlerId)
 
     if (currentAccount && currentAccount.requests[handlerId]) {
+      const storedRequest = currentAccount.requests[handlerId]
+      if (
+        isWatchOnlyAccountType(currentAccount.lastSignerType) &&
+        (storedRequest.type === 'transaction' || isSignatureRequest(storedRequest))
+      ) {
+        throw new Error(WATCH_ONLY_SIGNING_ERROR)
+      }
+
       currentAccount.requests[handlerId].status = RequestStatus.Pending
 
       const signerType = currentAccount.lastSignerType

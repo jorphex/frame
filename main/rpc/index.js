@@ -148,7 +148,7 @@ const rpc = {
   updateRequest(reqId, data, actionId) {
     accounts.updateRequest(reqId, data, actionId)
   },
-  approveRequest(req) {
+  approveRequest(req, cb = () => {}) {
     if (
       routeWalletCallRequest(req, accounts, (walletCallsRequest) => {
         provider
@@ -164,7 +164,11 @@ const rpc = {
     req = storedRequest
     if ((req.approvals || []).some((approval) => !approval.approved)) return
 
-    accounts.setRequestPending(req)
+    try {
+      accounts.setRequestPending(req)
+    } catch (error) {
+      return cb(error)
+    }
     if (req.type === 'transaction') {
       provider.approveTransactionRequest(req, (err, res) => {
         if (err) return accounts.setRequestError(req.handlerId, err)
@@ -206,7 +210,7 @@ const rpc = {
   },
   createFromAddress(address, name, cb) {
     if (!isAddress(address)) return cb(new Error('Invalid Address'))
-    accounts.add(address, name, { type: 'Address' })
+    accounts.add(address, name, { type: 'address' })
     cb()
   },
   createAccount(address, name, options, cb) {

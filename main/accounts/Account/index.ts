@@ -25,7 +25,14 @@ import {
   effectReportsBroadTokenAuthorityIntent,
   parseBroadTokenAuthorityIntent
 } from '../../../resources/domain/transaction/approvalRisk'
-import { Type as SignerType, getSignerType } from '../../../resources/domain/signer'
+import {
+  Type as SignerType,
+  WATCH_ONLY_SIGNING_ERROR,
+  getAccountSignerType,
+  getSignerType,
+  isWatchOnlyAccountType,
+  type AccountSignerType
+} from '../../../resources/domain/signer'
 
 import provider from '../../provider'
 import { ApprovalType } from '../../../resources/constants'
@@ -82,7 +89,7 @@ interface AccountOptions {
   name: string
   ensName?: string
   created?: string
-  lastSignerType?: SignerType
+  lastSignerType?: string
   active: boolean
   options: SignerOptions
 }
@@ -100,7 +107,7 @@ class FrameAccount {
   ensName: string | undefined
   created: string
 
-  lastSignerType: SignerType
+  lastSignerType: AccountSignerType
   signer: string
   signerStatus: string
 
@@ -123,7 +130,7 @@ class FrameAccount {
     const formattedAddress = (address && address.toLowerCase()) || '0x'
     this.id = formattedAddress // Account ID
     this.address = formattedAddress
-    this.lastSignerType = lastSignerType || (options.type as SignerType)
+    this.lastSignerType = getAccountSignerType(lastSignerType || options.type)
 
     this.active = active
     this.name = name
@@ -882,6 +889,9 @@ class FrameAccount {
       walletCalls.account.toLowerCase() !== this.address
     ) {
       throw new Error('Wallet-call request identity does not match account')
+    }
+    if (isWatchOnlyAccountType(this.lastSignerType)) {
+      throw new Error(WATCH_ONLY_SIGNING_ERROR)
     }
     if (walletCalls.locked || walletCalls.status !== undefined) {
       throw new Error('Wallet-call request has already been claimed')

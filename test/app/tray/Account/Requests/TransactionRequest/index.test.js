@@ -21,7 +21,8 @@ import {
 import { ViewData } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData'
 import {
   canApproveTransaction,
-  getRequiredRequestApproval
+  getRequiredRequestApproval,
+  isNoSignerError
 } from '../../../../../../app/tray/Footer/RequestCommand'
 import TxApproval from '../../../../../../app/tray/Footer/RequestCommand/TxApproval'
 import link from '../../../../../../resources/link'
@@ -102,6 +103,12 @@ describe('confirm', () => {
 })
 
 describe('simulation review', () => {
+  it('handles watch-only compatibility failures as missing signers', () => {
+    expect(isNoSignerError('No signer')).toBe(true)
+    expect(isNoSignerError('Watch-only accounts cannot sign')).toBe(true)
+    expect(isNoSignerError('Signer unavailable')).toBe(false)
+  })
+
   it('qualifies success and failure as configured-RPC results', () => {
     expect(getSimulationPresentation({ status: 'succeeded', source: 'eth_call' })).toEqual({
       className: '_txMainTagGood',

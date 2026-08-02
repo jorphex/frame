@@ -88,7 +88,7 @@ beforeEach((done) => {
     }
   }
 
-  Accounts.add(account2.address, 'Test Account 2')
+  Accounts.add(account2.address, 'Test Account 2', { type: account2.lastSignerType })
   Accounts.add(account.address, 'Test Account 1', account, (err, account) => {
     Accounts.setSigner(account.address, done)
   })
@@ -1516,5 +1516,42 @@ describe('#signerCompatibility', () => {
 
     expect(store.navDash).not.toHaveBeenCalled()
     expect(cb).toHaveBeenCalledWith(new Error('No signer'))
+  })
+
+  it('rejects a watch-only account without opening a signer panel', () => {
+    const cb = jest.fn()
+    Accounts.accounts[account.id].lastSignerType = 'address'
+    Accounts.accounts[account.id].signer = undefined
+
+    Accounts.signerCompatibility(request.handlerId, cb)
+
+    expect(store.navDash).not.toHaveBeenCalled()
+    expect(cb).toHaveBeenCalledWith(new Error('Watch-only accounts cannot sign'))
+  })
+})
+
+describe('#setRequestPending', () => {
+  it.each(['transaction', 'sign', 'signTypedData', 'signErc20Permit'])(
+    'rejects a watch-only %s request before pending state',
+    (type) => {
+      const currentAccount = Accounts.current()
+      const signingRequest = { ...request, handlerId: `watch-only-${type}`, type }
+      currentAccount.lastSignerType = 'address'
+      currentAccount.requests[signingRequest.handlerId] = signingRequest
+
+      expect(() => Accounts.setRequestPending(signingRequest)).toThrow(/watch-only accounts cannot sign/i)
+      expect(signingRequest.status).toBeUndefined()
+      expect(signingRequest.notice).toBeUndefined()
+    }
+  )
+
+  it('keeps non-signing request approval available to watch-only accounts', () => {
+    const currentAccount = Accounts.current()
+    const switchRequest = { ...request, handlerId: 'watch-only-switch', type: 'switchChain' }
+    currentAccount.lastSignerType = 'address'
+    currentAccount.requests[switchRequest.handlerId] = switchRequest
+
+    expect(() => Accounts.setRequestPending(switchRequest)).not.toThrow()
+    expect(switchRequest.status).toBe('pending')
   })
 })

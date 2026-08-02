@@ -30,6 +30,7 @@ interface Frame {
 }
 
 type SignerType = 'ring' | 'seed' | 'trezor' | 'ledger' | 'lattice'
+type AccountSignerType = SignerType | 'address'
 type AccountStatus = 'ok'
 
 interface Signer {
@@ -45,7 +46,7 @@ interface Signer {
 interface Account {
   id: string
   name: string
-  lastSignerType: SignerType
+  lastSignerType: AccountSignerType
   active: boolean
   address: Address
   status: AccountStatus
