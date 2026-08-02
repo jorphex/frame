@@ -2,6 +2,8 @@ import { v5 as uuidv5 } from 'uuid'
 import log from 'electron-log'
 
 import {
+  createSessionOrigin,
+  requiresSessionOrigin,
   parseOrigin,
   updateOrigin,
   isTrusted,
@@ -44,6 +46,18 @@ describe('#updateOrigin', () => {
           type: 'ethereum',
           id: 1
         }
+      })
+    })
+
+    it('marks generated local-client origins as session-only', () => {
+      const origin = 'Unknown/46d1d57b-7b20-41a8-a9ad-d299da51851d'
+
+      updateOrigin({}, origin)
+
+      expect(store.initOrigin).toHaveBeenCalledWith(uuidv5(origin, uuidv5.DNS), {
+        name: origin,
+        sessionOnly: true,
+        chain: { type: 'ethereum', id: 1 }
       })
     })
 
@@ -152,6 +166,23 @@ describe('#updateOrigin', () => {
       const origin = parseOrigin(undefined)
 
       expect(origin).toBe('Unknown')
+    })
+
+    it.each([undefined, 'null', 'Unknown', 'Unknown/caller-selected', 'https://Unknown/caller-selected'])(
+      'uses the server session identity for opaque origin %s',
+      (claimedOrigin) => {
+        expect(parseOrigin(claimedOrigin, 'Unknown/server-generated')).toBe('Unknown/server-generated')
+        expect(requiresSessionOrigin(claimedOrigin)).toBe(true)
+      }
+    )
+
+    it('generates distinct unguessable local-client origins', () => {
+      const first = createSessionOrigin()
+      const second = createSessionOrigin()
+
+      expect(first).toMatch(/^Unknown\/[0-9a-f-]{36}$/)
+      expect(second).toMatch(/^Unknown\/[0-9a-f-]{36}$/)
+      expect(second).not.toBe(first)
     })
   })
 })

@@ -1,6 +1,7 @@
 import { DappSchema } from '../../../../main/store/state/types/dapp'
 import { MainSchema } from '../../../../main/store/state/types/main'
 import { AccountMetadataSchema, AccountSchema } from '../../../../main/store/state/types/account'
+import { OriginSchema } from '../../../../main/store/state/types/origin'
 
 describe('persisted state schema compatibility', () => {
   it('accepts notification records from before every notification key existed', () => {
@@ -65,5 +66,17 @@ describe('persisted state schema compatibility', () => {
 
     expect(DappSchema.parse(dapp).manifest).toEqual(dapp.manifest)
     expect(() => DappSchema.parse({ ...dapp, manifest: 'bafy-manifest' })).toThrow()
+  })
+
+  it('defaults legacy origins to persistent and validates session-only markers', () => {
+    const origin = {
+      name: 'example.com',
+      chain: { id: 1, type: 'ethereum' },
+      session: { requests: 1, startedAt: 1, lastUpdatedAt: 1 }
+    }
+
+    expect(OriginSchema.parse(origin)).toMatchObject({ sessionOnly: false })
+    expect(OriginSchema.parse({ ...origin, sessionOnly: true })).toMatchObject({ sessionOnly: true })
+    expect(() => OriginSchema.parse({ ...origin, sessionOnly: 'yes' })).toThrow()
   })
 })

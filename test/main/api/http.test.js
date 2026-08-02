@@ -11,13 +11,30 @@ import {
 import { MAX_REQUEST_BYTES } from '../../../main/api/validPayload'
 import provider from '../../../main/provider'
 import accounts from '../../../main/accounts'
-import { isTrusted, updateOrigin } from '../../../main/api/origins'
+import { createSessionOrigin, isTrusted, updateOrigin } from '../../../main/api/origins'
 
 jest.mock('../../../main/provider', () => ({ send: jest.fn(), on: jest.fn() }))
 jest.mock('../../../main/accounts', () => ({ getSelectedAddresses: jest.fn(() => []) }))
 jest.mock('../../../main/store')
 jest.mock('../../../main/api/origins', () => ({
-  parseOrigin: jest.fn((origin) => origin || 'Unknown'),
+  createSessionOrigin: jest.fn(),
+  requiresSessionOrigin: jest.fn(
+    (origin) =>
+      !origin ||
+      origin === 'null' ||
+      origin === 'Unknown' ||
+      origin.startsWith('Unknown/') ||
+      origin.startsWith('https://Unknown/')
+  ),
+  parseOrigin: jest.fn((origin, sessionOrigin = 'Unknown') =>
+    !origin ||
+    origin === 'null' ||
+    origin === 'Unknown' ||
+    origin.startsWith('Unknown/') ||
+    origin.startsWith('https://Unknown/')
+      ? sessionOrigin
+      : origin
+  ),
   updateOrigin: jest.fn((payload) => ({
     payload: { ...payload, _origin: 'test-origin' },
     chainId: payload.chainId || '0x1'
@@ -31,6 +48,8 @@ let server
 let port
 
 beforeEach((done) => {
+  let session = 0
+  createSessionOrigin.mockReset().mockImplementation(() => `Unknown/session-${++session}`)
   provider.send.mockImplementation((payload, callback) =>
     callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: 'forwarded' })
   )
@@ -212,6 +231,38 @@ it('forwards a valid request and returns the provider response', async () => {
   })
   expect(provider.send).toHaveBeenCalledWith({ ...payload, _origin: 'test-origin' }, expect.any(Function))
 })
+
+it('keeps an originless identity on one socket and isolates separate sockets', async () => {
+  const firstAgent = new Agent({ keepAlive: true, maxSockets: 1 })
+  const secondAgent = new Agent({ keepAlive: true, maxSockets: 1 })
+  const payload = { id: 7, jsonrpc: '2.0', method: 'eth_chainId', params: [] }
+
+  try {
+    await send({ body: JSON.stringify(payload), agent: firstAgent })
+    await send({ body: JSON.stringify(payload), agent: firstAgent })
+    await send({ body: JSON.stringify(payload), agent: secondAgent })
+  } finally {
+    firstAgent.destroy()
+    secondAgent.destroy()
+  }
+
+  expect(updateOrigin.mock.calls.slice(-3).map((call) => call[1])).toEqual([
+    'Unknown/session-1',
+    'Unknown/session-1',
+    'Unknown/session-2'
+  ])
+})
+
+it.each(['Unknown/caller-selected', 'https://Unknown/caller-selected'])(
+  'does not let a caller select reserved local-client identity %s',
+  async (origin) => {
+    const payload = { id: 7, jsonrpc: '2.0', method: 'eth_chainId', params: [] }
+
+    await send({ body: JSON.stringify(payload), headers: { origin } })
+
+    expect(updateOrigin).toHaveBeenLastCalledWith(payload, 'Unknown/session-1')
+  }
+)
 
 it('rejects a non-canonical target chain before provider forwarding', async () => {
   const payload = { id: 7, jsonrpc: '2.0', method: 'eth_chainId', params: [], chainId: '0x01' }

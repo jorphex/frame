@@ -136,6 +136,31 @@ it('responds to an invalid request with its valid id', (done) => {
   mockSocket.emit('message', JSON.stringify({ id: 'request-9', jsonrpc: '1.0', method: 'eth_chainId' }))
 })
 
+it('isolates originless and caller-selected local identities by WebSocket connection', () => {
+  const firstSocket = new EventEmitter()
+  const secondSocket = new EventEmitter()
+  firstSocket.readyState = WebSocket.OPEN
+  secondSocket.readyState = WebSocket.OPEN
+  firstSocket.send = jest.fn()
+  secondSocket.send = jest.fn()
+
+  socketConnection.emit('connection', firstSocket, { headers: {} })
+  socketConnection.emit('connection', secondSocket, {
+    headers: { origin: 'Unknown/caller-selected' }
+  })
+  const request = JSON.stringify({ id: 9, jsonrpc: '2.0', method: 'eth_chainId', params: [] })
+  firstSocket.emit('message', request)
+  secondSocket.emit('message', request)
+
+  const origins = store.initOrigin.mock.calls.slice(-2).map((call) => call[1])
+  expect(origins).toEqual([
+    expect.objectContaining({ name: expect.stringMatching(/^Unknown\/[0-9a-f-]{36}$/), sessionOnly: true }),
+    expect.objectContaining({ name: expect.stringMatching(/^Unknown\/[0-9a-f-]{36}$/), sessionOnly: true })
+  ])
+  expect(origins[1].name).not.toBe(origins[0].name)
+  expect(origins[1].name).not.toBe('Unknown/caller-selected')
+})
+
 it.each(['caip_request', 'wallet_request'])(
   'rejects unauthorized %s envelopes before nested method mapping',
   (method, done) => {

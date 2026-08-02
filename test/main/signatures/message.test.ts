@@ -144,6 +144,15 @@ describe('#parseMessageRequest', () => {
     ])
   })
 
+  it('does not claim a SIWE domain comparison for a session-only local client', () => {
+    const result = parseMessageRequest('personal_sign', [siweMessage(), account], {
+      ...options,
+      origin: 'Unknown/46d1d57b-7b20-41a8-a9ad-d299da51851d'
+    })
+
+    expect(result.context.risks).toEqual(['siwe-origin-unverified'])
+  })
+
   it('preserves chain IDs larger than JavaScript safe integers exactly', () => {
     const chainId = '9007199254740993'
     const result = parseMessageRequest('personal_sign', [siweMessage({ chainId }), account], options)

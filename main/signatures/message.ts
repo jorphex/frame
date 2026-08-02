@@ -72,7 +72,12 @@ function normalizeMessage(value: unknown) {
 }
 
 function originMatchesDomain(origin: string, siwe: SiweMessageData) {
-  if (!origin || ['Unknown', 'frame-extension', 'frame-internal'].includes(origin)) return
+  if (
+    !origin ||
+    origin.startsWith('Unknown/') ||
+    ['Unknown', 'frame-extension', 'frame-internal'].includes(origin)
+  )
+    return
 
   try {
     const originUrl = new URL(origin.includes('://') ? origin : `https://${origin}`)

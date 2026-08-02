@@ -1,4 +1,4 @@
-import { v4 as generateUuid, v5 as uuidv5 } from 'uuid'
+import { v4 as generateUuid } from 'uuid'
 import { z } from 'zod'
 import log from 'electron-log'
 
@@ -6,6 +6,7 @@ import persist from '../persist'
 import migrations from '../migrate'
 
 import { MainSchema } from './types/main'
+import { clearSessionOnlyOrigins } from './session'
 
 export type { ChainId, Chain, ChainMetadata } from './types/chain'
 export type { Connection } from './types/connection'
@@ -831,11 +832,9 @@ const initial = {
 }
 
 function clearSessionState(state: z.infer<typeof StateSchema>) {
-  Object.keys(state.main.accounts).forEach((id) => {
-    // Remove permissions granted to unknown origins.
-    const permissions = state.main.permissions[id]
-    if (permissions) delete permissions[uuidv5('Unknown', uuidv5.DNS)]
+  clearSessionOnlyOrigins(state.main)
 
+  Object.keys(state.main.accounts).forEach((id) => {
     const account = state.main.accounts[id]
     if (isRecord(account)) Reflect.set(account, 'balances', { lastUpdated: undefined })
   })
@@ -853,18 +852,16 @@ function clearSessionState(state: z.infer<typeof StateSchema>) {
   })
 
   state.main.origins = Object.fromEntries(
-    Object.entries(state.main.origins)
-      .filter(([id]) => id !== uuidv5('Unknown', uuidv5.DNS))
-      .map(([id, origin]) => [
-        id,
-        {
-          ...origin,
-          session: {
-            ...origin.session,
-            endedAt: origin.session.lastUpdatedAt
-          }
+    Object.entries(state.main.origins).map(([id, origin]) => [
+      id,
+      {
+        ...origin,
+        session: {
+          ...origin.session,
+          endedAt: origin.session.lastUpdatedAt
         }
-      ])
+      }
+    ])
   )
 
   state.main.knownExtensions = Object.fromEntries(

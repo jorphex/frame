@@ -11,6 +11,7 @@ import {
   updateOrigin,
   isTrusted,
   parseOrigin,
+  createSessionOrigin,
   isKnownExtension,
   FrameExtension,
   parseFrameExtension
@@ -62,6 +63,7 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
   socket.id = uuid()
   socket.origin = req.headers.origin
   socket.frameExtension = parseFrameExtension(req)
+  const sessionOrigin = createSessionOrigin()
   const requests = new FixedWindowRateLimiter(rateLimit)
 
   const res = (payload: TransportResponse) => {
@@ -104,7 +106,7 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
       }
     }
 
-    const origin = parseOrigin(requestOrigin)
+    const origin = parseOrigin(requestOrigin, sessionOrigin)
 
     if (logTraffic(origin))
       log.info(

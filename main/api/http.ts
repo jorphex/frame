@@ -4,7 +4,7 @@ import log from 'electron-log'
 import provider from '../provider'
 import accounts from '../accounts'
 
-import { updateOrigin, isTrusted, parseOrigin } from './origins'
+import { createSessionOrigin, isTrusted, parseOrigin, requiresSessionOrigin, updateOrigin } from './origins'
 import parsePayload, { JsonRpcError, MAX_REQUEST_BYTES } from './validPayload'
 import protectedMethods from './protectedMethods'
 import { parseChainId } from '../provider/chainRequests'
@@ -31,6 +31,7 @@ const polls: Record<string, string[]> = {}
 const pollSubs: Record<string, Subscription> = {}
 const pending: Record<string, PendingRequest> = {}
 const cleanupTimers: Record<string, NodeJS.Timeout> = {}
+const socketOrigins = new WeakMap<IncomingMessage['socket'], string>()
 
 export const HTTP_MAX_CONNECTIONS = 128
 export const HTTP_HEADERS_TIMEOUT_MS = 10 * 1000
@@ -43,6 +44,18 @@ export const HTTP_SOCKET_RATE_LIMIT: RateLimitOptions = { maxRequests: 300, wind
 interface HTTPServerOptions {
   requestRateLimit?: RateLimitOptions
   socketRateLimit?: RateLimitOptions
+}
+
+const requestOrigin = (req: IncomingMessage) => {
+  if (!requiresSessionOrigin(req.headers.origin)) return parseOrigin(req.headers.origin)
+
+  let origin = socketOrigins.get(req.socket)
+  if (!origin) {
+    origin = createSessionOrigin()
+    socketOrigins.set(req.socket, origin)
+  }
+
+  return parseOrigin(req.headers.origin, origin)
 }
 
 const sendJson = (
@@ -152,7 +165,7 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
           }
         }
 
-        const origin = parseOrigin(req.headers.origin)
+        const origin = requestOrigin(req)
         const { payload, chainId } = updateOrigin(rawPayload, origin)
 
         try {

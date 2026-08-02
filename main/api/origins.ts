@@ -1,4 +1,4 @@
-import { v5 as uuidv5 } from 'uuid'
+import { v4 as uuidv4, v5 as uuidv5 } from 'uuid'
 import { IncomingMessage } from 'http'
 import queryString from 'query-string'
 
@@ -19,6 +19,7 @@ const extensionPrefixes = {
 }
 
 const protocolRegex = /^(?:ws|http)s?:\/\//
+const sessionOriginPrefix = 'Unknown/'
 
 interface OriginUpdateResult {
   payload: RPCRequestPayload
@@ -60,10 +61,24 @@ const currentAccountAddress = () => {
 const accountIsCurrent = (address: Address) =>
   currentAccountAddress()?.toLowerCase() === address.toLowerCase()
 
-export function parseOrigin(origin?: string) {
-  if (!origin) return 'Unknown'
+const normalizeOrigin = (origin: string) => origin.replace(protocolRegex, '')
 
-  return origin.replace(protocolRegex, '')
+export function isSessionOnlyOrigin(origin: string) {
+  return origin === 'Unknown' || origin.startsWith(sessionOriginPrefix)
+}
+
+export function requiresSessionOrigin(origin?: string) {
+  return !origin || origin === 'null' || isSessionOnlyOrigin(normalizeOrigin(origin))
+}
+
+export function createSessionOrigin() {
+  return `${sessionOriginPrefix}${uuidv4()}`
+}
+
+export function parseOrigin(origin?: string, sessionOrigin = 'Unknown') {
+  if (!origin || requiresSessionOrigin(origin)) return sessionOrigin
+
+  return normalizeOrigin(origin)
 }
 
 function invalidOrigin(origin: string) {
@@ -177,6 +192,7 @@ export function updateOrigin(
     } else {
       requireStoreAction('initOrigin')(originId, {
         name: origin,
+        ...(isSessionOnlyOrigin(origin) && { sessionOnly: true }),
         chain: {
           id: 1,
           type: 'ethereum'
