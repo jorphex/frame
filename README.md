@@ -112,6 +112,11 @@ Frame exposes system-wide JSON-RPC endpoints `ws://127.0.0.1:1248` and `http://1
 
 Frame also has a browser extension for injecting a Frame-connected [EIP-1193](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1193.md) provider into web apps as `window.ethereum`. This can be used to inject a connection when an app does not provide the option to connect to Frame natively.
 
+This modernization preview requires the separately packaged
+[fork companion](https://github.com/jorphex/frame-extension/releases) using
+authentication protocol version 2. Use the companion compatibility artifact to
+select a matching desktop build; older store extensions cannot pair.
+
 ### Security and Support
 
 This community fork has not received an independent security audit. Before using
@@ -125,7 +130,7 @@ compatibility](RPC_COMPATIBILITY.md). Maintainers should follow the documented
 ### Related
 
 - [Frame Chat](https://discord.gg/UH7NGqY) - Feel free to drop in and ask questions!
-- [Frame Browser Extension](https://github.com/frame-labs/frame-extension) - Use Frame with any web dapp
+- [Frame Companion Extension](https://github.com/jorphex/frame-extension) - Use this fork with browser dapps
 - [eth-provider](https://github.com/floating/eth-provider) - A universal Ethereum provider
 - [Restore](https://github.com/floating/restore) - A predictable and observable state container for React apps
 

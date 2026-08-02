@@ -1,6 +1,6 @@
-import { BrowserWindow, WebContentsView } from 'electron'
+import { BrowserWindow, shell, WebContentsView } from 'electron'
 
-import { createViewInstance, createWindow } from '../../../main/windows/window'
+import { createViewInstance, createWindow, openExternal } from '../../../main/windows/window'
 
 const mockWindow = {
   webContents: {
@@ -101,5 +101,22 @@ describe('createViewInstance', () => {
     expect(mockView.webContents.on).toHaveBeenCalledWith('will-navigate', expect.any(Function))
     expect(mockView.webContents.on).toHaveBeenCalledWith('will-attach-webview', expect.any(Function))
     expect(mockView.webContents.setWindowOpenHandler).toHaveBeenCalledWith(expect.any(Function))
+  })
+})
+
+describe('openExternal', () => {
+  beforeEach(() => {
+    shell.openExternal.mockClear()
+  })
+
+  it('opens only the fork companion release path', () => {
+    openExternal('https://github.com/jorphex/frame-extension/releases/tag/v0.12.1')
+    openExternal('https://github.com/jorphex/frame-extension/security')
+    openExternal('https://github.com/jorphex/frame-extension.evil.example/releases')
+
+    expect(shell.openExternal).toHaveBeenCalledTimes(1)
+    expect(shell.openExternal).toHaveBeenCalledWith(
+      'https://github.com/jorphex/frame-extension/releases/tag/v0.12.1'
+    )
   })
 })

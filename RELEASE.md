@@ -21,7 +21,11 @@ reproducible artifacts have not yet been demonstrated.
 3. Update user-facing release notes and support claims. Physical hardware claims
    must have a current result recorded using
    [`HARDWARE_SUPPORT.md`](HARDWARE_SUPPORT.md).
-4. Run the local quality and package gate:
+4. Update the companion's `compatibility.json` to the minimum reviewed desktop
+   commit when protocol or integration behavior changed. Build desktop and
+   companion candidates from their exact paired commits; never direct this
+   protocol-v2 desktop to an older store extension.
+5. Run the local quality and package gate:
 
    ```bash
    nvm install
@@ -40,7 +44,7 @@ reproducible artifacts have not yet been demonstrated.
    npm run sbom:verify:linux
    ```
 
-5. Inspect the final diff, dependency graph, test output, package names,
+6. Inspect the final diff, dependency graph, test output, package names,
    `dist/SHA256SUMS`, and `dist/frame.cdx.json`. Do not waive unexplained signing,
    migration, native-module, or packaging failures.
 
@@ -78,6 +82,10 @@ preview commit before release.
    use valuable accounts merely to qualify a release.
 6. Record known limitations prominently in the release notes, including unsigned
    artifacts and unverified platforms/signers.
+7. Qualify the paired Chrome and Firefox companion archives from their own
+   checksums and compatibility metadata. Confirm initial code comparison,
+   reconnect, reset, revocation, origin isolation, EIP-6963 discovery, and legacy
+   injection against this exact desktop candidate.
 
 ## Publish Or Reject
 

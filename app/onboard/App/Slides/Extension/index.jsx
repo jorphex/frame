@@ -20,8 +20,8 @@ const Extension = ({ setTitle, setProceed }) => {
           </div>
         </SlideItem>
         <SlideItem>
-          <div>Click the links below to visit the extension</div>
-          <div>store for your preferred browser:</div>
+          <div>Download the qualified companion release for</div>
+          <div>your preferred browser:</div>
         </SlideItem>
         <div
           style={{
@@ -32,10 +32,7 @@ const Extension = ({ setTitle, setProceed }) => {
           <div
             style={{ padding: '10px', cursor: 'pointer' }}
             onClick={() =>
-              link.send(
-                'tray:openExternal',
-                'https://chrome.google.com/webstore/detail/frame-alpha/ldcoohedfbjoobcadoglnnmmfbdlmmhf'
-              )
+              link.send('tray:openExternal', 'https://github.com/jorphex/frame-extension/releases')
             }
           >
             {svg.chrome(48)}
@@ -43,7 +40,7 @@ const Extension = ({ setTitle, setProceed }) => {
           <div
             style={{ padding: '10px', cursor: 'pointer' }}
             onClick={() =>
-              link.send('tray:openExternal', 'https://addons.mozilla.org/en-US/firefox/addon/frame-extension')
+              link.send('tray:openExternal', 'https://github.com/jorphex/frame-extension/releases')
             }
           >
             {svg.firefox(48)}

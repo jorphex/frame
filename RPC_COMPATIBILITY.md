@@ -112,12 +112,15 @@ process authentication.
   require a new approval.
 - Origin permission is not proof of local process identity. A malicious process
   running as the same OS user can assert browser-like origin metadata.
-- A recognized browser companion requires explicit user approval before Frame
-  accepts its proxied dapp origins. The current WebSocket protocol does not
-  cryptographically authenticate the extension, so this approval limits silent
-  impersonation but does not establish process identity.
+- Frame Companion protocol version 2 requires a challenge-bound P-256 proof and
+  explicit six-digit comparison before Frame accepts proxied dapp origins from a
+  new browser installation. Known page sessions reuse the approved public
+  credential but cannot create pairing prompts. Credentials can be rotated or
+  revoked. This authenticates Companion to Frame, not Frame to Companion or any
+  native localhost process.
 
-The companion browser extension is a separate project. Browser-wide provider
-injection and EIP-6963 discovery are outside this desktop repository's
-compatibility claim. Frame's embedded-dapp injector announces its provider with
-EIP-6963 and retains that same object as the legacy `window.ethereum` fallback.
+The [companion browser extension](https://github.com/jorphex/frame-extension) is
+a separate project with its own compatibility artifact. Browser-wide provider
+injection and EIP-6963 discovery are qualified there, not by this desktop
+repository. Frame's embedded-dapp injector announces its provider with EIP-6963
+and retains that same object as the legacy `window.ethereum` fallback.

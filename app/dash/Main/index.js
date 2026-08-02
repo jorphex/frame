@@ -290,10 +290,7 @@ class Settings extends React.Component {
               <div
                 className='snipItBrowserExtensionIcon snipItBrowserExtensionIconChrome'
                 onClick={() =>
-                  link.send(
-                    'tray:openExternal',
-                    'https://chrome.google.com/webstore/detail/frame-alpha/ldcoohedfbjoobcadoglnnmmfbdlmmhf'
-                  )
+                  link.send('tray:openExternal', 'https://github.com/jorphex/frame-extension/releases')
                 }
               >
                 {svg.chrome(28)}
@@ -301,10 +298,7 @@ class Settings extends React.Component {
               <div
                 className='snipItBrowserExtensionIcon snipItBrowserExtensionIconFirefox'
                 onClick={() =>
-                  link.send(
-                    'tray:openExternal',
-                    'https://addons.mozilla.org/en-US/firefox/addon/frame-extension'
-                  )
+                  link.send('tray:openExternal', 'https://github.com/jorphex/frame-extension/releases')
                 }
               >
                 {svg.firefox(28)}

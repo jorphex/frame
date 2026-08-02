@@ -85,8 +85,7 @@ export function createViewInstance(
 
 const externalWhitelist = [
   'https://frame.sh',
-  'https://chrome.google.com/webstore/detail/frame-alpha/ldcoohedfbjoobcadoglnnmmfbdlmmhf',
-  'https://addons.mozilla.org/en-US/firefox/addon/frame-extension',
+  'https://github.com/jorphex/frame-extension/releases',
   'https://github.com/floating/frame/issues/new',
   'https://github.com/floating/frame/blob/master/LICENSE',
   'https://github.com/floating/frame/blob/0.5/LICENSE',

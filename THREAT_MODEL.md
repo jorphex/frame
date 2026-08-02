@@ -45,9 +45,8 @@ clients receive server-generated identities scoped to one transport connection,
 so separate connections cannot silently inherit legacy host-only or shared
 `Unknown` permissions. Those identities and permissions are session-only and are
 removed during startup recovery. Protected RPC methods require an account
-permission. Requests from the companion extension have separate recognition
-logic. The current model does not fully isolate permissions by authenticated
-process identity, account, chain, method, or expiry. Request bodies, HTTP
+permission. The current model does not fully isolate permissions by authenticated
+native-process identity, account, chain, method, or expiry. Request bodies, HTTP
 connections, WebSocket clients, and request rates have explicit ceilings. Header
 and request-body receive times are bounded; HTTP subscription polls complete
 within 15 seconds. Subscription IDs exposed to clients are opaque aliases bound
@@ -55,13 +54,23 @@ to the owning WebSocket or canonical HTTP origin and original chain. HTTP poll
 clients, subscriptions, queued events/bytes, and idle lifetime are bounded;
 WebSocket subscription count and buffered delivery are also bounded. These
 controls prevent cross-client cancellation and unbounded inactive poll queues,
-but a poll token and asserted origin are still not process authentication. A
-recognized companion must be explicitly approved before it
-can proxy dapp origins, including the published Chrome extension. Extension
-protocol, ID, and query metadata remain caller assertions, so approval is not
-cryptographic companion authentication. These availability, approval, and
-connection-isolation controls do not authenticate callers or make asserted
-origins trustworthy.
+but a poll token and asserted origin are still not process authentication.
+
+The separately distributed Frame Companion uses protocol version 2. Browser
+scheme/ID and connection-role metadata select the handshake path but are not the
+credential. A bounded nonce challenge binds browser identity, installation UUID,
+P-256 public-key fingerprint, challenge ID, and expiry into a signed proof. The
+first control session requires the user to compare and approve the same six-digit
+code in Frame and Companion; Frame then stores the public credential. Known page
+sessions may reuse that credential but cannot create a pairing prompt. Rotation
+replaces and disconnects the prior key for that browser installation, and Frame
+settings can revoke a credential explicitly.
+
+This authenticates Companion to Frame so Frame can trust the dapp origins that
+the browser extension derives from browser APIs. It does not authenticate Frame
+or the localhost endpoint back to Companion, establish native process identity,
+or protect against compromise of the browser profile or host account. A same-user
+process that owns or intercepts port 1248 remains in the trusted computing base.
 
 The operating system account is therefore a major trust boundary. Frame is not
 expected to protect wallet data from malware, debuggers, or an administrator that
@@ -180,9 +189,11 @@ configuration, or token metadata to the upstream project's Sentry service.
 
 Dependencies are locked and install scripts are allowlisted. CI actions are
 pinned, Linux packages include checksums and an SBOM, and the manual workflow
-creates a draft release for review. Linux artifacts are not currently signed,
-and byte-for-byte reproducible builds have not been established. macOS and
-Windows signing are not configured for this fork.
+creates a draft release for review. The companion repository separately produces
+source-bound deterministic Chrome/Firefox archives, checksums, compatibility
+metadata, and a production SBOM. Linux desktop artifacts are not currently
+signed, and byte-for-byte reproducible desktop builds have not been established.
+macOS and Windows signing are not configured for this fork.
 
 The updater derives its release repository from package metadata and requires a
 user action before download/install. Release credentials, GitHub administration,

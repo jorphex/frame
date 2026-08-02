@@ -48,3 +48,5 @@ The current trust boundaries and known limitations are documented in
 in [`HARDWARE_SUPPORT.md`](HARDWARE_SUPPORT.md). Standards and local-provider
 claims are bounded by [`SUPPORTED_EIPS.md`](SUPPORTED_EIPS.md) and
 [`RPC_COMPATIBILITY.md`](RPC_COMPATIBILITY.md).
+The separately released browser transport has its own
+[security boundary](https://github.com/jorphex/frame-extension/blob/modernization-preview/SECURITY.md).
