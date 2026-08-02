@@ -2,7 +2,7 @@ import { ipcRenderer } from 'electron'
 let i = 0
 const newId = () => ++i
 
-const defined = (value) => value !== undefined || value !== null
+const defined = (value) => value !== undefined && value !== null
 
 const handlers = {}
 

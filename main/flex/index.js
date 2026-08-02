@@ -7,7 +7,7 @@ const log = require('electron-log')
 
 const windows = require('../windows')
 
-const defined = (value) => value !== undefined || value !== null
+const defined = (value) => value !== undefined && value !== null
 
 class Flex extends EventEmitter {
   setReady() {

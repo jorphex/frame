@@ -110,9 +110,18 @@ renderers use Content Security Policy. A preload bridge and main-process IPC sti
 form a privileged boundary: exposed methods and payloads must be treated as
 untrusted, validated, and limited to the sender that needs them.
 
+The current preload bridge accepts only bounded serialized envelopes from its own
+window, an expected packaged/development origin, and the expected protocol source
+label. One-way and invoke messages are limited to explicitly registered IPC
+channels, request identifiers and argument counts are bounded, and malformed or
+oversized messages are ignored without reaching Electron IPC. Main RPC methods
+remain a broad first-party renderer capability and their individual payloads are
+not yet described by a typed per-method schema. A renderer compromise must
+therefore still be treated as a privileged wallet-process compromise.
+
 Some renderer policies allow broad network or image sources. Embedded dapp views
 load separately partitioned content and depend on session checks and request
-filtering. A renderer compromise must not be assumed harmless.
+filtering.
 
 ### Networks And Third Parties
 

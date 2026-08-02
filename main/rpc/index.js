@@ -356,8 +356,8 @@ const rpc = {
   }
 }
 
-const unwrap = (v) => (v !== undefined || v !== null ? JSON.parse(v) : v)
-const wrap = (v) => (v !== undefined || v !== null ? JSON.stringify(v) : v)
+const unwrap = (v) => (v !== undefined && v !== null ? JSON.parse(v) : v)
+const wrap = (v) => (v !== undefined && v !== null ? JSON.stringify(v) : v)
 
 ipcMain.on('main:rpc', (event, id, method, ...args) => {
   id = unwrap(id)
