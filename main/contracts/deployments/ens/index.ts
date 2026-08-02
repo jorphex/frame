@@ -102,6 +102,8 @@ const registrar = ({ name = 'ENS Registrar', address, chainId }: DeploymentLocat
           data: { name, operator: to, tokenId: token }
         } as EnsApprovalAction
       }
+
+      return undefined
     }
   }
 }
@@ -141,6 +143,8 @@ const registarController = ({
           data: { name: ethName(name), duration: toNumber(duration) }
         } as EnsRenewalAction
       }
+
+      return undefined
     }
   }
 }

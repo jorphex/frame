@@ -54,6 +54,8 @@ function sendToMainProcess(data: any) {
   } else {
     log.error(`cannot send to main process! connected: ${process.connected}`)
   }
+
+  return undefined
 }
 
 async function updateBlacklist(address: Address, chains: number[]) {

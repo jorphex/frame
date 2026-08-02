@@ -86,6 +86,8 @@ async function extractColors(url: string, ens: string) {
       window = null
     }
   }
+
+  return undefined
 }
 
 export default extractColors

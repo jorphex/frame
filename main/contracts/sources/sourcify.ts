@@ -96,4 +96,6 @@ export async function fetchSourcifyContract(
   } catch (e) {
     log.warn(`Contract ${contractAddress} not found in Sourcify`, e)
   }
+
+  return undefined
 }

@@ -55,6 +55,8 @@ function singleParamError(issue: { input?: unknown }) {
   if (Array.isArray(issue.input) && issue.input.length > 1) {
     return 'Array must contain at most 1 element(s)'
   }
+
+  return undefined
 }
 
 const addressSchema = z

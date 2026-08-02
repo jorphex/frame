@@ -185,6 +185,8 @@ export class Accounts extends EventEmitter {
 
       return txRequest
     }
+
+    return undefined
   }
 
   confirmRequestApproval(reqId: string, approvalType: ApprovalType, approvalData: any) {

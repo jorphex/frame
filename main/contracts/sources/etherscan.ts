@@ -98,4 +98,6 @@ export async function fetchEtherscanContract(
   } catch (e) {
     log.warn(`Contract ${contractAddress} not found in Etherscan`, e)
   }
+
+  return undefined
 }

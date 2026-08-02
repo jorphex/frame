@@ -72,6 +72,8 @@ export default class Erc20Contract {
     } catch (e) {
       // call does not match ERC-20 interface
     }
+
+    return undefined
   }
 
   static encodeCallData(fn: string, params: any[]) {

@@ -177,8 +177,8 @@ export default class Ledger extends Signer {
 
     if (errorStatus === Status.LOCKED && this.status !== Status.LOCKED) {
       this.updateStatus(Status.LOCKED)
-
-      return this.emit('lock')
+      this.emit('lock')
+      return
     }
 
     if (errorStatus !== this.status) {

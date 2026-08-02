@@ -307,6 +307,8 @@ function parseSimulatedCall(call: unknown): TransactionSimulation | undefined {
       reason: boundedMessage(call.error.message, 'Execution reverted')
     }
   }
+
+  return undefined
 }
 
 export function parseSimulateCallsResult(

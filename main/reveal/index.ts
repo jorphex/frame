@@ -122,6 +122,8 @@ async function recogErc20(
       log.warn(e)
     }
   }
+
+  return undefined
 }
 
 function identifyKnownContractActions(
@@ -141,6 +143,8 @@ function identifyKnownContractActions(
       log.warn('Could not decode known contract action', { calldata, context }, e)
     }
   }
+
+  return undefined
 }
 
 const surface = {
@@ -184,6 +188,7 @@ const surface = {
     }
 
     log.warn(`Unable to decode data for contract ${contractAddress}`)
+    return undefined
   },
   recog: async (calldata: string, context: RecognitionContext) => {
     // Recognize actions from standard tx types

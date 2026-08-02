@@ -304,6 +304,7 @@ class FrameAccount {
       if (request.type === 'walletCalls') {
         return parseInt((request as WalletCallsRequest).chainId, 16)
       }
+      return undefined
     }
 
     Object.values(this.requests).forEach((request) => {

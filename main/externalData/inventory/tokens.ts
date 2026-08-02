@@ -93,7 +93,10 @@ export default class TokenLoader {
 
       const onConnect = startLoading.bind(this)
 
-      if (this.eth.connected) return startLoading()
+      if (this.eth.connected) {
+        void startLoading()
+        return
+      }
 
       this.eth.once('connect', onConnect)
     })

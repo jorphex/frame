@@ -225,6 +225,8 @@ export function parseFrameExtension(req: IncomingMessage): FrameExtension | unde
     // Match Safari in dev only
     return { browser: 'safari', id: 'frame-dev' }
   }
+
+  return undefined
 }
 
 export async function isKnownExtension(extension: FrameExtension) {

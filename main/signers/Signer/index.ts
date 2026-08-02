@@ -48,6 +48,8 @@ export default class Signer extends EventEmitter {
   fingerprint() {
     if (this.addresses && this.addresses.length)
       return crypt.stringToKey(this.addresses.join()).toString('hex')
+
+    return undefined
   }
 
   getCoinbase(cb: Callback<string>) {

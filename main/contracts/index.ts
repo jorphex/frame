@@ -33,6 +33,8 @@ function parseAbi(abiData: string): Interface | undefined {
   } catch (e) {
     log.warn(`could not parse ABI data: ${abiData}`)
   }
+
+  return undefined
 }
 
 export function decodeCallData(calldata: string, abi: string) {
@@ -58,6 +60,8 @@ export function decodeCallData(calldata: string, abi: string) {
       log.warn('unknown ABI method for signature', sighash)
     }
   }
+
+  return undefined
 }
 
 export async function fetchContract(

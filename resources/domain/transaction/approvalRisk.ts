@@ -34,6 +34,8 @@ export function parseBroadTokenAuthorityIntent(calldata: unknown): BroadTokenAut
   if (selector === SET_APPROVAL_FOR_ALL_SELECTOR && valueWord === ABI_TRUE) {
     return { type: 'operator-approval', delegate }
   }
+
+  return undefined
 }
 
 export function effectReportsBroadTokenAuthorityIntent(

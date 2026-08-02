@@ -95,6 +95,8 @@ function parseTransfer(token: string, topics: string[], words: string[]): Simula
     const tokenId = parseWord(topics[3].slice(2))
     if (tokenId !== undefined) return { type: 'transfer', standard: 'erc721', token, from, to, tokenId }
   }
+
+  return undefined
 }
 
 function parseApproval(token: string, topics: string[], words: string[]): SimulationEffect | undefined {
@@ -109,6 +111,8 @@ function parseApproval(token: string, topics: string[], words: string[]): Simula
     const tokenId = parseWord(topics[3].slice(2))
     if (tokenId !== undefined) return { type: 'approval', standard: 'erc721', token, owner, spender, tokenId }
   }
+
+  return undefined
 }
 
 function parseApprovalForAll(token: string, topics: string[], words: string[]): SimulationEffect | undefined {
@@ -210,6 +214,7 @@ function parseLog(value: unknown): { effects: SimulationEffect[]; truncated: boo
 
   if (effect) return { effects: [effect], truncated: false }
   if (topic === TRANSFER_BATCH_TOPIC) return parseTransferBatch(token, normalizedTopics, words)
+  return undefined
 }
 
 export function parseSimulationEffects(value: unknown): ParsedSimulationEffects {
