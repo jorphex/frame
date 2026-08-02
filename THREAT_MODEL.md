@@ -9,6 +9,10 @@ routes approved signing operations to software or hardware signers.
 This document describes the current implementation. It is not an audit or a
 claim that every listed risk has been mitigated.
 
+The current standards and wallet-method surface are documented in
+[`SUPPORTED_EIPS.md`](SUPPORTED_EIPS.md) and
+[`RPC_COMPATIBILITY.md`](RPC_COMPATIBILITY.md).
+
 ## Assets
 
 - Software-signer seed and private-key material.

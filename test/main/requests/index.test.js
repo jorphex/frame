@@ -12,7 +12,7 @@ describe('#mapRequest', () => {
     expect(mapRequest(request)).toStrictEqual(request)
   })
 
-  describe('caip_request', () => {
+  describe('legacy caip_request', () => {
     const request = {
       jsonrpc: '2.0',
       id: 8,
@@ -31,7 +31,7 @@ describe('#mapRequest', () => {
       }
     }
 
-    it('maps a CAIP-27 compliant RPC request into an internal representation', () => {
+    it('maps a legacy CAIP-2-routed request into an internal representation', () => {
       expect(mapRequest(request)).toStrictEqual({
         jsonrpc: '2.0',
         id: 8,
@@ -58,6 +58,13 @@ describe('#mapRequest', () => {
       }
 
       expect(mapRequest(req).chainId).toBe('0xa')
+
+      expect(
+        mapRequest({
+          ...req,
+          params: { ...req.params, chainId: 'eip155:9007199254740991' }
+        }).chainId
+      ).toBe('0x1fffffffffffff')
     })
 
     it('allows a nested request with no params', () => {
@@ -77,22 +84,23 @@ describe('#mapRequest', () => {
       })
     })
 
-    it('does not map a request with a non-CAIP-2 compliant chain param', () => {
-      const { session, request: payload } = request.params
+    it.each(['0x5', 'eip155:0', 'eip155:01', 'eip155:-1', 'eip155:not-a-chain', 'eip155:9007199254740992'])(
+      'does not map a request with invalid chain reference %s',
+      (chainId) => {
+        const { session, request: payload } = request.params
 
-      const req = {
-        ...request,
-        params: {
-          chainId: '0x5',
-          session,
-          request: payload
+        const req = {
+          ...request,
+          params: {
+            chainId,
+            session,
+            request: payload
+          }
         }
-      }
 
-      expect(() => mapRequest(req)).toThrow(
-        new Error('Chain ID must be CAIP-2 chain representation and start with "eip155"')
-      )
-    })
+        expect(() => mapRequest(req)).toThrow(/canonical, safely supported CAIP-2 eip155 reference/)
+      }
+    )
 
     it('does not map a request with no chain id param', () => {
       const { session, request: payload } = request.params

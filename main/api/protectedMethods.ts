@@ -1,4 +1,6 @@
 export default [
+  'caip_request',
+  'wallet_request',
   'eth_coinbase',
   'eth_accounts',
   'eth_requestAccounts',

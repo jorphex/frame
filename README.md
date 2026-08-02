@@ -117,8 +117,10 @@ Frame also has a browser extension for injecting a Frame-connected [EIP-1193](ht
 This community fork has not received an independent security audit. Before using
 it, review the [security policy](SECURITY.md), [current threat
 model](THREAT_MODEL.md), and [signer/platform support
-matrix](HARDWARE_SUPPORT.md). Maintainers should follow the documented [release
-procedure](RELEASE.md).
+matrix](HARDWARE_SUPPORT.md). The implemented standards and local provider
+surface are documented in [supported EIPs](SUPPORTED_EIPS.md) and [RPC
+compatibility](RPC_COMPATIBILITY.md). Maintainers should follow the documented
+[release procedure](RELEASE.md).
 
 ### Related
 

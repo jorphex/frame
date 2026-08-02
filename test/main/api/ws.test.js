@@ -3,6 +3,7 @@ import { EventEmitter } from 'stream'
 
 import store from '../../../main/store'
 import provider from '../../../main/provider'
+import accounts from '../../../main/accounts'
 import ws from '../../../main/api/ws'
 import { MAX_REQUEST_BYTES } from '../../../main/api/validPayload'
 
@@ -17,11 +18,12 @@ const extensionRequest = {
 jest.mock('ws')
 jest.mock('../../../main/store')
 jest.mock('../../../main/provider', () => ({ on: jest.fn(), send: jest.fn() }))
-jest.mock('../../../main/accounts', () => {})
+jest.mock('../../../main/accounts', () => ({ getSelectedAddresses: jest.fn(() => []) }))
 jest.mock('../../../main/windows', () => {})
 
 beforeEach(() => {
   store.initOrigin = jest.fn()
+  accounts.getSelectedAddresses.mockReturnValue([])
 
   socketConnection = new EventEmitter()
   mockSocket = new EventEmitter()
@@ -133,6 +135,36 @@ it('responds to an invalid request with its valid id', (done) => {
 
   mockSocket.emit('message', JSON.stringify({ id: 'request-9', jsonrpc: '1.0', method: 'eth_chainId' }))
 })
+
+it.each(['caip_request', 'wallet_request'])(
+  'rejects unauthorized %s envelopes before nested method mapping',
+  (method, done) => {
+    accounts.getSelectedAddresses.mockReturnValue(['0xc93452A74e596e81E4f73Ca1AcFF532089AD4c62'])
+    mockSocket.send = (response) => {
+      expect(JSON.parse(response)).toMatchObject({
+        id: 9,
+        jsonrpc: '2.0',
+        error: { code: 4100 }
+      })
+      expect(provider.send).not.toHaveBeenCalled()
+      done()
+    }
+
+    mockSocket.emit(
+      'message',
+      JSON.stringify({
+        id: 9,
+        jsonrpc: '2.0',
+        method,
+        params: {
+          chainId: 'eip155:1',
+          session: 'session',
+          request: { method: 'personal_sign', params: ['message'] }
+        }
+      })
+    )
+  }
+)
 
 it('rejects a non-canonical target chain id', (done) => {
   mockSocket.send = (response) => {

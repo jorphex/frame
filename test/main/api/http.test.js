@@ -243,6 +243,29 @@ it.each(['eth_accounts', 'wallet_switchEthereumChain'])(
   }
 )
 
+it.each(['caip_request', 'wallet_request'])(
+  'rejects unauthorized %s envelopes before nested method mapping',
+  async (method) => {
+    accounts.getSelectedAddresses.mockReturnValue(['0xc93452A74e596e81E4f73Ca1AcFF532089AD4c62'])
+    const payload = {
+      id: 7,
+      jsonrpc: '2.0',
+      method,
+      params: {
+        chainId: 'eip155:1',
+        session: 'session',
+        request: { method: 'personal_sign', params: ['message'] }
+      }
+    }
+
+    await expect(send({ body: JSON.stringify(payload) })).resolves.toMatchObject({
+      status: 200,
+      body: { id: 7, jsonrpc: '2.0', error: { code: 4100 } }
+    })
+    expect(provider.send).not.toHaveBeenCalled()
+  }
+)
+
 it('returns after rejecting an invalid polling client id', async () => {
   const payload = { id: 7, jsonrpc: '2.0', method: 'eth_pollSubscriptions', params: [7] }
 

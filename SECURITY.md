@@ -45,4 +45,6 @@ details publicly when practical.
 
 The current trust boundaries and known limitations are documented in
 [`THREAT_MODEL.md`](THREAT_MODEL.md). Hardware and platform claims are documented
-in [`HARDWARE_SUPPORT.md`](HARDWARE_SUPPORT.md).
+in [`HARDWARE_SUPPORT.md`](HARDWARE_SUPPORT.md). Standards and local-provider
+claims are bounded by [`SUPPORTED_EIPS.md`](SUPPORTED_EIPS.md) and
+[`RPC_COMPATIBILITY.md`](RPC_COMPATIBILITY.md).
