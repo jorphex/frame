@@ -26,6 +26,7 @@ import Chains, { Chain } from '../chains'
 import { createRpcProvider, estimateL1GasCost } from '../chains/optimism'
 import reveal from '../reveal'
 import { getSignerType, Type as SignerType } from '../../resources/domain/signer'
+import { getSignerCapabilities } from '../signers/capabilities'
 import { normalizeChainId, TransactionData } from '../../resources/domain/transaction'
 import { parseRpcQuantity } from '../../resources/domain/transaction/quantity'
 import { populate as populateTransaction, maxFee, classifyTransaction } from '../transaction'
@@ -1065,20 +1066,13 @@ export class Provider extends EventEmitter {
 
     const signerType = getSignerType(targetAccount.lastSignerType)
 
-    // check for signers that only support signing a specific version of typed data
-    if (
-      version !== SignTypedDataVersion.V4 &&
-      signerType &&
-      [SignerType.Ledger, SignerType.Trezor].includes(signerType)
-    ) {
-      const signerName = capitalize(signerType)
-      return resError(`${signerName} only supports eth_signTypedData_v4+`, payload, res)
-    }
-    if (
-      ![SignTypedDataVersion.V3, SignTypedDataVersion.V4].includes(version) &&
-      signerType === SignerType.Lattice
-    ) {
-      return resError('Lattice only supports eth_signTypedData_v3+', payload, res)
+    if (signerType) {
+      const capabilities = getSignerCapabilities({ type: signerType })
+      if (!capabilities.typedDataVersions.includes(version)) {
+        const signerName = capitalize(signerType)
+        const minimumVersion = signerType === SignerType.Lattice ? 'v3+' : 'v4+'
+        return resError(`${signerName} only supports eth_signTypedData_${minimumVersion}`, payload, res)
+      }
     }
 
     const type = sigParser.identify(typedMessage)

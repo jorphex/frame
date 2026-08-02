@@ -3,7 +3,8 @@ import { addHexPrefix, intToHex } from '@ethereumjs/util'
 import { TransactionFactory, TypedTransaction } from '@ethereumjs/tx'
 import { Common } from '@ethereumjs/common'
 
-import { AppVersion, SignerSummary } from '../signers/Signer'
+import type { SignerSummary } from '../signers/Signer'
+import { getSignerCapabilities } from '../signers/capabilities'
 import { GasFeesSource, TransactionData, typeSupportsBaseFee } from '../../resources/domain/transaction'
 import { isNonZeroHex } from '../../resources/utils'
 import chainConfig from '../chains/config'
@@ -11,32 +12,6 @@ import { TransactionRequest, TxClassification } from '../accounts/types'
 import { parseRpcQuantity } from '../../resources/domain/transaction/quantity'
 
 import type { Gas } from '../store/state'
-
-const londonHardforkSigners: SignerCompatibilityByVersion = {
-  seed: () => true,
-  ring: () => true,
-  ledger: (version) => version.major >= 2 || (version.major >= 1 && version.minor >= 9),
-  trezor: (version, model) => {
-    if ((model || '').toLowerCase() === 'trezor one') {
-      return (
-        version.major >= 2 ||
-        (version.major >= 1 && (version.minor > 10 || (version.minor === 10 && version.patch >= 4)))
-      )
-    }
-
-    // 3.x+, 2.5.x+, or 2.4.2+
-    return (
-      version.major >= 3 ||
-      (version.major === 2 && version.minor >= 5) ||
-      (version.major === 2 && version.minor === 4 && version.patch >= 2)
-    )
-  },
-  lattice: (version) => version.major >= 1 || version.minor >= 11
-}
-
-type SignerCompatibilityByVersion = {
-  [key: string]: (version: AppVersion, model?: string) => boolean
-}
 
 export interface Signature {
   v: string
@@ -52,8 +27,7 @@ export interface SignerCompatibility {
 
 function signerCompatibility(txData: TransactionData, signer: SignerSummary): SignerCompatibility {
   if (typeSupportsBaseFee(txData.type)) {
-    const compatibilityCheck = londonHardforkSigners[signer.type]
-    const compatible = !!compatibilityCheck?.(signer.appVersion, signer.model)
+    const compatible = getSignerCapabilities(signer).nativeEip1559
     return { signer: signer.type, tx: 'london', compatible }
   }
 

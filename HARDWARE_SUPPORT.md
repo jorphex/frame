@@ -10,6 +10,11 @@
 
 These statuses describe available evidence, not a security certification.
 
+Signer summaries also expose a deterministic `signingCapabilities` profile for
+implemented transaction envelopes, typed-data versions, messages, address
+display, and transport. That runtime profile routes wallet behavior; it does not
+upgrade automated or implemented evidence to physical qualification.
+
 ## Current Matrix
 
 | Signer or platform                 | Transport/package             | Evidence in this fork                                                                                        | Release status                                |
