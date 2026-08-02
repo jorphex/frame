@@ -138,29 +138,61 @@ it('responds to an invalid request with its valid id', (done) => {
   mockSocket.emit('message', JSON.stringify({ id: 'request-9', jsonrpc: '1.0', method: 'eth_chainId' }))
 })
 
-it('isolates originless and caller-selected local identities by WebSocket connection', () => {
+it('preserves and canonicalizes a companion-proxied page origin', async () => {
+  mockSocket.send = jest.fn()
+
+  mockSocket.emit(
+    'message',
+    JSON.stringify({
+      id: 9,
+      jsonrpc: '2.0',
+      method: 'eth_chainId',
+      params: [],
+      __frameOrigin: 'HTTPS://Example.TEST:443'
+    })
+  )
+  await Promise.resolve()
+  await Promise.resolve()
+
+  expect(store.initOrigin).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ name: 'https://example.test' })
+  )
+})
+
+it('isolates originless, reserved, and schemeless local identities by WebSocket connection', () => {
   const firstSocket = new EventEmitter()
   const secondSocket = new EventEmitter()
+  const thirdSocket = new EventEmitter()
   firstSocket.readyState = WebSocket.OPEN
   secondSocket.readyState = WebSocket.OPEN
+  thirdSocket.readyState = WebSocket.OPEN
   firstSocket.send = jest.fn()
   secondSocket.send = jest.fn()
+  thirdSocket.send = jest.fn()
 
   socketConnection.emit('connection', firstSocket, { headers: {} })
   socketConnection.emit('connection', secondSocket, {
     headers: { origin: 'Unknown/caller-selected' }
   })
+  socketConnection.emit('connection', thirdSocket, {
+    headers: { origin: 'legacy.example' }
+  })
   const request = JSON.stringify({ id: 9, jsonrpc: '2.0', method: 'eth_chainId', params: [] })
   firstSocket.emit('message', request)
   secondSocket.emit('message', request)
+  thirdSocket.emit('message', request)
 
-  const origins = store.initOrigin.mock.calls.slice(-2).map((call) => call[1])
+  const origins = store.initOrigin.mock.calls.slice(-3).map((call) => call[1])
   expect(origins).toEqual([
+    expect.objectContaining({ name: expect.stringMatching(/^Unknown\/[0-9a-f-]{36}$/), sessionOnly: true }),
     expect.objectContaining({ name: expect.stringMatching(/^Unknown\/[0-9a-f-]{36}$/), sessionOnly: true }),
     expect.objectContaining({ name: expect.stringMatching(/^Unknown\/[0-9a-f-]{36}$/), sessionOnly: true })
   ])
   expect(origins[1].name).not.toBe(origins[0].name)
+  expect(origins[2].name).not.toBe(origins[1].name)
   expect(origins[1].name).not.toBe('Unknown/caller-selected')
+  expect(origins[2].name).not.toBe('legacy.example')
 })
 
 it.each(['caip_request', 'wallet_request'])(

@@ -3,9 +3,10 @@
 Frame exposes JSON-RPC over `http://127.0.0.1:1248` and
 `ws://127.0.0.1:1248`. The loopback interface prevents direct remote access but
 does not authenticate local processes. HTTP origins and WebSocket metadata are
-asserted by clients and are not native process identities. Originless and opaque
-clients receive server-generated identities scoped to one transport connection;
-see the [threat model](THREAT_MODEL.md).
+asserted by clients and are not native process identities. Valid web origins are
+canonicalized as full, scheme-preserving URIs. Originless, opaque, malformed,
+oversized, and schemeless clients receive server-generated identities scoped to
+one transport connection; see the [threat model](THREAT_MODEL.md).
 
 This document separates methods implemented by Frame from methods forwarded to
 the configured chain connection.
@@ -91,9 +92,14 @@ same authorized socket. HTTP clients use Frame's non-standard
   per-socket requests, and request rate, and permits CORS from any origin.
 - WebSocket bounds payload size, active clients, and per-client message rate and
   disables per-message compression.
-- Originless and opaque HTTP/WebSocket clients cannot reuse another connection's
-  permission identity. Their generated origins and permissions are removed during
-  startup recovery; a new connection may require a new approval.
+- HTTP(S), WS(S), and browser-extension origins retain their canonical scheme,
+  host, and non-default port, so grants do not cross schemes. Existing host-only
+  browser grants are intentionally not assigned an invented scheme; browser dapps
+  require a new approval under their full URI after this migration.
+- Originless, opaque, malformed, oversized, and schemeless HTTP/WebSocket clients
+  cannot reuse another connection's permission identity. Their generated origins
+  and permissions are removed during startup recovery; a new connection may
+  require a new approval.
 - Origin permission is not proof of local process identity. A malicious process
   running as the same OS user can assert browser-like origin metadata.
 - A recognized browser companion requires explicit user approval before Frame

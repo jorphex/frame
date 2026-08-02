@@ -7,6 +7,7 @@ import { simulateTransaction, simulateWalletCalls } from '../../../../main/trans
 import { ApprovalType } from '../../../../resources/constants'
 import { GasFeesSource } from '../../../../resources/domain/transaction'
 import signers from '../../../../main/signers'
+import store from '../../../../main/store'
 
 jest.mock('../../../../main/reveal')
 jest.mock('../../../../main/transaction/simulation', () => ({
@@ -185,6 +186,8 @@ const readyWalletCallsRequest = (handlerId = 'ready-wallet-calls') => {
 
 beforeEach(() => {
   jest.clearAllTimers()
+  store.mockImplementation(() => undefined)
+  store.setPermission.mockClear()
   simulateTransaction.mockImplementation(() => new Promise(() => {}))
   simulateWalletCalls.mockImplementation(() => new Promise(() => {}))
   provider.getNonce.mockImplementation((_transaction, callback) => callback({ result: '0x5' }))
@@ -203,6 +206,37 @@ beforeEach(() => {
   )
   account = new Account(accountState, accounts)
   fetchContract.mockResolvedValueOnce(undefined)
+})
+
+it('grants the built-in Send dapp only at its concrete local origin', () => {
+  expect(store.setPermission).toHaveBeenCalledWith(accountState.address.toLowerCase(), {
+    handlerId: 'send-dapp-native',
+    origin: 'http://send.frame.eth.localhost:8421',
+    provider: true
+  })
+})
+
+it('moves a disabled legacy Send grant without re-enabling it', () => {
+  store.mockImplementation((path) =>
+    path === 'main.permissions'
+      ? {
+          'send-dapp-native': {
+            handlerId: 'send-dapp-native',
+            origin: 'send.frame.eth',
+            provider: false
+          }
+        }
+      : undefined
+  )
+  store.setPermission.mockClear()
+
+  new Account(accountState, accounts)
+
+  expect(store.setPermission).toHaveBeenCalledWith(accountState.address.toLowerCase(), {
+    handlerId: 'send-dapp-native',
+    origin: 'http://send.frame.eth.localhost:8421',
+    provider: false
+  })
 })
 
 it('normalizes legacy watch-only account casing in its persisted summary', () => {

@@ -78,6 +78,11 @@ const storeApi = {
   }
 }
 
+const SEND_DAPP_PERMISSION = {
+  handlerId: 'send-dapp-native',
+  origin: 'http://send.frame.eth.localhost:8421'
+} as const
+
 interface SignerOptions {
   type?: string
 }
@@ -142,15 +147,16 @@ class FrameAccount {
     this.signerStatus = ''
 
     const existingPermissions = storeApi.getPermissions(this.address)
-    const currentSendDappPermission = Object.values(existingPermissions).find((p) =>
-      (p.origin || '').toLowerCase().includes('send.frame.eth')
-    )
+    const currentSendDappPermission =
+      existingPermissions[SEND_DAPP_PERMISSION.handlerId] ||
+      Object.values(existingPermissions).find(
+        (permission) => permission.origin === SEND_DAPP_PERMISSION.origin
+      )
 
-    if (!currentSendDappPermission) {
+    if (currentSendDappPermission?.origin !== SEND_DAPP_PERMISSION.origin) {
       requireStoreAction('setPermission')(this.address, {
-        handlerId: 'send-dapp-native',
-        origin: 'send.frame.eth',
-        provider: true
+        ...SEND_DAPP_PERMISSION,
+        provider: currentSendDappPermission?.provider ?? true
       })
     }
 

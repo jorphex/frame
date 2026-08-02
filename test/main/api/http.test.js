@@ -24,14 +24,16 @@ jest.mock('../../../main/api/origins', () => ({
       origin === 'null' ||
       origin === 'Unknown' ||
       origin.startsWith('Unknown/') ||
-      origin.startsWith('https://Unknown/')
+      origin.startsWith('https://Unknown/') ||
+      !/^(?:https?|wss?):\/\//.test(origin)
   ),
   parseOrigin: jest.fn((origin, sessionOrigin = 'Unknown') =>
     !origin ||
     origin === 'null' ||
     origin === 'Unknown' ||
     origin.startsWith('Unknown/') ||
-    origin.startsWith('https://Unknown/')
+    origin.startsWith('https://Unknown/') ||
+    !/^(?:https?|wss?):\/\//.test(origin)
       ? sessionOrigin
       : origin
   ),
@@ -253,7 +255,7 @@ it('keeps an originless identity on one socket and isolates separate sockets', a
   ])
 })
 
-it.each(['Unknown/caller-selected', 'https://Unknown/caller-selected'])(
+it.each(['Unknown/caller-selected', 'https://Unknown/caller-selected', 'legacy.example'])(
   'does not let a caller select reserved local-client identity %s',
   async (origin) => {
     const payload = { id: 7, jsonrpc: '2.0', method: 'eth_chainId', params: [] }

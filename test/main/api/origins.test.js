@@ -120,28 +120,42 @@ describe('#updateOrigin', () => {
   })
 
   describe('parsing', () => {
-    it('parses an origin using ws:// protocol', () => {
+    it('preserves an origin using ws:// protocol', () => {
       const origin = parseOrigin('ws://frame.eth')
 
-      expect(origin).toBe('frame.eth')
+      expect(origin).toBe('ws://frame.eth')
     })
 
-    it('parses an origin using wss:// protocol', () => {
+    it('preserves an origin using wss:// protocol', () => {
       const origin = parseOrigin('wss://pylon.frame.eth')
 
-      expect(origin).toBe('pylon.frame.eth')
+      expect(origin).toBe('wss://pylon.frame.eth')
     })
 
-    it('parses an origin using http:// protocol', () => {
+    it('preserves an origin using http:// protocol', () => {
       const origin = parseOrigin('http://test-case.frame.io')
 
-      expect(origin).toBe('test-case.frame.io')
+      expect(origin).toBe('http://test-case.frame.io')
     })
 
-    it('parses an origin using https:// protocol', () => {
+    it('preserves an origin using https:// protocol', () => {
       const origin = parseOrigin('https://www.google.com')
 
-      expect(origin).toBe('www.google.com')
+      expect(origin).toBe('https://www.google.com')
+    })
+
+    it('canonicalizes host case and default ports using web origin semantics', () => {
+      expect(parseOrigin('HTTPS://Example.COM:443')).toBe('https://example.com')
+      expect(parseOrigin('ws://Example.COM:80')).toBe('ws://example.com')
+    })
+
+    it('keeps schemes as distinct permission identities', () => {
+      const http = parseOrigin('http://frame.test')
+      const https = parseOrigin('https://frame.test')
+
+      expect(http).toBe('http://frame.test')
+      expect(https).toBe('https://frame.test')
+      expect(uuidv5(http, uuidv5.DNS)).not.toBe(uuidv5(https, uuidv5.DNS))
     })
 
     it('does not change an origin using an extension protocol', () => {
@@ -150,16 +164,24 @@ describe('#updateOrigin', () => {
       expect(origin).toBe('chrome-extension://tagxpelsfagzmzljsfgmuipalsfaohgpal')
     })
 
-    it('does not change an origin with no prepended protocol', () => {
-      const origin = parseOrigin('send.frame.eth')
-
-      expect(origin).toBe('send.frame.eth')
-    })
-
-    it('does not change a plain string origin', () => {
+    it('preserves a narrow internal origin label', () => {
       const origin = parseOrigin('frame-extension')
 
       expect(origin).toBe('frame-extension')
+    })
+
+    it.each([
+      'send.frame.eth',
+      'example.test',
+      'https://example.test/path',
+      'https://example.test/..',
+      'https://user@example.test',
+      'https://example.test?query=1',
+      'https://example.test#fragment',
+      `https://${'a'.repeat(2048)}.test`
+    ])('uses the server session identity for non-origin claim %s', (claimedOrigin) => {
+      expect(parseOrigin(claimedOrigin, 'Unknown/server-generated')).toBe('Unknown/server-generated')
+      expect(requiresSessionOrigin(claimedOrigin)).toBe(true)
     })
 
     it('treats a lack of origin as unknown', () => {

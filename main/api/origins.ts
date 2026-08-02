@@ -18,8 +18,12 @@ const extensionPrefixes = {
   safari: 'safari-web-extension'
 }
 
-const protocolRegex = /^(?:ws|http)s?:\/\//
 const sessionOriginPrefix = 'Unknown/'
+const MAX_ORIGIN_LENGTH = 2048
+const internalOrigins = new Set(['frame-extension', 'frame-internal'])
+const webProtocols = new Set(['http:', 'https:', 'ws:', 'wss:'])
+const webOrigin = /^(?:https?|wss?):\/\/[^/?#\\]+\/?$/i
+const extensionOrigin = /^(?:chrome-extension|moz-extension|safari-web-extension):\/\/[0-9a-z.-]+$/i
 
 interface OriginUpdateResult {
   payload: RPCRequestPayload
@@ -61,14 +65,37 @@ const currentAccountAddress = () => {
 const accountIsCurrent = (address: Address) =>
   currentAccountAddress()?.toLowerCase() === address.toLowerCase()
 
-const normalizeOrigin = (origin: string) => origin.replace(protocolRegex, '')
+function canonicalOrigin(origin: string | undefined) {
+  if (!origin || origin.length > MAX_ORIGIN_LENGTH || origin !== origin.trim()) return
+  if (internalOrigins.has(origin)) return origin
+  if (extensionOrigin.test(origin)) return origin.toLowerCase()
+  if (!webOrigin.test(origin)) return
+
+  try {
+    const parsed = new URL(origin)
+    if (
+      !webProtocols.has(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== '/' ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return
+    }
+
+    return parsed.origin
+  } catch {
+    return
+  }
+}
 
 export function isSessionOnlyOrigin(origin: string) {
   return origin === 'Unknown' || origin.startsWith(sessionOriginPrefix)
 }
 
 export function requiresSessionOrigin(origin?: string) {
-  return !origin || origin === 'null' || isSessionOnlyOrigin(normalizeOrigin(origin))
+  return !origin || origin === 'null' || isSessionOnlyOrigin(origin) || !canonicalOrigin(origin)
 }
 
 export function createSessionOrigin() {
@@ -78,7 +105,7 @@ export function createSessionOrigin() {
 export function parseOrigin(origin?: string, sessionOrigin = 'Unknown') {
   if (!origin || requiresSessionOrigin(origin)) return sessionOrigin
 
-  return normalizeOrigin(origin)
+  return canonicalOrigin(origin) || sessionOrigin
 }
 
 function invalidOrigin(origin: string) {
