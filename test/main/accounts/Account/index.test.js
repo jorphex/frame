@@ -477,6 +477,24 @@ describe('#addRequest', () => {
     })
   })
 
+  it('requires explicit consent for normalized Permit2 authority', () => {
+    const request = typedRequest([
+      'permit2-transfer',
+      'permit2-maximum-amount',
+      'permit2-noncanonical-contract'
+    ])
+
+    account.addRequest(request)
+
+    expect(request.approvals[0]).toMatchObject({
+      type: ApprovalType.SignatureRisk,
+      data: {
+        title: 'Risky Typed Signature',
+        riskCodes: 'permit2-transfer,permit2-maximum-amount,permit2-noncanonical-contract'
+      }
+    })
+  })
+
   it('composes typed-data and unlimited-permit approvals independently', () => {
     const request = permitRequest(maxTokenAmount.toString(10), 'risky-unlimited-permit')
     request.context.risks = ['domain-chain-mismatch']

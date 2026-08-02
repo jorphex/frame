@@ -55,6 +55,26 @@ describe('#identify', () => {
     expect(signatureParser.identify(typedMessage)).toBe('signTypedData')
   })
 
+  it('does not identify a matching declaration under a different primary type', () => {
+    typedMessage.data.primaryType = 'Order'
+
+    expect(signatureParser.identify(typedMessage)).toBe('signTypedData')
+  })
+
+  it('does not identify a reordered permit declaration', () => {
+    typedMessage.data.types.Permit.reverse()
+
+    expect(signatureParser.identify(typedMessage)).toBe('signTypedData')
+  })
+
+  it('does not identify domain values omitted from the signed domain type', () => {
+    typedMessage.data.types.EIP712Domain = typedMessage.data.types.EIP712Domain.filter(
+      ({ name }) => name !== 'verifyingContract'
+    )
+
+    expect(signatureParser.identify(typedMessage)).toBe('signTypedData')
+  })
+
   it('should successfully identfy empty types arrays', () => {
     typedMessage.data.types = []
 

@@ -2675,6 +2675,64 @@ describe('#send', () => {
       })
     })
 
+    it('keeps Permit2 on the generic typed-data path with normalized authority context', () => {
+      const permit2Data = {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' }
+          ],
+          PermitSingle: [
+            { name: 'details', type: 'PermitDetails' },
+            { name: 'spender', type: 'address' },
+            { name: 'sigDeadline', type: 'uint256' }
+          ],
+          PermitDetails: [
+            { name: 'token', type: 'address' },
+            { name: 'amount', type: 'uint160' },
+            { name: 'expiration', type: 'uint48' },
+            { name: 'nonce', type: 'uint48' }
+          ]
+        },
+        primaryType: 'PermitSingle',
+        domain: {
+          name: 'Permit2',
+          chainId: 1,
+          verifyingContract: '0x000000000022d473030f116ddee9f6b43ac78ba3'
+        },
+        message: {
+          details: {
+            token: '0x2222222222222222222222222222222222222222',
+            amount: '100',
+            expiration: '2000000000',
+            nonce: '1'
+          },
+          spender: '0x1111111111111111111111111111111111111111',
+          sigDeadline: '1900000000'
+        }
+      }
+
+      send({ method: 'eth_signTypedData_v4', params: [address, permit2Data] })
+
+      expect(accountRequests).toHaveLength(1)
+      expect(accountRequests[0]).toMatchObject({
+        type: 'signTypedData',
+        typedMessage: { data: permit2Data, version: SignTypedDataVersion.V4 },
+        context: {
+          requestChainId: 1,
+          domainChainId: '1',
+          risks: ['permit2-allowance'],
+          permit2: {
+            kind: 'allowance',
+            canonicalContract: true,
+            grantsAuthority: true,
+            maximumAmount: false
+          }
+        }
+      })
+    })
+
     it('rejects an EIP-2612 owner mismatch before allocating request state', () => {
       const response = jest.fn()
       const mismatchedPermit = {

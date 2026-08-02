@@ -219,6 +219,96 @@ describe('#parseTypedMessage', () => {
 describe('#getTypedDataContext', () => {
   const message = (data, version = SignTypedDataVersion.V4) => ({ data, version })
 
+  it('attaches Permit2 authority and consent risks to exact canonical data', () => {
+    const permit2 = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' }
+        ],
+        PermitSingle: [
+          { name: 'details', type: 'PermitDetails' },
+          { name: 'spender', type: 'address' },
+          { name: 'sigDeadline', type: 'uint256' }
+        ],
+        PermitDetails: [
+          { name: 'token', type: 'address' },
+          { name: 'amount', type: 'uint160' },
+          { name: 'expiration', type: 'uint48' },
+          { name: 'nonce', type: 'uint48' }
+        ]
+      },
+      primaryType: 'PermitSingle',
+      domain: {
+        name: 'Permit2',
+        chainId: 1,
+        verifyingContract: '0x4444444444444444444444444444444444444444'
+      },
+      message: {
+        details: {
+          token: '0x1111111111111111111111111111111111111111',
+          amount: (2n ** 160n - 1n).toString(10),
+          expiration: '2000000000',
+          nonce: '1'
+        },
+        spender: '0x3333333333333333333333333333333333333333',
+        sigDeadline: '1900000000'
+      }
+    }
+
+    expect(getTypedDataContext(message(permit2), 1)).toMatchObject({
+      requestChainId: 1,
+      domainChainId: '1',
+      risks: ['permit2-allowance', 'permit2-maximum-amount', 'permit2-noncanonical-contract'],
+      permit2: {
+        kind: 'allowance',
+        canonicalContract: false,
+        grantsAuthority: true,
+        maximumAmount: true
+      }
+    })
+  })
+
+  it('summarizes a zero-amount Permit2 request without an authority risk', () => {
+    const permit2 = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' }
+        ],
+        PermitTransferFrom: [
+          { name: 'permitted', type: 'TokenPermissions' },
+          { name: 'spender', type: 'address' },
+          { name: 'nonce', type: 'uint256' },
+          { name: 'deadline', type: 'uint256' }
+        ],
+        TokenPermissions: [
+          { name: 'token', type: 'address' },
+          { name: 'amount', type: 'uint256' }
+        ]
+      },
+      primaryType: 'PermitTransferFrom',
+      domain: {
+        name: 'Permit2',
+        chainId: 1,
+        verifyingContract: '0x000000000022d473030f116ddee9f6b43ac78ba3'
+      },
+      message: {
+        permitted: { token: '0x1111111111111111111111111111111111111111', amount: '0' },
+        spender: '0x3333333333333333333333333333333333333333',
+        nonce: '1',
+        deadline: '1900000000'
+      }
+    }
+
+    expect(getTypedDataContext(message(permit2), 1)).toMatchObject({
+      risks: [],
+      permit2: { kind: 'transfer', grantsAuthority: false }
+    })
+  })
+
   it.each([
     [1, '1'],
     ['1', '1'],

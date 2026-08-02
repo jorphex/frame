@@ -6,7 +6,15 @@ const RISK_MESSAGES = {
   'domain-chain-invalid': () =>
     'The domain chain ID cannot be compared with the chain handling this request.',
   'domain-chain-mismatch': ({ domainChainId, requestChainId }) =>
-    `Domain chain ${domainChainId} does not match request chain ${requestChainId}.`
+    `Domain chain ${domainChainId} does not match request chain ${requestChainId}.`,
+  'permit2-allowance': () =>
+    'This Permit2 signature creates standing token allowances for the displayed spender until each allowance expires.',
+  'permit2-transfer': () =>
+    'This Permit2 signature authorizes the displayed spender to make one-time token transfers up to the displayed amounts.',
+  'permit2-maximum-amount': () =>
+    'At least one Permit2 amount is the maximum value supported by this permission type.',
+  'permit2-noncanonical-contract': ({ permit2 }) =>
+    `The verifying contract ${permit2?.verifyingContract || 'is unknown and'} is not the canonical Uniswap Permit2 deployment.`
 }
 
 const displayKey = (key) => key.replace(/([A-Z])/g, ' $1').trim()
@@ -70,6 +78,33 @@ export const TypedDataWarnings = ({ context }) => {
   ) : null
 }
 
+const Permit2Authority = ({ authority }) => {
+  if (!authority) return null
+
+  return (
+    <Section title='Permit2 Authority'>
+      <SimpleJSON
+        humanizeKeys
+        quoteStrings={false}
+        json={{
+          authorityType: authority.kind === 'allowance' ? 'Standing allowance' : 'One-time transfer',
+          spender: authority.spender,
+          verifyingContract: authority.verifyingContract,
+          canonicalContract: authority.canonicalContract ? 'Yes' : 'No',
+          signatureDeadlineUnixSeconds: authority.deadline,
+          batch: authority.batch ? 'Yes' : 'No',
+          witnessData: authority.witness ? 'Included' : 'None',
+          permissions: authority.permissions.map(({ token, amount, expiration }) => ({
+            token,
+            amountBaseUnits: amount,
+            ...(expiration === undefined ? {} : { expirationUnixSeconds: expiration })
+          }))
+        }}
+      />
+    </Section>
+  )
+}
+
 const SigningContext = ({ chainName, context, origin, originName, typedMessage }) => {
   const structured = !Array.isArray(typedMessage.data)
   const requestChainId = context?.requestChainId
@@ -91,6 +126,7 @@ const SigningContext = ({ chainName, context, origin, originName, typedMessage }
         />
       </Section>
       <TypedDataWarnings context={context} />
+      <Permit2Authority authority={context?.permit2} />
     </>
   )
 }

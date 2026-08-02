@@ -1,11 +1,13 @@
 import { MessageTypeProperty } from '@metamask/eth-sig-util'
 
 interface LabelledSignatureType {
-  domainFilter: string[]
+  primaryType: string
+  domainFilter: MessageTypeProperty[]
   types: { [key: string]: MessageTypeProperty[] }
 }
 
 const eip2612Permit: LabelledSignatureType = {
+  primaryType: 'Permit',
   types: {
     Permit: [
       { name: 'owner', type: 'address' },
@@ -15,7 +17,10 @@ const eip2612Permit: LabelledSignatureType = {
       { name: 'deadline', type: 'uint256' }
     ]
   },
-  domainFilter: ['chainId', 'verifyingContract']
+  domainFilter: [
+    { name: 'chainId', type: 'uint256' },
+    { name: 'verifyingContract', type: 'address' }
+  ]
 }
 
 const signatureTypes: { [key: string]: LabelledSignatureType } = {

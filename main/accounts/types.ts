@@ -188,12 +188,46 @@ export interface TypedMessage<V extends SignTypedDataVersion = SignTypedDataVers
 }
 
 export type TypedDataRisk =
-  'legacy-v1' | 'domain-chain-missing' | 'domain-chain-invalid' | 'domain-chain-mismatch'
+  | 'legacy-v1'
+  | 'domain-chain-missing'
+  | 'domain-chain-invalid'
+  | 'domain-chain-mismatch'
+  | 'permit2-allowance'
+  | 'permit2-transfer'
+  | 'permit2-maximum-amount'
+  | 'permit2-noncanonical-contract'
+
+export interface Permit2Permission {
+  token: string
+  amount: string
+  expiration?: string
+}
+
+export interface Permit2Authority {
+  kind: 'allowance' | 'transfer'
+  primaryType:
+    | 'PermitSingle'
+    | 'PermitBatch'
+    | 'PermitTransferFrom'
+    | 'PermitBatchTransferFrom'
+    | 'PermitWitnessTransferFrom'
+    | 'PermitBatchWitnessTransferFrom'
+  verifyingContract: string
+  canonicalContract: boolean
+  spender: string
+  deadline: string
+  permissions: Permit2Permission[]
+  batch: boolean
+  witness: boolean
+  grantsAuthority: boolean
+  maximumAmount: boolean
+}
 
 export interface TypedDataContext {
   requestChainId: number
   domainChainId?: string
   risks: TypedDataRisk[]
+  permit2?: Permit2Authority
 }
 
 export type SignTypedDataRequest = DefaultSignTypedDataRequest | PermitSignatureRequest

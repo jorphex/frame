@@ -100,6 +100,47 @@ it('shows legacy V1 fields and warnings', () => {
   expect(screen.getByText('false')).toBeTruthy()
 })
 
+it('shows normalized Permit2 authority before the raw typed data', () => {
+  const permit2 = {
+    kind: 'allowance',
+    primaryType: 'PermitSingle',
+    verifyingContract: '0x000000000022d473030f116ddee9f6b43ac78ba3',
+    canonicalContract: true,
+    spender: '0x3333333333333333333333333333333333333333',
+    deadline: '1900000000',
+    permissions: [
+      {
+        token: '0x1111111111111111111111111111111111111111',
+        amount: '100',
+        expiration: '2000000000'
+      }
+    ],
+    batch: false,
+    witness: false,
+    grantsAuthority: true,
+    maximumAmount: false
+  }
+
+  render(
+    <SimpleTypedData
+      req={request({
+        context: {
+          requestChainId: 1,
+          domainChainId: '1',
+          permit2,
+          risks: ['permit2-allowance']
+        }
+      })}
+    />
+  )
+
+  expect(screen.getByText('Permit2 Authority')).toBeTruthy()
+  expect(screen.getByText('Standing allowance')).toBeTruthy()
+  expect(screen.getByText(permit2.spender)).toBeTruthy()
+  expect(screen.getByText(permit2.permissions[0].token)).toBeTruthy()
+  expect(screen.getByText(/creates standing token allowances/)).toBeTruthy()
+})
+
 it('uses the same complete view for specialized permit requests', () => {
   render(<SimpleTypedData req={request({ type: 'signErc20Permit' })} />)
 

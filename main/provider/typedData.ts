@@ -6,6 +6,7 @@ import type {
   TypedDataRisk,
   TypedMessage
 } from '../accounts/types'
+import { getPermit2Authority } from '../signatures/permit2'
 
 interface UnknownRecord extends Record<string, unknown> {
   name?: unknown
@@ -274,20 +275,30 @@ export function getTypedDataContext(typedMessage: TypedMessage, requestChainId: 
     return { requestChainId, risks: ['legacy-v1'] }
   }
 
+  const permit2 = getPermit2Authority(typedMessage)
+  const permit2Context = permit2 ? { permit2 } : {}
   const risks: TypedDataRisk[] = []
   const { domain } = typedMessage.data
 
+  if (permit2) {
+    if (permit2.grantsAuthority) {
+      risks.push(permit2.kind === 'allowance' ? 'permit2-allowance' : 'permit2-transfer')
+    }
+    if (permit2.maximumAmount) risks.push('permit2-maximum-amount')
+    if (!permit2.canonicalContract) risks.push('permit2-noncanonical-contract')
+  }
+
   if (!hasOwn(domain, 'chainId')) {
     risks.push('domain-chain-missing')
-    return { requestChainId, risks }
+    return { requestChainId, risks, ...permit2Context }
   }
 
   const domainChainId = normalizeDomainChainId(domain.chainId)
   if (domainChainId === undefined) {
     risks.push('domain-chain-invalid')
-    return { requestChainId, risks }
+    return { requestChainId, risks, ...permit2Context }
   }
 
   if (domainChainId !== String(requestChainId)) risks.push('domain-chain-mismatch')
-  return { requestChainId, domainChainId, risks }
+  return { requestChainId, domainChainId, risks, ...permit2Context }
 }

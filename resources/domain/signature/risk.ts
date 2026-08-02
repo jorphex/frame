@@ -11,7 +11,16 @@ const REQUIRED_RISKS: Record<SignatureRiskKind, readonly string[]> = {
     'siwe-not-yet-valid',
     'siwe-issued-in-future'
   ],
-  'typed-data': ['legacy-v1', 'domain-chain-missing', 'domain-chain-invalid', 'domain-chain-mismatch']
+  'typed-data': [
+    'legacy-v1',
+    'domain-chain-missing',
+    'domain-chain-invalid',
+    'domain-chain-mismatch',
+    'permit2-allowance',
+    'permit2-transfer',
+    'permit2-maximum-amount',
+    'permit2-noncanonical-contract'
+  ]
 }
 
 export function requiredSignatureRisks(kind: SignatureRiskKind, risks: unknown): string[] {
