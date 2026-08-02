@@ -159,6 +159,59 @@ export const SimulationNativeBalanceChanges = ({ simulation }) => {
   )
 }
 
+const callTraceTitle = (call) => {
+  if (call.type === 'CREATE') return 'Contract Creation'
+  if (call.type === 'CREATE2') return 'CREATE2 Contract Creation'
+  if (call.type === 'SELFDESTRUCT') return 'Contract Self-Destruct'
+  return `${call.type} Internal Call`
+}
+
+export const SimulationCallTrace = ({ simulation }) => {
+  const evidence = simulation?.callTrace
+  if (!evidence || (!evidence.calls.length && !evidence.truncated)) return null
+
+  return (
+    <div className='txViewData'>
+      <div className='txViewDataHeader'>RPC-Reported Execution Trace</div>
+      <div className='simulationEffectsNotice' role='note'>
+        Derived from a callTracer result returned by your configured RPC. This is not independently verified
+        or guaranteed complete. Raw call input and return data are omitted.
+      </div>
+      {evidence.calls.map((call, index) => (
+        <section
+          className='simulationEffect'
+          key={`${call.depth}:${call.type}:${call.to || call.from}:${index}`}
+        >
+          <div
+            className={call.failure ? 'simulationEffectTitle simulationEffectRisk' : 'simulationEffectTitle'}
+          >
+            {callTraceTitle(call)}
+          </div>
+          <SimpleJSON
+            humanizeKeys
+            quoteStrings={false}
+            json={{
+              depth: call.depth,
+              from: call.from,
+              ...(call.to ? { to: call.to } : {}),
+              reportedValueWei: call.value,
+              callInputBytes: call.inputBytes,
+              ...(call.selector ? { selector: call.selector } : {}),
+              ...(call.failure ? { failure: call.failure } : {})
+            }}
+          />
+        </section>
+      ))}
+      {evidence.truncated && (
+        <div className='simulationEffectsTruncated' role='alert'>
+          Execution trace preview truncated. Review the transaction through another trusted source before
+          signing.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export const SimulationAllowance = ({ simulation }) => {
   const allowance = simulation?.allowance
   if (!allowance) return null

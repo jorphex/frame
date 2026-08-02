@@ -7,6 +7,7 @@ import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionR
 import {
   getAllowancePresentation,
   getAccessListPresentation,
+  getCallTracePresentation,
   getDelegationPresentation,
   getNativeBalanceChangesPresentation,
   getSimulationEffectsPresentation,
@@ -14,6 +15,7 @@ import {
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
 import {
   SimulationAllowance,
+  SimulationCallTrace,
   SimulationDelegation,
   SimulationEffects,
   SimulationNativeBalanceChanges
@@ -343,6 +345,57 @@ describe('simulation review', () => {
 
     expect(screen.getByText('No native balance changes were reported.')).toBeTruthy()
     expect(screen.queryByText(/Native Balance Increase/i)).toBeNull()
+  })
+
+  it('summarizes and renders bounded configured-RPC execution frames', () => {
+    const target = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    const created = '0xcccccccccccccccccccccccccccccccccccccccc'
+    const evidence = {
+      source: 'debug_traceCall',
+      truncated: true,
+      calls: [
+        {
+          type: 'DELEGATECALL',
+          depth: 1,
+          from: account.toLowerCase(),
+          to: target,
+          value: '0',
+          inputBytes: 36,
+          selector: '0xabcdef01',
+          failure: 'execution reverted'
+        },
+        {
+          type: 'CREATE2',
+          depth: 2,
+          from: target,
+          to: created,
+          value: '3',
+          inputBytes: 128
+        }
+      ]
+    }
+
+    expect(getCallTracePresentation({ callTrace: evidence })).toEqual({
+      className: '_txMainTagBad',
+      label: '2 RPC-reported execution frames (1 creation, 1 failed) (truncated)'
+    })
+    render(<SimulationCallTrace simulation={{ callTrace: evidence }} />)
+
+    expect(screen.getByText('RPC-Reported Execution Trace')).toBeTruthy()
+    expect(screen.getByRole('note').textContent).toMatch(/configured RPC/i)
+    expect(screen.getByRole('note').textContent).toMatch(/raw call input and return data are omitted/i)
+    expect(screen.getByText('DELEGATECALL Internal Call')).toBeTruthy()
+    expect(screen.getByText('CREATE2 Contract Creation')).toBeTruthy()
+    expect(screen.getByText('0xabcdef01')).toBeTruthy()
+    expect(screen.getByText('execution reverted')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toMatch(/trace preview truncated/i)
+  })
+
+  it('omits an empty call-trace presentation', () => {
+    expect(getCallTracePresentation(undefined)).toBeNull()
+    expect(getCallTracePresentation({ callTrace: { source: 'debug_traceCall', calls: [] } })).toBeNull()
+    render(<SimulationCallTrace simulation={{ callTrace: { source: 'debug_traceCall', calls: [] } }} />)
+    expect(screen.queryByText('RPC-Reported Execution Trace')).toBeNull()
   })
 
   it.each([

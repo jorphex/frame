@@ -145,6 +145,26 @@ export function getNativeBalanceChangesPresentation(simulation) {
   }
 }
 
+export function getCallTracePresentation(simulation) {
+  const evidence = simulation?.callTrace
+  if (!evidence || (!evidence.calls.length && !evidence.truncated)) return null
+
+  const count = evidence.calls.length
+  const creations = evidence.calls.filter((call) => call.type === 'CREATE' || call.type === 'CREATE2').length
+  const failures = evidence.calls.filter((call) => call.failure).length
+  const details = [
+    creations ? `${creations} creation${creations === 1 ? '' : 's'}` : '',
+    failures ? `${failures} failed` : ''
+  ].filter(Boolean)
+
+  return {
+    className: failures ? '_txMainTagBad' : '_txMainTagWarning',
+    label: `${count} RPC-reported execution frame${count === 1 ? '' : 's'}${
+      details.length ? ` (${details.join(', ')})` : ''
+    }${evidence.truncated ? ' (truncated)' : ''}`
+  }
+}
+
 export function getAllowancePresentation(simulation) {
   const allowance = simulation?.allowance
   if (!allowance) return null
@@ -208,6 +228,7 @@ const TxOverview = ({
   const simulation = getSimulationPresentation(req.simulation)
   const simulationEffects = getSimulationEffectsPresentation(req.simulation, req.account)
   const nativeBalanceChanges = getNativeBalanceChangesPresentation(req.simulation)
+  const callTrace = getCallTracePresentation(req.simulation)
   const allowance = getAllowancePresentation(req.simulation)
   const delegation = getDelegationPresentation(req.simulation)
   const accessList = getAccessListPresentation(req.data)
@@ -295,6 +316,13 @@ const TxOverview = ({
               <div className={`_txMainTag ${nativeBalanceChanges.className}`}>
                 {nativeBalanceChanges.label}
               </div>
+            </ClusterValue>
+          </ClusterRow>
+        )}
+        {callTrace && (
+          <ClusterRow>
+            <ClusterValue>
+              <div className={`_txMainTag ${callTrace.className}`}>{callTrace.label}</div>
             </ClusterValue>
           </ClusterRow>
         )}

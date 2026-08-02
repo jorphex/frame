@@ -4,6 +4,7 @@ import svg from '../../../../../../resources/svg'
 import link from '../../../../../../resources/link'
 import {
   SimulationAllowance,
+  SimulationCallTrace,
   SimulationDelegation,
   SimulationEffects,
   SimulationNativeBalanceChanges
@@ -183,6 +184,7 @@ export class ViewData extends React.Component {
       <div className='accountViewScroll cardShow'>
         <SimulationDelegation simulation={req.simulation} />
         <SimulationAllowance simulation={req.simulation} />
+        <SimulationCallTrace simulation={req.simulation} />
         <SimulationNativeBalanceChanges simulation={req.simulation} />
         <SimulationEffects account={req.account} simulation={req.simulation} />
         {/* <div className='txViewData'>

@@ -116,13 +116,17 @@ filtering. A renderer compromise must not be assumed harmless.
 RPC endpoints, explorers, IPFS gateways, ABI sources, token metadata, pricing
 services, update hosting, and signer-vendor services may be unavailable,
 incorrect, or malicious. Transaction execution checks, reported token effects,
-native balance-change traces, allowance reads, account-code classifications, and
-EIP-7702 account-delegation checks come from the configured RPC and are not
-independently verified. Native balance-change evidence is bounded, excludes code
-and storage, may omit gas fees, and is unavailable on RPCs without
-Geth-compatible tracing. A no-code result does not prove an EOA, and code
-presence does not prove ERC-1271, Safe, or any other interface. Decoding is
-explanatory and does not prove contract behavior. Users must verify chain,
+native balance-change traces, internal-call traces, allowance reads,
+account-code classifications, and EIP-7702 account-delegation checks come from
+the configured RPC and are not independently verified. Native balance-change
+evidence is bounded, excludes code and storage, may omit gas fees, and is
+unavailable on RPCs without Geth-compatible tracing. Internal-call evidence is
+accepted only when the root call matches the reviewed sender, destination,
+value, and calldata; its depth, frame count, child count, aggregate input size,
+and failure text are bounded, and raw input/return data are not sent to the
+renderer. A no-code result does not prove an EOA, and code presence does not
+prove ERC-1271, Safe, or any other interface. Decoding and tracing are
+explanatory and do not prove contract behavior. Users must verify chain,
 recipient, value, calldata, and signing details on the hardware device whenever
 possible.
 

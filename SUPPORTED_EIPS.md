@@ -64,13 +64,15 @@ for the exact method surface.
 Configured RPC execution checks use `eth_simulateV1` when available and a
 bounded `eth_call` fallback otherwise. For successful single transactions,
 Frame also requests a bounded `debug_traceCall` `prestateTracer` diff with code
-and storage disabled. Exact native-asset Wei deltas are shown when supported;
-they may omit gas fees and remain configured-RPC claims. Standard token/NFT
-event logs are shown as RPC-reported effects, not complete or independently
-verified balance changes. Stateful wallet-call batches do not use independent
-traces because those cannot represent state carried between calls. Hardware
-support claims and physical-test status are maintained separately in
-[HARDWARE_SUPPORT.md](HARDWARE_SUPPORT.md).
+and storage disabled, plus an optional bounded `callTracer` view correlated to
+the reviewed transaction. Exact native-asset Wei deltas and summarized nested
+calls/contract creations are shown when supported; they may omit gas fees or
+execution details and remain configured-RPC claims. Raw call input and return
+data are not exposed in the trace view. Standard token/NFT event logs are shown
+as RPC-reported effects, not complete or independently verified balance changes.
+Stateful wallet-call batches do not use independent traces because those cannot
+represent state carried between calls. Hardware support claims and physical-test
+status are maintained separately in [HARDWARE_SUPPORT.md](HARDWARE_SUPPORT.md).
 
 ## Chain-Agnostic Compatibility
 

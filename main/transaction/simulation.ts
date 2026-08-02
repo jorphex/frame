@@ -16,6 +16,11 @@ const MAX_RETURN_DATA_BYTES = 128 * 1024
 const MAX_WALLET_CALLS = 16
 const MAX_BALANCE_CHANGE_ACCOUNTS = 128
 const MAX_TRACE_ACCOUNTS = 1024
+const MAX_CALL_TRACE_ENTRIES = 100
+const MAX_INSPECTED_CALL_FRAMES = 512
+const MAX_CALL_TRACE_CHILDREN = 256
+const MAX_CALL_TRACE_DEPTH = 32
+const MAX_CALL_TRACE_INPUT_BYTES = 512 * 1024
 const MAX_UINT64 = (1n << 64n) - 1n
 const MAX_UINT256 = (1n << 256n) - 1n
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
@@ -61,6 +66,26 @@ export type NativeBalanceChanges =
       reason: string
     }
 
+export type CallTraceType =
+  'CALL' | 'STATICCALL' | 'DELEGATECALL' | 'CALLCODE' | 'CREATE' | 'CREATE2' | 'SELFDESTRUCT'
+
+export interface CallTraceEntry {
+  type: CallTraceType
+  depth: number
+  from: string
+  to?: string
+  value: string
+  inputBytes: number
+  selector?: string
+  failure?: string
+}
+
+export interface CallTraceEvidence {
+  source: 'debug_traceCall'
+  calls: CallTraceEntry[]
+  truncated?: boolean
+}
+
 export interface TransactionSimulation {
   status: SimulationStatus
   source?: SimulationSource
@@ -71,6 +96,7 @@ export interface TransactionSimulation {
   allowance?: TokenAllowanceSnapshot
   delegation?: AccountDelegationCheck
   nativeBalanceChanges?: NativeBalanceChanges
+  callTrace?: CallTraceEvidence
 }
 
 export interface SimulationCallData {
@@ -243,6 +269,146 @@ function parseBalance(value: unknown) {
   return balance !== undefined && balance <= MAX_UINT256 ? balance : undefined
 }
 
+const CALL_TRACE_TYPES = new Set<CallTraceType>([
+  'CALL',
+  'STATICCALL',
+  'DELEGATECALL',
+  'CALLCODE',
+  'CREATE',
+  'CREATE2',
+  'SELFDESTRUCT'
+])
+
+interface ParsedCallFrame {
+  entry: Omit<CallTraceEntry, 'depth'>
+  input: string
+  children: unknown[]
+}
+
+function parseCallFrame(value: unknown): ParsedCallFrame | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value['type'] !== 'string' ||
+    !CALL_TRACE_TYPES.has(value['type'] as CallTraceType)
+  ) {
+    return
+  }
+
+  const type = value['type'] as CallTraceType
+  const fromValue = value['from']
+  const toValue = value['to']
+  const inputValue = value['input'] === undefined ? '0x' : value['input']
+  const from = typeof fromValue === 'string' && ADDRESS.test(fromValue) ? fromValue.toLowerCase() : undefined
+  const to = typeof toValue === 'string' && ADDRESS.test(toValue) ? toValue.toLowerCase() : undefined
+  const input = typeof inputValue === 'string' && isData(inputValue) ? inputValue : undefined
+  const parsedValue = value['value'] === undefined ? 0n : parseBalance(value['value'])
+  const children = value['calls'] === undefined ? [] : value['calls']
+
+  if (
+    !from ||
+    (!to && type !== 'CREATE' && type !== 'CREATE2') ||
+    !input ||
+    parsedValue === undefined ||
+    !Array.isArray(children)
+  ) {
+    return
+  }
+
+  const failureValue = value['error'] ?? value['revertReason']
+  if (failureValue !== undefined && typeof failureValue !== 'string') return
+
+  const inputBytes = (input.length - 2) / 2
+  const hasSelector = type !== 'CREATE' && type !== 'CREATE2' && inputBytes >= 4
+  return {
+    entry: {
+      type,
+      from,
+      ...(to && { to }),
+      value: parsedValue.toString(10),
+      inputBytes,
+      ...(hasSelector && { selector: input.slice(0, 10).toLowerCase() }),
+      ...(failureValue !== undefined && {
+        failure: boundedMessage(failureValue, 'Internal call failed')
+      })
+    },
+    input: input.toLowerCase(),
+    children
+  }
+}
+
+function callTraceRootMatches(frame: ParsedCallFrame, transaction: SimulationCallData) {
+  const expectedFrom =
+    typeof transaction.from === 'string' && ADDRESS.test(transaction.from)
+      ? transaction.from.toLowerCase()
+      : undefined
+  const expectedTo =
+    typeof transaction.to === 'string' && ADDRESS.test(transaction.to)
+      ? transaction.to.toLowerCase()
+      : undefined
+  const expectedInput = transaction.data === undefined ? '0x' : transaction.data
+  const expectedValue = transaction.value === undefined ? 0n : parseBalance(transaction.value)
+
+  if (!expectedFrom || !isData(expectedInput) || expectedValue === undefined) return false
+  if (frame.entry.from !== expectedFrom || frame.input !== expectedInput.toLowerCase()) return false
+  if (BigInt(frame.entry.value) !== expectedValue) return false
+
+  return expectedTo
+    ? frame.entry.type === 'CALL' && frame.entry.to === expectedTo
+    : frame.entry.type === 'CREATE'
+}
+
+export function parseCallTrace(
+  result: unknown,
+  transaction: SimulationCallData
+): { calls: CallTraceEntry[]; truncated: boolean } | undefined {
+  const root = parseCallFrame(result)
+  if (!root || !callTraceRootMatches(root, transaction)) return
+
+  const calls: CallTraceEntry[] = []
+  let inspected = 0
+  let inputBytes = 0
+  let truncated = false
+  const stack: Array<{ value: unknown; depth: number; include: boolean }> = [
+    { value: result, depth: 0, include: root.entry.type === 'CREATE' }
+  ]
+
+  while (stack.length) {
+    const candidate = stack.pop()
+    if (!candidate) break
+    if (inspected === MAX_INSPECTED_CALL_FRAMES) {
+      truncated = true
+      break
+    }
+
+    const frame = parseCallFrame(candidate.value)
+    if (!frame) return
+    inspected += 1
+    inputBytes += frame.entry.inputBytes
+    if (inputBytes > MAX_CALL_TRACE_INPUT_BYTES) return
+
+    if (candidate.include) {
+      if (calls.length < MAX_CALL_TRACE_ENTRIES) {
+        calls.push({ ...frame.entry, depth: candidate.depth })
+      } else {
+        truncated = true
+      }
+    }
+
+    if (frame.children.length > MAX_CALL_TRACE_CHILDREN) truncated = true
+    if (candidate.depth === MAX_CALL_TRACE_DEPTH) {
+      truncated ||= frame.children.length > 0
+      continue
+    }
+
+    const children = frame.children.slice(0, MAX_CALL_TRACE_CHILDREN)
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push({ value: children[index], depth: candidate.depth + 1, include: true })
+    }
+  }
+
+  return { calls, truncated }
+}
+
 function parseTraceAccounts(value: unknown) {
   if (!isRecord(value)) return
 
@@ -380,6 +546,54 @@ async function readNativeBalanceChanges(
     status: 'succeeded',
     source: 'debug_traceCall',
     changes: parsed.changes,
+    ...(parsed.truncated ? { truncated: true } : {})
+  }
+}
+
+async function readCallTrace(
+  transaction: SimulationCallData,
+  send: ChainSend,
+  targetChain: Chain,
+  timeoutMs: number
+): Promise<CallTraceEvidence | undefined> {
+  if (timeoutMs <= 0) return
+
+  const outcome = await requestRpc(
+    send,
+    {
+      id: 5,
+      jsonrpc: '2.0',
+      method: 'debug_traceCall',
+      params: [
+        buildEthCall(transaction),
+        'latest',
+        {
+          tracer: 'callTracer',
+          timeout: `${Math.ceil(timeoutMs)}ms`,
+          tracerConfig: { onlyTopCall: false, withLog: false }
+        }
+      ]
+    },
+    targetChain,
+    timeoutMs
+  )
+
+  if (
+    'timedOut' in outcome ||
+    !isRecord(outcome.response) ||
+    outcome.response.id !== 5 ||
+    outcome.response.jsonrpc !== '2.0' ||
+    outcome.response.error !== undefined
+  ) {
+    return
+  }
+
+  const parsed = parseCallTrace(outcome.response.result, transaction)
+  if (!parsed || (!parsed.calls.length && !parsed.truncated)) return
+
+  return {
+    source: 'debug_traceCall',
+    calls: parsed.calls,
     ...(parsed.truncated ? { truncated: true } : {})
   }
 }
@@ -634,18 +848,25 @@ export async function simulateTransaction(
       Math.max(0, timeoutMs - (Date.now() - startedAt))
     )
   })
-  const [simulation, allowance, delegation, nativeBalanceChanges] = await Promise.all([
+  const callTracePromise = simulationPromise.then((simulation) => {
+    if (simulation.status !== 'succeeded') return undefined
+
+    return readCallTrace(transaction, send, targetChain, Math.max(0, timeoutMs - (Date.now() - startedAt)))
+  })
+  const [simulation, allowance, delegation, nativeBalanceChanges, callTrace] = await Promise.all([
     simulationPromise,
     readTokenAllowance(transaction, send, targetChain, timeoutMs),
     readAccountDelegation(transaction.from, send, targetChain, timeoutMs),
-    nativeBalanceChangesPromise
+    nativeBalanceChangesPromise,
+    callTracePromise
   ])
 
   return {
     ...simulation,
     ...(allowance ? { allowance } : {}),
     ...(delegation.status === 'undelegated' ? {} : { delegation }),
-    ...(nativeBalanceChanges ? { nativeBalanceChanges } : {})
+    ...(nativeBalanceChanges ? { nativeBalanceChanges } : {}),
+    ...(callTrace ? { callTrace } : {})
   }
 }
 

@@ -1,6 +1,7 @@
 import {
   buildEthCall,
   buildSimulationCall,
+  parseCallTrace,
   parseDelegationIndicator,
   parseNativeBalanceChanges,
   parseSimulateCallsResult,
@@ -41,6 +42,15 @@ const unsupportedNativeBalanceChanges = {
   source: 'debug_traceCall',
   reason: 'Configured RPC does not support native balance-change tracing'
 }
+
+const callFrame = (overrides = {}) => ({
+  type: 'CALL',
+  from: transaction.from,
+  to: transaction.to,
+  value: transaction.value,
+  input: transaction.data,
+  ...overrides
+})
 
 function rpcError(code, message) {
   return { id: 1, jsonrpc: '2.0', error: { code, message } }
@@ -172,6 +182,154 @@ it('fails closed on malformed native balance changes and bounds account output',
     oversized[`0x${index.toString(16).padStart(40, '0')}`] = { balance: '0x0' }
   }
   expect(parseNativeBalanceChanges({ pre: oversized, post: {} })).toBeUndefined()
+})
+
+it('strictly parses bounded nested calls without exposing raw trace data', () => {
+  const firstTarget = '0x3333333333333333333333333333333333333333'
+  const delegate = '0x4444444444444444444444444444444444444444'
+  const created = '0x5555555555555555555555555555555555555555'
+  const result = parseCallTrace(
+    callFrame({
+      calls: [
+        callFrame({
+          from: transaction.to,
+          to: firstTarget,
+          value: '0x2',
+          input: '0xabcdef01dead',
+          output: `0x${'ff'.repeat(64)}`,
+          calls: [
+            callFrame({
+              type: 'DELEGATECALL',
+              from: firstTarget,
+              to: delegate,
+              value: '0x0',
+              input: '0x12345678',
+              error: `execution reverted: ${'x'.repeat(300)}`
+            })
+          ]
+        }),
+        callFrame({
+          type: 'CREATE',
+          from: transaction.to,
+          to: created,
+          value: '0x0',
+          input: '0x60006000'
+        })
+      ]
+    }),
+    transaction
+  )
+
+  expect(result).toEqual({
+    truncated: false,
+    calls: [
+      {
+        type: 'CALL',
+        depth: 1,
+        from: transaction.to,
+        to: firstTarget,
+        value: '2',
+        inputBytes: 6,
+        selector: '0xabcdef01'
+      },
+      {
+        type: 'DELEGATECALL',
+        depth: 2,
+        from: firstTarget,
+        to: delegate,
+        value: '0',
+        inputBytes: 4,
+        selector: '0x12345678',
+        failure: expect.stringMatching(/^execution reverted:/)
+      },
+      {
+        type: 'CREATE',
+        depth: 1,
+        from: transaction.to,
+        to: created,
+        value: '0',
+        inputBytes: 4
+      }
+    ]
+  })
+  expect(result.calls[1].failure).toHaveLength(240)
+  expect(JSON.stringify(result)).not.toContain('f'.repeat(64))
+  expect(result.calls.every((call) => !Object.hasOwn(call, 'input') && !Object.hasOwn(call, 'output'))).toBe(
+    true
+  )
+})
+
+it('includes a correlated top-level contract creation', () => {
+  const deployment = { ...transaction, to: undefined, value: '0x0', data: '0x60006000' }
+  const created = '0x5555555555555555555555555555555555555555'
+
+  expect(
+    parseCallTrace(
+      callFrame({
+        type: 'CREATE',
+        to: created,
+        value: deployment.value,
+        input: deployment.data
+      }),
+      deployment
+    )
+  ).toEqual({
+    truncated: false,
+    calls: [
+      {
+        type: 'CREATE',
+        depth: 0,
+        from: transaction.from,
+        to: created,
+        value: '0',
+        inputBytes: 4
+      }
+    ]
+  })
+})
+
+it.each([
+  ['sender', callFrame({ from: '0x9999999999999999999999999999999999999999' })],
+  ['destination', callFrame({ to: '0x9999999999999999999999999999999999999999' })],
+  ['value', callFrame({ value: '0x2' })],
+  ['calldata', callFrame({ input: '0x123456' })],
+  ['root type', callFrame({ type: 'DELEGATECALL' })],
+  ['unknown frame type', callFrame({ calls: [callFrame({ type: 'FUTURECALL' })] })],
+  ['malformed address', callFrame({ calls: [callFrame({ from: 'not-an-address' })] })],
+  ['malformed input', callFrame({ calls: [callFrame({ input: '0x0' })] })],
+  ['malformed children', callFrame({ calls: {} })]
+])('rejects an uncorrelated or malformed call trace: %s', (_label, trace) => {
+  expect(parseCallTrace(trace, transaction)).toBeUndefined()
+})
+
+it('bounds call-trace output, depth, children, and aggregate calldata', () => {
+  const repeated = Array.from({ length: 101 }, () => callFrame({ from: transaction.to }))
+  expect(parseCallTrace(callFrame({ calls: repeated }), transaction)).toMatchObject({
+    truncated: true,
+    calls: expect.any(Array)
+  })
+  expect(parseCallTrace(callFrame({ calls: repeated }), transaction).calls).toHaveLength(100)
+
+  let deep = callFrame({ from: transaction.to })
+  for (let depth = 0; depth < 34; depth += 1) {
+    deep = callFrame({ from: transaction.to, calls: [deep] })
+  }
+  expect(parseCallTrace(callFrame({ calls: [deep] }), transaction)).toMatchObject({ truncated: true })
+
+  const tooManyChildren = Array.from({ length: 257 }, () => callFrame({ from: transaction.to }))
+  expect(parseCallTrace(callFrame({ calls: tooManyChildren }), transaction)).toMatchObject({
+    truncated: true
+  })
+
+  const largeInput = `0x${'00'.repeat(128 * 1024)}`
+  expect(
+    parseCallTrace(
+      callFrame({
+        calls: Array.from({ length: 4 }, () => callFrame({ from: transaction.to, input: largeInput }))
+      }),
+      transaction
+    )
+  ).toBeUndefined()
 })
 
 it('strictly parses one successful simulation call', () => {
@@ -332,6 +490,98 @@ it('attaches exact configured-RPC native balance changes after execution succeed
     expect.any(Function),
     { type: 'ethereum', id: 1 }
   )
+})
+
+it('attaches a correlated configured-RPC call trace after execution succeeds', async () => {
+  const internalTarget = '0x3333333333333333333333333333333333333333'
+  const trace = callFrame({
+    calls: [
+      callFrame({
+        from: transaction.to,
+        to: internalTarget,
+        value: '0x0',
+        input: '0xabcdef01deadbeef'
+      })
+    ]
+  })
+  const send = jest.fn((payload, callback) => {
+    const tracer = payload.params?.[2]?.tracer
+    const result =
+      payload.method === 'eth_getCode'
+        ? '0x'
+        : tracer === 'prestateTracer'
+          ? { pre: {}, post: {} }
+          : tracer === 'callTracer'
+            ? trace
+            : simulateSuccess
+    callback({ id: payload.id, jsonrpc: '2.0', result })
+  })
+
+  await expect(simulateTransaction(transaction, { send })).resolves.toMatchObject({
+    status: 'succeeded',
+    callTrace: {
+      source: 'debug_traceCall',
+      calls: [
+        {
+          type: 'CALL',
+          depth: 1,
+          from: transaction.to,
+          to: internalTarget,
+          value: '0',
+          inputBytes: 8,
+          selector: '0xabcdef01'
+        }
+      ]
+    }
+  })
+  expect(send).toHaveBeenCalledWith(
+    {
+      id: 5,
+      jsonrpc: '2.0',
+      method: 'debug_traceCall',
+      params: [
+        buildEthCall(transaction),
+        'latest',
+        {
+          tracer: 'callTracer',
+          timeout: expect.stringMatching(/^[1-9][0-9]*ms$/),
+          tracerConfig: { onlyTopCall: false, withLog: false }
+        }
+      ]
+    },
+    expect.any(Function),
+    { type: 'ethereum', id: 1 }
+  )
+  expect(JSON.stringify((await simulateTransaction(transaction, { send })).callTrace)).not.toContain(
+    'deadbeef'
+  )
+})
+
+it('omits unsupported, malformed, and uncorrelated call-trace evidence', async () => {
+  const responses = [
+    rpcError(-32601, 'Method not found'),
+    { id: 999, jsonrpc: '2.0', result: callFrame() },
+    { id: 5, jsonrpc: '1.0', result: callFrame() },
+    { id: 5, jsonrpc: '2.0', result: { type: 'CALL' } },
+    {
+      id: 5,
+      jsonrpc: '2.0',
+      result: callFrame({ to: '0x9999999999999999999999999999999999999999' })
+    }
+  ]
+
+  for (const callTraceResponse of responses) {
+    const send = jest.fn((payload, callback) => {
+      const tracer = payload.params?.[2]?.tracer
+      if (payload.method === 'eth_getCode') callback({ id: payload.id, jsonrpc: '2.0', result: '0x' })
+      else if (tracer === 'prestateTracer') {
+        callback({ id: payload.id, jsonrpc: '2.0', result: { pre: {}, post: {} } })
+      } else if (tracer === 'callTracer') callback(callTraceResponse)
+      else callback({ id: payload.id, jsonrpc: '2.0', result: simulateSuccess })
+    })
+
+    await expect(simulateTransaction(transaction, { send })).resolves.not.toHaveProperty('callTrace')
+  }
 })
 
 it('qualifies malformed and unsupported native balance traces without weakening execution evidence', async () => {
