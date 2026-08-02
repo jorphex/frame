@@ -17,7 +17,7 @@ the configured chain connection.
 | Permissions     | `wallet_getPermissions`, `wallet_requestPermissions`                                            | Support only EIP-2255 `eth_accounts` permission without caveats. Permission requests prompt for the selected account.                                                                                                 |
 | Transactions    | `eth_sendTransaction`                                                                           | Normalizes, decodes, checks, simulates, reviews, signs, and broadcasts legacy/type-1/type-2 transactions. Explicit type 3+, EIP-7702 authorization lists, and unknown transaction fields are rejected.                |
 | Message signing | `personal_sign`, `eth_sign`, `personal_ecRecover`                                               | Normalizes standard/legacy `personal_sign` parameter order, reviews UTF-8 or opaque bytes, identifies SIWE, and places explicit consent in front of dangerous `eth_sign`.                                             |
-| Typed signing   | `eth_signTypedData`, `eth_signTypedData_v1`, `eth_signTypedData_v3`, `eth_signTypedData_v4`     | Strictly validates the selected format and presents structured domain/message review. Unsupported similarly named methods are not treated as signing methods and are forwarded.                                       |
+| Typed signing   | `eth_signTypedData`, `eth_signTypedData_v1`, `eth_signTypedData_v3`, `eth_signTypedData_v4`     | Strictly validates the selected format and presents structured domain/message review. Unsupported similarly named signing methods fail closed rather than reaching the chain connection.                              |
 | Chains          | `wallet_addEthereumChain`, `wallet_switchEthereumChain`, `wallet_getEthereumChains`             | Validate and confirm chain changes; the non-standard getter returns enabled Frame chains.                                                                                                                             |
 | Assets          | `wallet_watchAsset`, `wallet_getAssets`                                                         | ERC-20 suggestion plus a non-standard getter for the selected account's scanned native/ERC-20 assets.                                                                                                                 |
 | Wallet calls    | `wallet_sendCalls`, `wallet_getCallsStatus`, `wallet_showCallsStatus`, `wallet_getCapabilities` | EIP-5792 version `2.0.0`, non-atomic sequential calls only. Status is origin/account scoped and persisted; capabilities report `atomic.status = "unsupported"`.                                                       |
@@ -38,16 +38,22 @@ origin and selected account before mapping the nested request. Current CAIP-27
 
 ## Forwarded Methods
 
-All other method names are forwarded to the configured connection for the
-target chain after Frame removes its internal origin and chain-routing fields.
-This includes ordinary read methods such as `eth_call`, `eth_getBalance`, and
-`eth_getBlockByNumber`.
+Other method names are forwarded to the configured connection for the target
+chain after Frame removes its internal origin and chain-routing fields. This
+includes ordinary reads such as `eth_call`, `eth_getBalance`, and
+`eth_getBlockByNumber`, plus read-only client extensions such as trace methods.
+
+Frame never forwards an unhandled `wallet_*`, `personal_*`, `account_*`, or
+`eth_sign*` method. It also blocks the privileged `admin_*`, `engine_*`, and
+`miner_*` namespaces. Within `debug_*`, Frame forwards an explicit set of current
+raw-inspection and trace methods; other debug methods fail closed. Rejected
+methods use EIP-1193 error `4200` so those node-account and privileged APIs
+cannot become a path around Frame's review boundary.
 
 `eth_sendRawTransaction` is permission-gated but then forwarded unchanged; Frame
-cannot decode, review, or sign an already signed transaction. Unknown
-`eth_signTypedData*` variants are also forwarded rather than treated as wallet
-signing requests. Callers must not infer wallet support merely because the
-configured RPC node happens to implement a forwarded method.
+cannot decode, review, or sign an already signed transaction. Callers must not
+infer wallet support merely because the configured RPC node happens to implement
+a forwarded method.
 
 ## Chains And Errors
 

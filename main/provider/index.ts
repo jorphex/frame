@@ -48,6 +48,7 @@ import walletCallBatchLedger from './walletCallLedger'
 import { executeWalletCallRuntime } from './walletCallRuntime'
 import walletCallEvidenceRuntime from './walletCallEvidenceRuntime'
 import { showWalletCallStatus } from './walletCallStatusView'
+import { isUnsafeRpcForwardingMethod } from './rpcForwarding'
 
 import { Subscription, SubscriptionType, hasSubscriptionPermission } from './subscriptions'
 import {
@@ -1534,6 +1535,10 @@ export class Provider extends EventEmitter {
     // Connection dependent methods need to pass targetChain
     if (method === 'net_version') return this.getNetVersion(payload, res, targetChain)
     if (method === 'eth_chainId') return this.getChainId(payload, res, targetChain)
+
+    if (isUnsafeRpcForwardingMethod(method)) {
+      return resError({ message: `Frame does not support ${method}`, code: 4200 }, payload, res)
+    }
 
     // remove custom data
     const { _origin, chainId, ...rpcPayload } = payload

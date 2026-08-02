@@ -13,6 +13,13 @@ The current standards and wallet-method surface are documented in
 [`SUPPORTED_EIPS.md`](SUPPORTED_EIPS.md) and
 [`RPC_COMPATIBILITY.md`](RPC_COMPATIBILITY.md).
 
+Frame rejects unhandled wallet/signing methods, the `admin_*`, `engine_*`, and
+`miner_*` namespaces, and unreviewed `debug_*` methods instead of forwarding
+them to the configured RPC. This prevents those node-account and administrative
+method families from becoming a path around Frame's review boundary; ordinary
+execution reads, reviewed debug queries, and explicitly signed raw transaction
+broadcast remain available.
+
 ## Assets
 
 - Software-signer seed and private-key material.

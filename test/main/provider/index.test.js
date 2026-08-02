@@ -705,6 +705,74 @@ describe('#send', () => {
     })
   })
 
+  it.each([
+    'wallet_invokeMethod',
+    'wallet_futureMethod',
+    'personal_sendTransaction',
+    'personal_unlockAccount',
+    'account_signTransaction',
+    'eth_signTransaction',
+    'admin_stopRPC',
+    'debug_cpuProfile',
+    'debug_getAndDeleteDatabase',
+    'debug_setHead',
+    'debug_traceFutureMethod',
+    'engine_newPayloadV4',
+    'miner_start'
+  ])('rejects unsafe fallback method %s without contacting the chain connection', (method) => {
+    const response = jest.fn()
+
+    send({ id: 19, jsonrpc: '2.0', method, params: [] }, response)
+
+    expect(response).toHaveBeenCalledWith({
+      id: 19,
+      jsonrpc: '2.0',
+      error: { message: `Frame does not support ${method}`, code: 4200 }
+    })
+    expect(connection.send).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['wallet_request', { request: { method: 'personal_sendTransaction', params: [] } }],
+    [
+      'caip_request',
+      {
+        chainId: 'eip155:1',
+        session: 'session',
+        request: { method: 'personal_sendTransaction', params: [] }
+      }
+    ]
+  ])('rejects unsafe methods nested in an authorized %s envelope', (method, params) => {
+    const response = jest.fn()
+
+    send({ id: 20, jsonrpc: '2.0', method, params }, response)
+
+    expect(response).toHaveBeenCalledWith({
+      id: 20,
+      jsonrpc: '2.0',
+      error: { message: 'Frame does not support personal_sendTransaction', code: 4200 }
+    })
+    expect(connection.send).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'eth_getProof',
+    'debug_getRawBlock',
+    'debug_traceTransaction',
+    'trace_replayTransaction',
+    'eth_sendRawTransaction'
+  ])('preserves chain forwarding for %s', (method) => {
+    const request = { method, params: [] }
+
+    send(request)
+
+    expect(connection.send).toHaveBeenCalledWith(request, expect.any(Function), {
+      type: 'ethereum',
+      id: 1,
+      on: true
+    })
+  })
+
   it('returns an error when an unknown chain is given', (done) => {
     const request = { method: 'eth_testFrame', chainId: '0x63' }
 
@@ -2768,13 +2836,14 @@ describe('#send', () => {
     const unknownVersions = ['_v5', '_v1.1', 'v3']
 
     unknownVersions.forEach((versionExtension) => {
-      it(`passes a request with unhandled method eth_signTypedData${versionExtension} through to the connection`, (done) => {
-        mockConnectionError('received unhandled request')
+      it(`rejects unhandled method eth_signTypedData${versionExtension} without forwarding`, (done) => {
+        const method = `eth_signTypedData${versionExtension}`
 
         const params = [address, 'test']
 
-        send({ method: `eth_signTypedData${versionExtension}`, params }, (err) => {
-          expect(err.error.message).toBe('received unhandled request')
+        send({ method, params }, (err) => {
+          expect(err.error).toEqual({ message: `Frame does not support ${method}`, code: 4200 })
+          expect(connection.send).not.toHaveBeenCalled()
           done()
         })
       })
