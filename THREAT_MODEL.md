@@ -38,13 +38,17 @@ the same user. HTTP permits any CORS origin, and native clients can choose their
 `Origin` header. Origin labels and permission prompts reduce accidental access;
 they are not proof of process identity.
 
-Protected RPC methods require an account permission. Requests from the companion
-extension have separate recognition logic. The current model does not fully
-isolate permissions by process identity, transport, account, chain, method, or
-expiry. Request bodies, HTTP connections, WebSocket clients, and request rates
-have explicit ceilings. Header and request-body receive times are bounded; HTTP
-subscription polls complete within 15 seconds. These availability controls do
-not authenticate callers or make asserted origins trustworthy.
+Originless and opaque HTTP/WebSocket clients receive server-generated identities
+scoped to one transport connection, so separate connections cannot silently
+inherit the legacy shared `Unknown` permission. Those identities and permissions
+are session-only and are removed during startup recovery. Protected RPC methods
+require an account permission. Requests from the companion extension have
+separate recognition logic. The current model does not fully isolate permissions
+by authenticated process identity, account, chain, method, or expiry. Request
+bodies, HTTP connections, WebSocket clients, and request rates have explicit
+ceilings. Header and request-body receive times are bounded; HTTP subscription
+polls complete within 15 seconds. These availability and connection-isolation
+controls do not authenticate callers or make asserted origins trustworthy.
 
 The operating system account is therefore a major trust boundary. Frame is not
 expected to protect wallet data from malware, debuggers, or an administrator that
