@@ -11,7 +11,14 @@ import type { Permission } from '../store/state'
 const dev = process.env.NODE_ENV === 'development'
 
 const activeExtensionChecks: Record<string, Promise<boolean>> = {}
-const activePermissionChecks: Record<string, Promise<Permission | undefined>> = {}
+interface ActivePermissionCheck {
+  promise: Promise<Permission | undefined>
+  request: AccessRequest
+  settle(permission?: Permission): void
+  waiters: number
+}
+
+const activePermissionChecks: Record<string, ActivePermissionCheck> = {}
 const extensionPrefixes = {
   chrome: 'chrome-extension',
   firefox: 'moz-extension',
@@ -137,19 +144,51 @@ async function requestExtensionPermission(extension: FrameExtension) {
   return result
 }
 
-async function requestPermission(address: Address, fullPayload: RPCRequestPayload) {
+function waitForPermission(permissionCheckId: string, check: ActivePermissionCheck, signal?: AbortSignal) {
+  if (signal?.aborted) return Promise.resolve(undefined)
+
+  check.waiters += 1
+  return new Promise<Permission | undefined>((resolve) => {
+    let waiting = true
+    const finish = (permission?: Permission) => {
+      if (!waiting) return
+      waiting = false
+      check.waiters -= 1
+      signal?.removeEventListener('abort', abort)
+      resolve(permission)
+    }
+    const abort = () => {
+      finish()
+      if (check.waiters > 0 || activePermissionChecks[permissionCheckId] !== check) return
+
+      try {
+        accounts.cancelUnapprovedRequestForAccount(check.request.account, check.request.handlerId, {
+          code: 4900,
+          message: 'Requesting client disconnected'
+        })
+      } finally {
+        check.settle()
+      }
+    }
+
+    signal?.addEventListener('abort', abort, { once: true })
+    check.promise.then(finish)
+  })
+}
+
+async function requestPermission(address: Address, fullPayload: RPCRequestPayload, signal?: AbortSignal) {
   const { _origin: originId, ...payload } = fullPayload
   const permissionCheckId = `${address.toLowerCase()}:${originId}`
 
   if (permissionCheckId in activePermissionChecks) {
-    return activePermissionChecks[permissionCheckId]
+    const check = activePermissionChecks[permissionCheckId]
+    if (check) return waitForPermission(permissionCheckId, check, signal)
   }
 
-  let settle: (permission?: Permission) => void = () => {}
-  const result = new Promise<Permission | undefined>((resolve) => {
-    settle = resolve
+  let resolveCheck: (permission?: Permission) => void = () => {}
+  const promise = new Promise<Permission | undefined>((resolve) => {
+    resolveCheck = resolve
   })
-  activePermissionChecks[permissionCheckId] = result
 
   const request: AccessRequest = {
     payload,
@@ -158,11 +197,21 @@ async function requestPermission(address: Address, fullPayload: RPCRequestPayloa
     origin: originId,
     account: address
   }
+  const check: ActivePermissionCheck = {
+    promise,
+    request,
+    waiters: 0,
+    settle(permission) {
+      if (activePermissionChecks[permissionCheckId] !== check) return
+      delete activePermissionChecks[permissionCheckId]
+      resolveCheck(permission)
+    }
+  }
+  activePermissionChecks[permissionCheckId] = check
 
   if (!accountIsCurrent(address)) {
-    delete activePermissionChecks[permissionCheckId]
-    settle()
-    return result
+    check.settle()
+    return waitForPermission(permissionCheckId, check, signal)
   }
 
   try {
@@ -170,15 +219,13 @@ async function requestPermission(address: Address, fullPayload: RPCRequestPayloa
       const origin = store('main.origins', originId)
       const permission = origin ? storeApi.getPermission(address, origin.name) : undefined
 
-      delete activePermissionChecks[permissionCheckId]
-      settle(permission)
+      check.settle(permission)
     })
   } catch {
-    delete activePermissionChecks[permissionCheckId]
-    settle()
+    check.settle()
   }
 
-  return result
+  return waitForPermission(permissionCheckId, check, signal)
 }
 
 export function getOriginAccess(payload: RPCRequestPayload): OriginAccess | undefined {
@@ -191,13 +238,18 @@ export function getOriginAccess(payload: RPCRequestPayload): OriginAccess | unde
   return { address, origin: origin.name, ...(permission !== undefined && { permission }) }
 }
 
-export async function requestOriginAccess(payload: RPCRequestPayload, expectedAddress?: Address) {
+export async function requestOriginAccess(
+  payload: RPCRequestPayload,
+  expectedAddress?: Address,
+  signal?: AbortSignal
+) {
   const access = getOriginAccess(payload)
   if (!access) return false
   if (expectedAddress && access.address.toLowerCase() !== expectedAddress.toLowerCase()) return false
   if (access.permission?.provider) return true
 
-  const permission = await requestPermission(access.address, payload)
+  const permission = await requestPermission(access.address, payload, signal)
+  if (signal?.aborted) return false
   return accountIsCurrent(access.address) && !!permission?.provider
 }
 
@@ -276,7 +328,7 @@ export async function isKnownExtension(extension: FrameExtension) {
   return extensionPermission ?? requestExtensionPermission(extension)
 }
 
-export async function isTrusted(payload: RPCRequestPayload) {
+export async function isTrusted(payload: RPCRequestPayload, signal?: AbortSignal) {
   // Permission granted to unknown origins only persist until the Frame is closed, they are not permanent
   const origin = store('main.origins', payload._origin)
   if (!origin) return false
@@ -290,7 +342,7 @@ export async function isTrusted(payload: RPCRequestPayload) {
   const access = getOriginAccess(payload)
   if (!access) return false
 
-  const permission = access.permission || (await requestPermission(access.address, payload))
+  const permission = access.permission || (await requestPermission(access.address, payload, signal))
 
-  return accountIsCurrent(access.address) && !!permission?.provider
+  return !signal?.aborted && accountIsCurrent(access.address) && !!permission?.provider
 }

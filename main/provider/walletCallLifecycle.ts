@@ -5,6 +5,7 @@ import {
   type WalletCallAdmissionInput,
   type WalletCallAdmissionLedger
 } from './walletCallAdmission'
+import { getRequestSignal, bindRequestSignal } from './requestSignal'
 
 interface WalletCallLifecycleLedger extends WalletCallAdmissionLedger {
   fail(origin: string, account: string, id: string): void
@@ -118,7 +119,7 @@ function createResponder(
     }
   })
 
-  return Object.freeze(responder)
+  return Object.freeze(bindRequestSignal(responder, getRequestSignal(respond)))
 }
 
 export class WalletCallLifecycleController {

@@ -21,6 +21,7 @@ import protectedMethods from './protectedMethods'
 import { parseChainId } from '../provider/chainRequests'
 import originSessions from './originSessions'
 import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
+import { bindRequestSignal } from '../provider/requestSignal'
 
 const logTraffic = (origin: string) =>
   process.env['LOG_TRAFFIC'] === 'true' || process.env['LOG_TRAFFIC'] === origin
@@ -65,8 +66,9 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
   socket.frameExtension = parseFrameExtension(req)
   const sessionOrigin = createSessionOrigin()
   const requests = new FixedWindowRateLimiter(rateLimit)
+  const pendingRequests = new Set<AbortController>()
 
-  const res = (payload: TransportResponse) => {
+  const sendResponse = (payload: TransportResponse) => {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(payload), (err) => {
         if (err) log.info(err)
@@ -82,9 +84,15 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
 
     const parsedPayload = parsePayload<ExtensionPayload>(data.toString())
     if (!parsedPayload.success) {
-      return res({ id: parsedPayload.id, jsonrpc: '2.0', error: parsedPayload.error })
+      return sendResponse({ id: parsedPayload.id, jsonrpc: '2.0', error: parsedPayload.error })
     }
     const rawPayload = parsedPayload.payload
+    const controller = new AbortController()
+    pendingRequests.add(controller)
+    const res = bindRequestSignal((payload: TransportResponse) => {
+      pendingRequests.delete(controller)
+      if (!controller.signal.aborted) sendResponse(payload)
+    }, controller.signal)
 
     let requestOrigin = socket.origin
     if (socket.frameExtension) {
@@ -96,6 +104,7 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
 
         return res({ id: rawPayload.id, jsonrpc: rawPayload.jsonrpc, error })
       }
+      if (controller.signal.aborted) return
 
       // Request from extension, swap origin
       if (rawPayload.__frameOrigin) {
@@ -145,7 +154,10 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
 
     if (origin === 'frame-extension') {
       // custom extension action for summoning Frame
-      if (rawPayload.method === 'frame_summon') return windows.toggleTray()
+      if (rawPayload.method === 'frame_summon') {
+        pendingRequests.delete(controller)
+        return windows.toggleTray()
+      }
 
       const { id, jsonrpc } = rawPayload
       if (rawPayload.method === 'eth_chainId') return res({ id, jsonrpc, result: chainId })
@@ -153,38 +165,47 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
         return res({ id, jsonrpc, result: BigInt(chainId).toString(10) })
     }
 
-    if (protectedMethods.indexOf(payload.method) > -1 && !(await isTrusted(payload))) {
+    const trusted =
+      protectedMethods.indexOf(payload.method) === -1 || (await isTrusted(payload, controller.signal))
+    if (controller.signal.aborted) return
+
+    if (!trusted) {
       let error = { message: 'Permission denied, approve ' + origin + ' in Frame to continue', code: 4100 }
       if (!accounts.getSelectedAddresses()[0]) error = { message: 'No Frame account selected', code: 4100 }
       res({ id: payload.id, jsonrpc: payload.jsonrpc, error })
     } else {
-      provider.send(payload, (response) => {
-        if (response && response.result) {
-          if (payload.method === 'eth_subscribe') {
-            if (typeof response.result === 'string') {
-              subs[response.result] = { socket, originId: payload._origin }
+      provider.send(
+        payload,
+        bindRequestSignal((response) => {
+          if (response && response.result) {
+            if (payload.method === 'eth_subscribe') {
+              if (typeof response.result === 'string') {
+                subs[response.result] = { socket, originId: payload._origin }
+              }
+            } else if (payload.method === 'eth_unsubscribe') {
+              const params = Array.isArray(payload.params) ? payload.params : []
+              params.forEach((sub) => {
+                if (typeof sub === 'string' && subs[sub]) delete subs[sub]
+              })
             }
-          } else if (payload.method === 'eth_unsubscribe') {
-            const params = Array.isArray(payload.params) ? payload.params : []
-            params.forEach((sub) => {
-              if (typeof sub === 'string' && subs[sub]) delete subs[sub]
-            })
           }
-        }
 
-        if (logTraffic(origin))
-          log.info(
-            `<- res | ${socket.frameExtension ? 'ext' : 'ws'} | ${origin} | ${
-              payload.method
-            } | <- | ${JSON.stringify(response.result || response.error)}`
-          )
+          if (logTraffic(origin))
+            log.info(
+              `<- res | ${socket.frameExtension ? 'ext' : 'ws'} | ${origin} | ${
+                payload.method
+              } | <- | ${JSON.stringify(response.result || response.error)}`
+            )
 
-        res(response)
-      })
+          res(response)
+        }, controller.signal)
+      )
     }
   })
   socket.on('error', (err) => log.error(err))
   socket.on('close', () => {
+    pendingRequests.forEach((controller) => controller.abort())
+    pendingRequests.clear()
     Object.keys(subs).forEach((sub) => {
       const subscription = subs[sub]
       if (subscription?.socket.id === socket.id) {

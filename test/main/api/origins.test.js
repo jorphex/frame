@@ -14,7 +14,11 @@ import {
 import accounts from '../../../main/accounts'
 import store from '../../../main/store'
 
-jest.mock('../../../main/accounts', () => ({ current: jest.fn(), addRequest: jest.fn() }))
+jest.mock('../../../main/accounts', () => ({
+  current: jest.fn(),
+  addRequest: jest.fn(),
+  cancelUnapprovedRequestForAccount: jest.fn()
+}))
 jest.mock('../../../main/store')
 
 beforeAll(() => {
@@ -28,6 +32,7 @@ afterAll(() => {
 beforeEach(() => {
   accounts.current.mockReset()
   accounts.addRequest.mockReset()
+  accounts.cancelUnapprovedRequestForAccount.mockReset()
   store.initOrigin = jest.fn()
   store.addOriginRequest = jest.fn()
 
@@ -488,6 +493,54 @@ describe('#isTrusted', () => {
     jest.runAllTimers()
 
     return runTest
+  })
+
+  it('keeps a shared access prompt when only one requesting transport disconnects', async () => {
+    const address = '0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5'
+    const payload = { method: 'eth_accounts', _origin: frameTestOriginId }
+    const first = new AbortController()
+    const second = new AbortController()
+    let resolvePrompt
+
+    accounts.current.mockReturnValue({ address })
+    accounts.addRequest.mockImplementationOnce((_request, callback) => {
+      resolvePrompt = callback
+    })
+
+    const firstResult = isTrusted(payload, first.signal)
+    const secondResult = requestOriginAccess(payload, undefined, second.signal)
+    first.abort()
+    await expect(firstResult).resolves.toBe(false)
+
+    expect(accounts.addRequest).toHaveBeenCalledTimes(1)
+    expect(accounts.cancelUnapprovedRequestForAccount).not.toHaveBeenCalled()
+
+    store.set('main.permissions', address, {
+      [frameTestOriginId]: { origin: 'test.frame.eth', provider: true }
+    })
+    resolvePrompt()
+
+    await expect(secondResult).resolves.toBe(true)
+    expect(accounts.cancelUnapprovedRequestForAccount).not.toHaveBeenCalled()
+  })
+
+  it('dismisses an untouched access prompt when its final transport disconnects', async () => {
+    const address = '0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5'
+    const payload = { method: 'eth_accounts', _origin: frameTestOriginId }
+    const controller = new AbortController()
+
+    accounts.current.mockReturnValue({ address })
+    accounts.addRequest.mockImplementationOnce(() => {})
+
+    const result = isTrusted(payload, controller.signal)
+    controller.abort()
+
+    await expect(result).resolves.toBe(false)
+    expect(accounts.cancelUnapprovedRequestForAccount).toHaveBeenCalledWith(
+      address,
+      frameTestOriginId,
+      expect.objectContaining({ code: 4900, message: 'Requesting client disconnected' })
+    )
   })
 
   const userActions = [

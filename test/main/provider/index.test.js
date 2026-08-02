@@ -20,6 +20,7 @@ import { executeWalletCallRuntime } from '../../../main/provider/walletCallRunti
 import walletCallEvidenceRuntime from '../../../main/provider/walletCallEvidenceRuntime'
 import { showWalletCallStatus } from '../../../main/provider/walletCallStatusView'
 import { ApprovalType } from '../../../resources/constants'
+import { bindRequestSignal } from '../../../main/provider/requestSignal'
 
 const address = '0x22dd63c3619818fdbc262c78baee43cb61e9cccf'
 
@@ -2636,6 +2637,36 @@ describe('#send', () => {
       expect(accountRequests[0].payload.params[0]).toBe(address)
       expect(accountRequests[0].payload.params[1]).toEqual(addressSizedMessage)
       expect(accountRequests[0].payload.params[2]).toEqual(password)
+    })
+
+    it('releases the exact response handler when its transport disconnects before approval', () => {
+      const controller = new AbortController()
+      const callback = bindRequestSignal(jest.fn(), controller.signal)
+      accounts.addRequest.mockImplementationOnce((req, responder) => {
+        req.res = responder
+        accountRequests.push(req)
+      })
+
+      send({ method: 'personal_sign', params: [hexMessage, address, password] }, callback)
+      const [handlerId] = Object.keys(provider.handlers)
+
+      expect(handlerId).toBe(accountRequests[0].handlerId)
+      controller.abort()
+
+      expect(provider.handlers).toEqual({})
+      expect(callback).not.toHaveBeenCalled()
+    })
+
+    it('does not create approval state for an already-disconnected transport', () => {
+      const controller = new AbortController()
+      const callback = bindRequestSignal(jest.fn(), controller.signal)
+      controller.abort()
+
+      send({ method: 'personal_sign', params: [hexMessage, address, password] }, callback)
+
+      expect(accountRequests).toHaveLength(0)
+      expect(provider.handlers).toEqual({})
+      expect(callback).not.toHaveBeenCalled()
     })
 
     it('does not submit a request from an account other than the current one', (done) => {

@@ -6,6 +6,7 @@ import provider from '../../../main/provider'
 import accounts from '../../../main/accounts'
 import ws from '../../../main/api/ws'
 import { MAX_REQUEST_BYTES } from '../../../main/api/validPayload'
+import { getRequestSignal } from '../../../main/provider/requestSignal'
 
 let socketConnection, mockSocket
 
@@ -23,6 +24,8 @@ jest.mock('../../../main/accounts', () => ({ getSelectedAddresses: jest.fn(() =>
 jest.mock('../../../main/windows', () => {})
 
 beforeEach(() => {
+  provider.send.mockReset()
+  provider.on.mockReset()
   store.initOrigin = jest.fn()
   store.set('main.knownExtensions', { ldcoohedfbjoobcadoglnnmmfbdlmmhf: true })
   accounts.getSelectedAddresses.mockReturnValue([])
@@ -110,6 +113,34 @@ it('does not deliver subscriptions to a closing socket', () => {
   })
 
   expect(regularSocket.send).not.toHaveBeenCalled()
+})
+
+it('aborts only still-pending provider requests when a WebSocket closes', () => {
+  const callbacks = []
+  provider.send.mockImplementation((_payload, callback) => callbacks.push(callback))
+  const regularSocket = new EventEmitter()
+  regularSocket.readyState = WebSocket.OPEN
+  regularSocket.close = jest.fn()
+  regularSocket.send = jest.fn()
+  socketConnection.emit('connection', regularSocket, { headers: { origin: 'https://example.com' } })
+  const first = JSON.stringify({ id: 1, jsonrpc: '2.0', method: 'eth_chainId', params: [] })
+  const second = JSON.stringify({ id: 2, jsonrpc: '2.0', method: 'eth_chainId', params: [] })
+
+  regularSocket.emit('message', first)
+  regularSocket.emit('message', second)
+  callbacks[0]({ id: 1, jsonrpc: '2.0', result: '0x1' })
+
+  expect(getRequestSignal(callbacks[0]).aborted).toBe(false)
+  expect(getRequestSignal(callbacks[1]).aborted).toBe(false)
+
+  regularSocket.emit('close')
+
+  expect(getRequestSignal(callbacks[0]).aborted).toBe(false)
+  expect(getRequestSignal(callbacks[1]).aborted).toBe(true)
+  expect(regularSocket.send).toHaveBeenCalledTimes(1)
+
+  callbacks[1]({ id: 2, jsonrpc: '2.0', result: '0x1' })
+  expect(regularSocket.send).toHaveBeenCalledTimes(1)
 })
 
 it('responds to malformed JSON with a parse error', (done) => {

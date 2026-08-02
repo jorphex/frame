@@ -11,6 +11,7 @@ import { toRpcQuantity } from '../../../resources/domain/transaction/quantity'
 import { GasFeesSource } from '../../../resources/domain/transaction'
 import { ApprovalType } from '../../../resources/constants'
 import { gweiToHex } from '../../util'
+import { bindRequestSignal } from '../../../main/provider/requestSignal'
 
 jest.mock('../../../main/provider', () => ({ send: jest.fn(), emit: jest.fn(), on: jest.fn() }))
 jest.mock('../../../main/signers', () => ({ get: jest.fn() }))
@@ -1115,6 +1116,60 @@ describe('#rejectRequest', () => {
     ).toThrow(/locate account request/i)
     expect(response).not.toHaveBeenCalled()
     expect(targetAccount.requests[explicit.handlerId]).toBe(explicit)
+  })
+})
+
+describe('#cancelUnapprovedRequestForAccount', () => {
+  const accessRequest = (handlerId) => ({
+    handlerId,
+    type: 'access',
+    origin: 'transport.test',
+    account: account2.address,
+    payload: { id: handlerId, jsonrpc: '2.0', method: 'eth_accounts' }
+  })
+
+  it('removes only the exact untouched request when its transport aborts', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const controller = new AbortController()
+    const response = bindRequestSignal(jest.fn(), controller.signal)
+    const ownedRequest = accessRequest('transport-owned')
+    const otherRequest = accessRequest('other-transport')
+
+    Accounts.addRequestForAccount(account2.address, ownedRequest, response)
+    Accounts.addRequestForAccount(account2.address, otherRequest, jest.fn())
+    controller.abort()
+
+    expect(response).toHaveBeenCalledWith({
+      id: 'transport-owned',
+      jsonrpc: '2.0',
+      error: { code: 4900, message: 'Requesting client disconnected' }
+    })
+    expect(targetAccount.requests['transport-owned']).toBeUndefined()
+    expect(targetAccount.requests['other-transport']).toBe(otherRequest)
+    expect(Accounts.current().id).toBe(account.address)
+  })
+
+  it('preserves a request that was claimed before its transport aborts', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const controller = new AbortController()
+    const response = bindRequestSignal(jest.fn(), controller.signal)
+    const claimedRequest = {
+      ...accessRequest('claimed-request'),
+      status: 'pending',
+      locked: true
+    }
+
+    Accounts.addRequestForAccount(account2.address, claimedRequest, response)
+    controller.abort()
+
+    expect(response).not.toHaveBeenCalled()
+    expect(targetAccount.requests['claimed-request']).toBe(claimedRequest)
+    expect(
+      Accounts.cancelUnapprovedRequestForAccount(account2.address, claimedRequest.handlerId, {
+        code: 4900,
+        message: 'Requesting client disconnected'
+      })
+    ).toBe(false)
   })
 })
 

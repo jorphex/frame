@@ -1,5 +1,6 @@
 import { WalletCallBatchLedger } from '../../../main/provider/walletCallBatches'
 import { WalletCallLifecycleController } from '../../../main/provider/walletCallLifecycle'
+import { bindRequestSignal, getRequestSignal } from '../../../main/provider/requestSignal'
 
 const account = '0x1111111111111111111111111111111111111111'
 const target = '0x2222222222222222222222222222222222222222'
@@ -107,6 +108,16 @@ it('admits an account-bound one-shot responder without publishing the batch id',
   expect(request.res.walletCallsLifecycle).toBe(true)
   expect(typeof request.res.accept).toBe('function')
   expect(ledger.getStatus('example.test', account, admitted.id).status).toBe(100)
+})
+
+it('carries transport ownership onto the admitted account responder', () => {
+  const { controller, requests } = dependencies()
+  const abortController = new AbortController()
+  const respond = bindRequestSignal(jest.fn(), abortController.signal)
+
+  controller.admit(input(), respond)
+
+  expect(getRequestSignal(requests.get('handler-id').res)).toBe(abortController.signal)
 })
 
 it('durably closes a rejected review before returning its error exactly once', () => {

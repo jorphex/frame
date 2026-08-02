@@ -12,6 +12,7 @@ import { MAX_REQUEST_BYTES } from '../../../main/api/validPayload'
 import provider from '../../../main/provider'
 import accounts from '../../../main/accounts'
 import { createSessionOrigin, isTrusted, updateOrigin } from '../../../main/api/origins'
+import { getRequestSignal } from '../../../main/provider/requestSignal'
 
 jest.mock('../../../main/provider', () => ({ send: jest.fn(), on: jest.fn() }))
 jest.mock('../../../main/accounts', () => ({ getSelectedAddresses: jest.fn(() => []) }))
@@ -232,6 +233,47 @@ it('forwards a valid request and returns the provider response', async () => {
     body: { id: 7, jsonrpc: '2.0', result: 'forwarded' }
   })
   expect(provider.send).toHaveBeenCalledWith({ ...payload, _origin: 'test-origin' }, expect.any(Function))
+})
+
+it('does not abort transport ownership after a response completes', async () => {
+  let forwarded
+  provider.send.mockImplementationOnce((payload, callback) => {
+    forwarded = callback
+    callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: 'forwarded' })
+  })
+
+  await send({ body: JSON.stringify({ id: 7, jsonrpc: '2.0', method: 'eth_chainId', params: [] }) })
+  await new Promise((resolve) => setImmediate(resolve))
+
+  expect(getRequestSignal(forwarded).aborted).toBe(false)
+})
+
+it('aborts only the unfinished provider request when its HTTP client disconnects', async () => {
+  let forwarded
+  let markForwarded
+  const requestForwarded = new Promise((resolve) => {
+    markForwarded = resolve
+  })
+  provider.send.mockImplementationOnce((_payload, callback) => {
+    forwarded = callback
+    markForwarded()
+  })
+
+  const client = request({ host: '127.0.0.1', port, method: 'POST' })
+  client.on('error', () => {})
+  client.end(JSON.stringify({ id: 8, jsonrpc: '2.0', method: 'eth_chainId', params: [] }))
+
+  await requestForwarded
+  const signal = getRequestSignal(forwarded)
+  expect(signal.aborted).toBe(false)
+
+  const aborted = new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }))
+  const closed = new Promise((resolve) => client.socket.once('close', resolve))
+  client.socket.destroy()
+  await Promise.all([closed, aborted])
+
+  expect(signal.aborted).toBe(true)
+  expect(() => forwarded({ id: 8, jsonrpc: '2.0', result: 'late' })).not.toThrow()
 })
 
 it('keeps an originless identity on one socket and isolates separate sockets', async () => {

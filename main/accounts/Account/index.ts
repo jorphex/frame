@@ -65,6 +65,7 @@ import type { Permission } from '../../store/state'
 import type { TransactionSimulation, WalletCallsSimulationResult } from '../../transaction/simulation'
 import type Signer from '../../signers/Signer'
 import { parseErc20ApprovalIntent } from '../../../resources/domain/transaction/allowance'
+import { getRequestSignal } from '../../provider/requestSignal'
 
 const nebula = nebulaApi()
 
@@ -122,6 +123,7 @@ class FrameAccount {
   private simulationTimers: Record<string, ReturnType<typeof setTimeout>> = {}
   private preparationVersions: Record<string, number> = {}
   private preparationTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+  private requestAbortCleanup: Record<string, () => void> = {}
 
   accountObserver: Observer
 
@@ -292,6 +294,8 @@ class FrameAccount {
   clearRequest(handlerId: string) {
     log.info(`clearRequest(${handlerId}) for account ${this.id}`)
 
+    this.requestAbortCleanup[handlerId]?.()
+    delete this.requestAbortCleanup[handlerId]
     delete this.requests[handlerId]
     delete this.simulationVersions[handlerId]
     clearTimeout(this.simulationTimers[handlerId])
@@ -1020,11 +1024,35 @@ class FrameAccount {
       return
     }
 
+    const signal = getRequestSignal(res)
+    if (signal?.aborted) {
+      const payload = req.payload || {}
+      res({
+        id: payload.id,
+        jsonrpc: payload.jsonrpc,
+        error: { code: 4900, message: 'Requesting client disconnected' }
+      })
+      return
+    }
+
     const add = (r: AnyAccountRequest) => {
       r.mode = RequestMode.Normal
       r.created = Date.now()
       r.res = res
       this.requests[r.handlerId] = r
+
+      if (signal) {
+        const abort = () => {
+          const request = this.requests[r.handlerId]
+          if (request !== r) return
+          this.accounts.cancelUnapprovedRequestForAccount(this.id, r.handlerId, {
+            code: 4900,
+            message: 'Requesting client disconnected'
+          })
+        }
+        signal.addEventListener('abort', abort, { once: true })
+        this.requestAbortCleanup[r.handlerId] = () => signal.removeEventListener('abort', abort)
+      }
 
       if (req.type === 'sign' || req.type === 'signTypedData' || req.type === 'signErc20Permit') {
         req.approvals = req.approvals || []
@@ -1160,6 +1188,8 @@ class FrameAccount {
   }
 
   close() {
+    Object.values(this.requestAbortCleanup).forEach((cleanup) => cleanup())
+    this.requestAbortCleanup = {}
     Object.values(this.simulationTimers).forEach(clearTimeout)
     this.simulationTimers = {}
     Object.keys(this.simulationVersions).forEach((handlerId) => {

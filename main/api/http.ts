@@ -10,6 +10,7 @@ import protectedMethods from './protectedMethods'
 import { parseChainId } from '../provider/chainRequests'
 import originSessions from './originSessions'
 import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
+import { bindRequestSignal } from '../provider/requestSignal'
 
 const logTraffic = process.env['LOG_TRAFFIC']
 
@@ -179,30 +180,49 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
 
         originSessions.extend(payload._origin)
 
-        if (protectedMethods.indexOf(payload.method) > -1 && !(await isTrusted(payload))) {
+        const controller = new AbortController()
+        const abortIfUnfinished = () => {
+          if (!res.writableFinished) controller.abort()
+        }
+        req.socket.once('close', abortIfUnfinished)
+        res.once('close', abortIfUnfinished)
+        res.once('finish', () => req.socket.removeListener('close', abortIfUnfinished))
+        const respond = bindRequestSignal((response: RPCResponsePayload) => {
+          if (controller.signal.aborted || res.writableEnded) return
+          if (logTraffic)
+            log.info(
+              `<- res | http | ${req.headers.origin} | ${payload.method} | <- | ${JSON.stringify(response)}`
+            )
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(response))
+        }, controller.signal)
+
+        const trusted =
+          protectedMethods.indexOf(payload.method) === -1 || (await isTrusted(payload, controller.signal))
+        if (controller.signal.aborted) return
+
+        if (!trusted) {
           let error = { message: `Permission denied, approve ${origin} in Frame to continue`, code: 4100 }
           if (!accounts.getSelectedAddresses()[0])
             error = { message: 'No Frame account selected', code: 4100 }
-          sendJson(res, 200, { id: payload.id, jsonrpc: payload.jsonrpc, error })
+          respond({ id: payload.id, jsonrpc: payload.jsonrpc, error })
         } else {
           if (payload.method === 'eth_pollSubscriptions') {
             const params = Array.isArray(payload.params) ? payload.params : []
             const id = params[0]
             if (typeof id !== 'string') {
-              return sendTransportError(res, 200, payload.id, {
-                code: -32602,
-                message: 'Invalid Client ID'
+              return respond({
+                id: payload.id,
+                jsonrpc: payload.jsonrpc,
+                error: { code: -32602, message: 'Invalid Client ID' }
               })
             }
             const immediate = params[1] === 'immediate'
             const send = (force: boolean) => {
               const result = polls[id] || []
               if (result.length || immediate || force) {
-                res.writeHead(200, { 'Content-Type': 'application/json' })
                 const response = { id: payload.id, jsonrpc: payload.jsonrpc, result }
-                if (logTraffic)
-                  log.info(`<- res | http | ${origin} | ${payload.method} | <- | ${JSON.stringify(response)}`)
-                res.end(JSON.stringify(response))
+                respond(response)
                 delete polls[id]
                 clearTimeout(cleanupTimers[id])
                 cleanupTimers[id] = setTimeout(cleanup.bind(null, id), 20 * 1000)
@@ -218,36 +238,44 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
                   send(true)
                 }
 
-                pending[id] = {
+                const pendingRequest = {
                   send: sendResponse,
                   timer: setTimeout(sendResponse, 15 * 1000)
                 }
+                pending[id] = pendingRequest
+                controller.signal.addEventListener(
+                  'abort',
+                  () => {
+                    if (pending[id] !== pendingRequest) return
+                    clearTimeout(pendingRequest.timer)
+                    delete pending[id]
+                  },
+                  { once: true }
+                )
               }
             }
             return send(false)
           }
 
-          provider.send(payload, (response) => {
-            if (response && response.result) {
-              if (payload.method === 'eth_subscribe') {
-                if (typeof response.result === 'string') {
-                  pollSubs[response.result] = { id: rawPayload.pollId || '', origin: payload._origin } // Refactor this so you don't need to send a pollId and use the existing subscription id
+          provider.send(
+            payload,
+            bindRequestSignal((response) => {
+              if (response && response.result) {
+                if (payload.method === 'eth_subscribe') {
+                  if (typeof response.result === 'string') {
+                    pollSubs[response.result] = { id: rawPayload.pollId || '', origin: payload._origin } // Refactor this so you don't need to send a pollId and use the existing subscription id
+                  }
+                } else if (payload.method === 'eth_unsubscribe') {
+                  const params = Array.isArray(payload.params) ? payload.params : []
+                  params.forEach((sub) => {
+                    if (typeof sub === 'string' && pollSubs[sub]) delete pollSubs[sub]
+                  })
                 }
-              } else if (payload.method === 'eth_unsubscribe') {
-                const params = Array.isArray(payload.params) ? payload.params : []
-                params.forEach((sub) => {
-                  if (typeof sub === 'string' && pollSubs[sub]) delete pollSubs[sub]
-                })
               }
-            }
 
-            if (logTraffic)
-              log.info(
-                `<- res | http | ${req.headers.origin} | ${payload.method} | <- | ${JSON.stringify(response)}`
-              )
-            res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify(response))
-          })
+              respond(response)
+            }, controller.signal)
+          )
         }
       })
       .on('error', (error) => {

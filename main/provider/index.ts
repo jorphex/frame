@@ -53,6 +53,7 @@ import { executeWalletCallRuntime } from './walletCallRuntime'
 import walletCallEvidenceRuntime from './walletCallEvidenceRuntime'
 import { showWalletCallStatus } from './walletCallStatusView'
 import { isUnsafeRpcForwardingMethod } from './rpcForwarding'
+import { getRequestSignal, inheritRequestSignal } from './requestSignal'
 
 import { Subscription, SubscriptionType, hasSubscriptionPermission } from './subscriptions'
 import {
@@ -173,6 +174,7 @@ export class Provider extends EventEmitter {
   private pendingErc1046Suggestions = new Map<string, Promise<Token>>()
 
   handlers: Record<string, RPCRequestCallback> = {}
+  private handlerAbortCleanup = new Map<string, () => void>()
   subscriptions: { [key in SubscriptionType]: Subscription[] } = {
     accountsChanged: [],
     assetsChanged: [],
@@ -287,8 +289,10 @@ export class Provider extends EventEmitter {
 
   private respondToRequest(handlerId: string, response: RPCResponsePayload) {
     const handler = this.handlers[handlerId]
-    if (handler) handler(response)
+    this.handlerAbortCleanup.get(handlerId)?.()
+    this.handlerAbortCleanup.delete(handlerId)
     delete this.handlers[handlerId]
+    if (handler) handler(response)
   }
 
   getNetVersion(payload: RPCRequestPayload, res: RPCRequestCallback, targetChain: Chain) {
@@ -544,8 +548,20 @@ export class Provider extends EventEmitter {
   }
 
   private addRequestHandler(res: RPCRequestCallback) {
+    const signal = getRequestSignal(res)
+    if (signal?.aborted) return
+
     const handlerId: string = uuid()
     this.handlers[handlerId] = res
+
+    if (signal) {
+      const abort = () => {
+        delete this.handlers[handlerId]
+        this.handlerAbortCleanup.delete(handlerId)
+      }
+      signal.addEventListener('abort', abort, { once: true })
+      this.handlerAbortCleanup.set(handlerId, () => signal.removeEventListener('abort', abort))
+    }
 
     return handlerId
   }
@@ -901,6 +917,7 @@ export class Provider extends EventEmitter {
           resError(err, payload, res)
         } else {
           const handlerId = this.addRequestHandler(res)
+          if (!handlerId) return
           const txMetadata = transactionMetadata as TransactionMetadata
           const { feesUpdated, recipientType, ...data } = txMetadata.tx
 
@@ -981,6 +998,7 @@ export class Provider extends EventEmitter {
 
     const normalizedPayload = { ...payload, params: parsedRequest.params }
     const handlerId = this.addRequestHandler(res)
+    if (!handlerId) return
 
     const req: SignRequest = {
       handlerId,
@@ -996,9 +1014,9 @@ export class Provider extends EventEmitter {
       approvals: []
     }
 
-    const _res = (data: RPCResponsePayload) => {
+    const _res = inheritRequestSignal(res, (data: RPCResponsePayload) => {
       this.respondToRequest(req.handlerId, data)
-    }
+    })
 
     accounts.addRequest(req, _res)
   }
@@ -1098,6 +1116,7 @@ export class Provider extends EventEmitter {
     }
 
     const handlerId = this.addRequestHandler(res)
+    if (!handlerId) return
 
     const req: SignTypedDataRequest = {
       handlerId,
@@ -1112,6 +1131,10 @@ export class Provider extends EventEmitter {
 
     // TODO: all of this below code to construct the original request can be added to
     // a module like the above sigparser which, instead of identifying the request, creates it
+    const requestResponder = inheritRequestSignal(res, (data: RPCResponsePayload) => {
+      this.respondToRequest(req.handlerId, data)
+    })
+
     if (type === 'signErc20Permit') {
       const {
         message: { deadline, spender: spenderAddress, value, owner, nonce },
@@ -1149,9 +1172,9 @@ export class Provider extends EventEmitter {
         approvals: []
       }
 
-      accounts.addRequest(permitRequest)
+      accounts.addRequest(permitRequest, requestResponder)
     } else {
-      accounts.addRequest(req)
+      accounts.addRequest(req, requestResponder)
     }
   }
 
@@ -1528,7 +1551,7 @@ export class Provider extends EventEmitter {
 
     let granted: boolean
     try {
-      granted = await requestOriginAccess(payload, initialAccess.address)
+      granted = await requestOriginAccess(payload, initialAccess.address, getRequestSignal(res))
     } catch (error) {
       return resError({ code: -32603, message: (error as Error).message }, payload, res)
     }

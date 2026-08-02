@@ -817,6 +817,19 @@ export class Accounts extends EventEmitter {
     return Object.freeze({ snapshot, responder })
   }
 
+  cancelUnapprovedRequestForAccount(accountId: string, handlerId: string, error: EVMError) {
+    if (typeof accountId !== 'string' || typeof handlerId !== 'string' || !handlerId) return false
+
+    const account = this.accounts[accountId.toLowerCase()]
+    const request = account?.getRequest<AnyAccountRequest>(handlerId)
+    if (!account || !request || request.status !== undefined || ('locked' in request && request.locked)) {
+      return false
+    }
+
+    account.rejectRequest(request, error)
+    return true
+  }
+
   settleWalletCallsRequest(accountId: string, handlerId: string, error?: Error) {
     if (typeof accountId !== 'string' || typeof handlerId !== 'string' || !handlerId) {
       throw new Error('Invalid wallet-call request identity')
