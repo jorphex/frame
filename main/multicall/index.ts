@@ -31,7 +31,7 @@ function chainConfig(chainId: number, eth: EthereumProvider): MulticallConfig {
   }
 }
 
-async function makeCall(functionName: string, params: any[], config: MulticallConfig) {
+async function makeCall(functionName: string, params: readonly unknown[], config: MulticallConfig) {
   const data = multicallInterface.encodeFunctionData(functionName, params)
 
   const response: BytesLike = await config.provider.request({
@@ -56,7 +56,7 @@ function buildCallData<R, T>(calls: Call<R, T>[]) {
   })
 }
 
-function getResultData(results: any, call: string[], target: string) {
+function getResultData(results: BytesLike, call: string[], target: string) {
   const [fnSignature] = call
   if (!fnSignature) throw new Error('multicall function signature is required')
   const callInterface = getInterface(fnSignature)

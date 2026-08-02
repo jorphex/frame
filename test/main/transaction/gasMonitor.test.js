@@ -52,6 +52,14 @@ describe('#getGasPrices', () => {
 
     expect(gas.asap).toBe(gasPrice)
   })
+
+  it.each([null, 1, '1', '0x01'])('rejects an invalid gas price response: %p', async (response) => {
+    requestHandlers.eth_gasPrice = () => response
+
+    await expect(new GasMonitor(testConnection).getGasPrices()).rejects.toThrow(
+      'Invalid eth_gasPrice response'
+    )
+  })
 })
 
 describe('#getFeeHistory', () => {

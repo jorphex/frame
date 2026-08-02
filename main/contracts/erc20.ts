@@ -82,7 +82,7 @@ export default class Erc20Contract {
     return undefined
   }
 
-  static encodeCallData(fn: string, params: any[]) {
+  static encodeCallData(fn: string, params: readonly unknown[]) {
     return erc20Interface.encodeFunctionData(fn, params)
   }
 

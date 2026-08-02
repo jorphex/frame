@@ -4,7 +4,7 @@ import log from 'electron-log'
 import type { BigNumber } from 'bignumber.js'
 
 interface Connection extends EventEmitter {
-  send(payload: JSONRPCRequestPayload): Promise<any>
+  send(payload: JSONRPCRequestPayload): Promise<unknown>
   chainId: string
 }
 
@@ -71,7 +71,10 @@ class BlockMonitor extends EventEmitter {
 
     this.connection
       .send({ id: 1, jsonrpc: '2.0', method: 'eth_subscribe', params: ['newHeads'] })
-      .then((subId) => (this.subscriptionId = subId))
+      .then((subId) => {
+        if (typeof subId !== 'string') throw new Error('Received invalid block subscription id')
+        this.subscriptionId = subId
+      })
       .catch(() => {
         // subscriptions are not supported, poll for block changes instead
         this.clearSubscription()
@@ -137,7 +140,7 @@ class BlockMonitor extends EventEmitter {
     }
   }
 
-  private handleError(...args: any) {
+  private handleError(...args: unknown[]) {
     this.connection.emit('status', 'degraded')
     log.error(...args)
   }

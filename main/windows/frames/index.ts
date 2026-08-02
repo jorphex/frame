@@ -174,7 +174,7 @@ export default class FrameManager {
     return frameInstance
   }
 
-  private sendMessageToFrame(frameId: string, channel: string, ...args: any) {
+  private sendMessageToFrame(frameId: string, channel: string, ...args: unknown[]) {
     const frameInstance = this.frameInstances[frameId]
 
     if (frameInstance && !frameInstance.isDestroyed()) {
@@ -189,7 +189,7 @@ export default class FrameManager {
     }
   }
 
-  broadcast(channel: string, args: any[]) {
+  broadcast(channel: string, args: unknown[]) {
     Object.keys(this.frameInstances).forEach((id) => this.sendMessageToFrame(id, channel, ...args))
   }
 

@@ -1,7 +1,7 @@
 import log from 'electron-log'
-import { WorkerProcessCommand } from './process'
+import { isWorkerProcessCommand } from './process'
 
-export function sendMessage(event: string, payload?: any) {
+export function sendMessage(event: string, payload?: unknown) {
   log.debug(
     `child process with pid ${process.pid} sending "${event}" event with payload: ${JSON.stringify(payload)}`
   )
@@ -17,9 +17,15 @@ export function sendError(err: Error) {
   sendMessage('error', err.message)
 }
 
-const messageHandlers: { [command: string]: (...params: any) => void } = {}
+const messageHandlers: Record<string, (...params: unknown[]) => void> = {}
 
-function handleMessageFromParent(message: WorkerProcessCommand) {
+function handleMessageFromParent(value: unknown) {
+  if (!isWorkerProcessCommand(value)) {
+    log.warn(`child process with pid ${process.pid} received a malformed message`)
+    return
+  }
+
+  const message = value
   log.debug(
     `child process with pid ${process.pid} received message: ${message.command} ${JSON.stringify(
       message.args
@@ -39,7 +45,7 @@ function handleMessageFromParent(message: WorkerProcessCommand) {
 // calling this function has the side effect of adding a message listener to the process
 // so it should only be called by a child process listening to messages from a main
 // process via an IPC channel
-export function addCommand(command: string, handler: (...params: any[]) => void) {
+export function addCommand(command: string, handler: (...params: unknown[]) => void) {
   if (process.listenerCount('message') === 0) {
     process.on('message', handleMessageFromParent)
   }

@@ -43,10 +43,10 @@ function arraysMatch<T>(a: T[] = [], b: T[] = []) {
   return a.length === b.length && a.every((elem, i) => b[i] === elem)
 }
 
-function debounce(func: (...args: any) => any, timeout = 300) {
+function debounce<Args extends unknown[]>(func: (...args: Args) => unknown, timeout = 300) {
   let timer: NodeJS.Timeout
 
-  return (...args: any) => {
+  return (...args: Args) => {
     clearTimeout(timer)
     timer = setTimeout(() => {
       func(...args)

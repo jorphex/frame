@@ -4,33 +4,11 @@ import { ChildProcess, fork } from 'child_process'
 import { EventEmitter } from 'stream'
 
 import { toTokenId } from '../../../resources/domain/balance'
+import { BalancesWorkerCommand, parseBalancesWorkerEvent } from './protocol'
 
-import type { CurrencyBalance, TokenBalance } from './scan'
 import type { Token } from '../../store/state'
 
 const BOOTSTRAP_TIMEOUT_SECONDS = 20
-
-interface WorkerMessage {
-  type: string
-}
-
-interface TokenBalanceMessage extends Omit<WorkerMessage, 'type'> {
-  type: 'tokenBalances'
-  address: Address
-  balances: TokenBalance[]
-}
-
-interface TokenBlacklistMessage extends Omit<WorkerMessage, 'type'> {
-  type: 'tokenBlacklist'
-  address: Address
-  tokens: Token[]
-}
-
-interface ChainBalanceMessage extends Omit<WorkerMessage, 'type'> {
-  type: 'chainBalances'
-  address: Address
-  balances: CurrencyBalance[]
-}
 
 export default class BalancesWorkerController extends EventEmitter {
   private readonly worker: ChildProcess
@@ -54,33 +32,31 @@ export default class BalancesWorkerController extends EventEmitter {
       this.stopWorker()
     }, BOOTSTRAP_TIMEOUT_SECONDS * 1000)
 
-    this.worker.on('message', (message: WorkerMessage) => {
+    this.worker.on('message', (value: unknown) => {
+      const message = parseBalancesWorkerEvent(value)
+      if (!message) {
+        log.warn('balances controller received malformed worker message')
+        return
+      }
+
       log.debug(`balances controller received message: ${JSON.stringify(message)}`)
 
-      if (message.type === 'ready') {
-        this.clearBootstrapTimeout()
-
-        log.info(`balances worker ready, pid: ${this.worker.pid}`)
-
-        this.heartbeat = setInterval(() => this.sendHeartbeat(), 1000 * 20)
-
-        this.emit('ready')
-      }
-
-      if (message.type === 'chainBalances') {
-        const { address, balances } = message as ChainBalanceMessage
-        this.emit('chainBalances', address, balances)
-      }
-
-      if (message.type === 'tokenBalances') {
-        const { address, balances } = message as TokenBalanceMessage
-        this.emit('tokenBalances', address, balances)
-      }
-
-      if (message.type === 'tokenBlacklist') {
-        const { address, tokens } = message as TokenBlacklistMessage
-        const tokenSet = new Set(tokens.map(toTokenId))
-        this.emit('tokenBlacklist', address, tokenSet)
+      switch (message.type) {
+        case 'ready':
+          this.clearBootstrapTimeout()
+          log.info(`balances worker ready, pid: ${this.worker.pid}`)
+          this.heartbeat = setInterval(() => this.sendHeartbeat(), 1000 * 20)
+          this.emit('ready')
+          break
+        case 'chainBalances':
+          this.emit('chainBalances', message.address, message.balances)
+          break
+        case 'tokenBalances':
+          this.emit('tokenBalances', message.address, message.balances)
+          break
+        case 'tokenBlacklist':
+          this.emit('tokenBlacklist', message.address, new Set(message.tokens.map(toTokenId)))
+          break
       }
     })
 
@@ -115,15 +91,15 @@ export default class BalancesWorkerController extends EventEmitter {
   }
 
   updateChainBalances(address: Address, chains: number[]) {
-    this.sendCommandToWorker('updateChainBalance', [address, chains])
+    this.sendCommandToWorker({ command: 'updateChainBalance', args: [address, chains] })
   }
 
   updateKnownTokenBalances(address: Address, tokens: Token[]) {
-    this.sendCommandToWorker('fetchTokenBalances', [address, tokens])
+    this.sendCommandToWorker({ command: 'fetchTokenBalances', args: [address, tokens] })
   }
 
   scanForTokenBalances(address: Address, tokens: Token[], chains: number[]) {
-    this.sendCommandToWorker('tokenBalanceScan', [address, tokens, chains])
+    this.sendCommandToWorker({ command: 'tokenBalanceScan', args: [address, tokens, chains] })
   }
 
   // private
@@ -143,23 +119,23 @@ export default class BalancesWorkerController extends EventEmitter {
   }
 
   // sending messages
-  private sendCommandToWorker(command: string, args: any[] = []) {
-    log.debug(`sending command ${command} to worker`)
+  private sendCommandToWorker(message: BalancesWorkerCommand) {
+    log.debug(`sending command ${message.command} to worker`)
 
     try {
       if (!this.isWorkerReachable()) {
-        log.error(`attempted to send command "${command}" to worker but worker cannot be reached!`)
+        log.error(`attempted to send command "${message.command}" to worker but worker cannot be reached!`)
         return
       }
 
-      this.worker.send({ command, args })
+      this.worker.send(message)
     } catch (e) {
-      log.error(`unknown error sending command "${command}" to worker`, e)
+      log.error(`unknown error sending command "${message.command}" to worker`, e)
     }
   }
 
   private sendHeartbeat() {
-    this.sendCommandToWorker('heartbeat')
+    this.sendCommandToWorker({ command: 'heartbeat', args: [] })
   }
 
   private clearBootstrapTimeout() {

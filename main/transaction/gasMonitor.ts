@@ -3,18 +3,19 @@ import { intToHex } from '@ethereumjs/util'
 import type { Block } from '../chains/gas'
 import { parseRpcQuantity } from '../../resources/domain/transaction/quantity'
 
-interface FeeHistoryResponse {
-  baseFeePerGas?: unknown
-  gasUsedRatio?: unknown
-  reward?: unknown
-  oldestBlock?: unknown
-}
-
 interface GasPrices {
   slow: string
   standard: string
   fast: string
   asap: string
+}
+
+interface GasConnection {
+  send(payload: { method: string; params?: unknown[] }): Promise<unknown>
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 function parseFeeQuantity(value: unknown, field: string) {
@@ -24,11 +25,19 @@ function parseFeeQuantity(value: unknown, field: string) {
 }
 
 function normalizeFeeHistory(
-  response: FeeHistoryResponse,
+  response: unknown,
   requestedBlocks: number,
   rewardPercentiles: number[]
 ): Block[] {
-  const { baseFeePerGas, gasUsedRatio, reward, oldestBlock } = response || {}
+  if (!isRecord(response)) {
+    throw new Error('Invalid eth_feeHistory response shape')
+  }
+
+  const candidate = response
+  const baseFeePerGas = candidate['baseFeePerGas']
+  const gasUsedRatio = candidate['gasUsedRatio']
+  const reward = candidate['reward']
+  const oldestBlock = candidate['oldestBlock']
   if (
     !Array.isArray(baseFeePerGas) ||
     !Array.isArray(gasUsedRatio) ||
@@ -72,9 +81,9 @@ function normalizeFeeHistory(
 }
 
 export default class GasMonitor {
-  private connection
+  private connection: GasConnection
 
-  constructor(connection: any /* Chains */) {
+  constructor(connection: GasConnection) {
     this.connection = connection
   }
 
@@ -104,13 +113,16 @@ export default class GasMonitor {
     const blockCount = intToHex(numBlocks)
     const payload = { method: 'eth_feeHistory', params: [blockCount, newestBlock, rewardPercentiles] }
 
-    const feeHistory: FeeHistoryResponse = await this.connection.send(payload)
+    const feeHistory = await this.connection.send(payload)
 
     return normalizeFeeHistory(feeHistory, numBlocks, rewardPercentiles)
   }
 
   async getGasPrices(): Promise<GasPrices> {
     const gasPrice = await this.connection.send({ method: 'eth_gasPrice' })
+    if (typeof gasPrice !== 'string' || parseRpcQuantity(gasPrice) === undefined) {
+      throw new Error('Invalid eth_gasPrice response')
+    }
 
     // in the future we may want to have specific calculators to calculate variations
     // in the gas price or eliminate this structure altogether

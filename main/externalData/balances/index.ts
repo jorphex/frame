@@ -58,7 +58,7 @@ export default function (store: Store) {
     attemptRestart()
   }
 
-  function runWhenReady(fn: () => any) {
+  function runWhenReady(fn: () => unknown) {
     if (workerController?.isRunning()) {
       // worker is running, start the scan
       fn()

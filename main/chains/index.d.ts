@@ -23,7 +23,7 @@ declare class Chains extends EventEmitter {
     }
   }
 
-  syncDataEmit(data: any): void
+  syncDataEmit(data: unknown): void
   send(payload: JSONRPCRequestPayload, cb: RPCRequestCallback, targetChain?: Chain): void
 }
 

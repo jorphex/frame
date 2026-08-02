@@ -8,14 +8,21 @@ import { capitalize } from '../../resources/utils'
 const isMacOS = process.platform === 'darwin'
 let isUbuntu23OrGreater = false
 
+interface LinuxOsInfo {
+  dist?: string
+  release?: string
+}
+
 if (process.platform === 'linux') {
   try {
-    getos((error: Error, osInfo: any) => {
+    getos((error: Error | null, osInfo: LinuxOsInfo) => {
       if (error) {
         console.error('Could not determine Linux version', error)
       } else {
         if (osInfo.dist === 'Ubuntu' && osInfo.release) {
-          const majorVersion = parseInt(osInfo.release.split('.')[0], 10)
+          const majorVersionText = osInfo.release.split('.')[0]
+          if (!majorVersionText) return
+          const majorVersion = parseInt(majorVersionText, 10)
           isUbuntu23OrGreater = majorVersion >= 23
         }
       }

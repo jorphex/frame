@@ -66,7 +66,7 @@ export default function (eth: EthereumProvider) {
       return { ...createBalance(rawBalance, 18), chainId }
     } catch (e) {
       log.error(`error loading native currency balance for chain id: ${chainId}`, e)
-      return { balance: '0x0', displayValue: '0.0', chainId }
+      return { balance: '0x0', displayBalance: '0.0', chainId }
     }
   }
 

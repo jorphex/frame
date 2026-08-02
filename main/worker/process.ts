@@ -5,13 +5,29 @@ import log from 'electron-log'
 // message from a worker process to the parent
 export interface WorkerProcessMessage {
   event: string
-  payload: any
+  payload?: unknown
 }
 
 // message from a parent process to a worker
 export interface WorkerProcessCommand {
   command: string
-  args: any[]
+  args?: unknown[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function isWorkerProcessMessage(value: unknown): value is WorkerProcessMessage {
+  return isRecord(value) && typeof value['event'] === 'string'
+}
+
+export function isWorkerProcessCommand(value: unknown): value is WorkerProcessCommand {
+  return (
+    isRecord(value) &&
+    typeof value['command'] === 'string' &&
+    (value['args'] === undefined || Array.isArray(value['args']))
+  )
 }
 
 export interface WorkerOptions {
@@ -50,7 +66,13 @@ export default class WorkerProcess extends EventEmitter {
       }, opts.timeout)
     }
 
-    this.worker.on('message', (message: WorkerProcessMessage) => this.emit(message.event, message.payload))
+    this.worker.on('message', (value: unknown) => {
+      if (!isWorkerProcessMessage(value)) {
+        log.warn(`worker process ${this.name} sent a malformed message`)
+        return
+      }
+      this.emit(value.event, value.payload)
+    })
 
     this.worker.once('error', (err) => {
       log.warn(`worker process ${this.name} raised error: ${err}`)
@@ -63,7 +85,7 @@ export default class WorkerProcess extends EventEmitter {
     })
   }
 
-  send(command: string, ...args: any[]) {
+  send(command: string, ...args: unknown[]) {
     this.worker.send({ command, args })
   }
 

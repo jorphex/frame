@@ -63,6 +63,24 @@ describe('events', () => {
     expect(emittedData).toBe('hello, world!')
   })
 
+  it('emits worker events without a payload', () => {
+    const handler = jest.fn()
+    worker.on('update', handler)
+
+    childProcess.emit('message', { event: 'update' })
+
+    expect(handler).toHaveBeenCalledWith(undefined)
+  })
+
+  it('ignores malformed worker messages', () => {
+    const handler = jest.fn()
+    worker.on('update', handler)
+
+    childProcess.emit('message', { event: 1, payload: 'unexpected' })
+
+    expect(handler).not.toHaveBeenCalled()
+  })
+
   it('exits if an error event is received', () => {
     let exitEmitted = false
 

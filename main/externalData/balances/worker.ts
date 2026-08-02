@@ -11,13 +11,9 @@ import { supportsChain as chainSupportsScan } from '../../multicall'
 import balancesLoader, { BalanceLoader } from './scan'
 import TokenLoader from '../inventory/tokens'
 import { toTokenId } from '../../../resources/domain/balance'
+import { BalancesWorkerEvent, parseBalancesWorkerCommand } from './protocol'
 
 import type { Token } from '../../store/state'
-
-interface ExternalDataWorkerMessage {
-  command: string
-  args: any[]
-}
 
 let heartbeat: NodeJS.Timeout
 let balances: BalanceLoader
@@ -48,7 +44,7 @@ async function getChains() {
   }
 }
 
-function sendToMainProcess(data: any) {
+function sendToMainProcess(data: BalancesWorkerEvent) {
   if (process.send) {
     return process.send(data)
   } else {
@@ -123,21 +119,30 @@ function resetHeartbeat() {
   }, 60 * 1000)
 }
 
-const messageHandler: { [command: string]: (...params: any) => void } = {
-  updateChainBalance: chainBalanceScan,
-  fetchTokenBalances: fetchTokenBalances,
-  heartbeat: resetHeartbeat,
-  tokenBalanceScan: (address, tokensToOmit, chains) => {
-    updateBlacklist(address, chains)
-    tokenBalanceScan(address, tokensToOmit, chains)
+process.on('message', (value: unknown) => {
+  const message = parseBalancesWorkerCommand(value)
+  if (!message) {
+    log.warn('received malformed balance worker command')
+    return
   }
-}
 
-process.on('message', (message: ExternalDataWorkerMessage) => {
   log.debug(`received message: ${message.command} [${message.args}]`)
 
-  const args = message.args || []
-  const handler = messageHandler[message.command]
-  if (handler) handler(...args)
-  else log.warn(`received unexpected balance worker command: ${message.command}`)
+  switch (message.command) {
+    case 'heartbeat':
+      resetHeartbeat()
+      break
+    case 'updateChainBalance':
+      void chainBalanceScan(...message.args)
+      break
+    case 'fetchTokenBalances':
+      void fetchTokenBalances(...message.args)
+      break
+    case 'tokenBalanceScan': {
+      const [address, tokensToOmit, chains] = message.args
+      void updateBlacklist(address, chains)
+      void tokenBalanceScan(address, tokensToOmit, chains)
+      break
+    }
+  }
 })

@@ -13,7 +13,10 @@ let keyboardLayout: KeyboardLayout | undefined
 if (global?.navigator) {
   navigator.keyboard.getLayoutMap().then((layout) => {
     keyboardLayout = layout
-    ;(link as any).send('tray:action', 'setKeyboardLayout', {
+    if (!('send' in link) || typeof link.send !== 'function') {
+      throw new Error('Renderer link does not support sending events')
+    }
+    link.send('tray:action', 'setKeyboardLayout', {
       isUS: isUSLayout()
     })
   })

@@ -198,6 +198,17 @@ describe('#getTokenBalances', () => {
   })
 })
 
+describe('#getCurrencyBalances', () => {
+  it('returns a valid zero balance when a native balance request fails', async () => {
+    const eth = ethProvider()
+    eth.request.mockRejectedValue(new Error('RPC unavailable'))
+
+    await expect(balanceLoader(eth).getCurrencyBalances(ownerAddress, [1])).resolves.toEqual([
+      { balance: '0x0', displayBalance: '0.0', chainId: 1 }
+    ])
+  })
+})
+
 // helper functions //
 
 function respondToTokenCall(payload) {

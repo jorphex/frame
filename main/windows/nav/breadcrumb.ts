@@ -1,6 +1,6 @@
-export interface Breadcrumb {
+export interface Breadcrumb<Data = unknown> {
   view: string
-  data: any
+  data: Data
 }
 
 type Step = 'confirm'
@@ -11,7 +11,7 @@ interface RequestData {
   requestId: string
 }
 
-export interface RequestBreadcrumb extends Omit<Breadcrumb, 'view'> {
+export interface RequestBreadcrumb extends Breadcrumb<RequestData> {
   view: 'requestView'
   data: RequestData
 }
@@ -34,7 +34,7 @@ export interface WalletCallStatusViewData {
   }
 }
 
-export interface WalletCallsStatusBreadcrumb extends Omit<Breadcrumb, 'view'> {
+export interface WalletCallsStatusBreadcrumb extends Breadcrumb<WalletCallStatusViewData> {
   view: 'walletCallsStatus'
   data: WalletCallStatusViewData
 }

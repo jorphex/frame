@@ -1,12 +1,20 @@
 import EventEmitter from 'events'
 
-const controller: any = new EventEmitter()
+class MockBalancesController extends EventEmitter {
+  isRunning = jest.fn()
+  updateKnownTokenBalances = jest.fn()
+  updateChainBalances = jest.fn()
+  scanForTokenBalances = jest.fn()
+  close = jest.fn()
+}
+
+const controller = new MockBalancesController()
 
 export const emit = controller.emit.bind(controller)
-export const isRunning = (controller.isRunning = jest.fn())
-export const updateKnownTokenBalances = (controller.updateKnownTokenBalances = jest.fn())
-export const updateChainBalances = (controller.updateChainBalances = jest.fn())
-export const scanForTokenBalances = (controller.scanForTokenBalances = jest.fn())
-export const close = (controller.close = jest.fn())
+export const isRunning = controller.isRunning
+export const updateKnownTokenBalances = controller.updateKnownTokenBalances
+export const updateChainBalances = controller.updateChainBalances
+export const scanForTokenBalances = controller.scanForTokenBalances
+export const close = controller.close
 
 export default jest.fn(() => controller)
