@@ -169,6 +169,9 @@ Promise.all([
     ledgerApis: ledgerModules.map((module) => typeof module.default),
     ledgerVersions,
     siweDomain: siwe.domain,
+    reactVersion: require(path.join(appModules, 'react/package.json')).version,
+    reactDomVersion: require(path.join(appModules, 'react-dom/package.json')).version,
+    styledComponentsVersion: require(path.join(appModules, 'styled-components/package.json')).version,
     ethersVersion: ethers.version,
     ethersBrowserProvider: typeof ethers.BrowserProvider,
     signatureVersion: require(path.join(appModules, '@metamask/eth-sig-util/package.json')).version,
@@ -259,6 +262,9 @@ assert.deepEqual(probeResult.ledgerVersions, {
     packageJson.dependencies['@ledgerhq/hw-transport-node-hid-singleton']
 })
 assert.equal(probeResult.siweDomain, 'example.com')
+assert.equal(probeResult.reactVersion, packageJson.dependencies.react)
+assert.equal(probeResult.reactDomVersion, packageJson.dependencies['react-dom'])
+assert.equal(probeResult.styledComponentsVersion, packageJson.dependencies['styled-components'])
 assert.equal(probeResult.ethersVersion, packageJson.dependencies.ethers)
 assert.equal(probeResult.ethersBrowserProvider, 'function')
 assert.equal(probeResult.signatureVersion, packageJson.dependencies['@metamask/eth-sig-util'])
@@ -312,5 +318,5 @@ console.log(
     probeResult.abi
   } hardware-wallet native, Ledger ${
     probeResult.ledgerVersions['@ledgerhq/hw-app-eth']
-  }, electron-builder 26/notarize 3, SIWE, EIP-712, Zod 4, electron-log 5, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
+  }, electron-builder 26/notarize 3, React 19/styled-components 6, SIWE, EIP-712, Zod 4, electron-log 5, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )

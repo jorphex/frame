@@ -24,7 +24,7 @@ export const Container = styled.div`
 `
 
 export const Item = styled.div`
-  display: 'flex';
+  display: flex;
   flex-direction: column;
   div {
     padding-bottom: 0px;

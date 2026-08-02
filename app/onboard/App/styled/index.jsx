@@ -110,7 +110,7 @@ export const Tag = styled.span`
 `
 
 export const SlideItem = styled.div`
-  display: 'flex';
+  display: flex;
   flex-direction: column;
   div {
     padding-bottom: 0px;

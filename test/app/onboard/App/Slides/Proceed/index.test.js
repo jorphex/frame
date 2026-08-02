@@ -16,4 +16,10 @@ it('completes when the user clicks close', async () => {
   await user.click(screen.getByRole('button', { name: 'Done' }))
 
   expect(onComplete).toHaveBeenCalled()
+
+  const style = window.getComputedStyle(screen.getByRole('button', { name: 'Done' }))
+  expect(style.display).toBe('flex')
+  expect(style.width).toBe('180px')
+  expect(style.height).toBe('48px')
+  expect(style.borderRadius).toBe('24px')
 })
