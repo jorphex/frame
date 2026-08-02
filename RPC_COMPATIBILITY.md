@@ -99,5 +99,5 @@ same authorized socket. HTTP clients use Frame's non-standard
 
 The companion browser extension is a separate project. Browser-wide provider
 injection and EIP-6963 discovery are outside this desktop repository's
-compatibility claim; Frame's embedded-dapp injector currently uses only the
-legacy `window.ethereum` convention.
+compatibility claim. Frame's embedded-dapp injector announces its provider with
+EIP-6963 and retains that same object as the legacy `window.ethereum` fallback.

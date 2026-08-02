@@ -1,6 +1,6 @@
-import { createEip1193Provider } from '../../../../resources/provider/eip1193'
+import { installFrameProvider } from '../../../../resources/provider/frame'
 
-window.ethereum = createEip1193Provider(require('eth-provider')('frame'))
+installFrameProvider(window, require('eth-provider')('frame'))
 
 // let storage = initial
 
