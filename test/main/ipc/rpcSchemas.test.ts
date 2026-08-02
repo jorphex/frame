@@ -67,6 +67,20 @@ test('validates fee quantities and request identifiers', () => {
   expect(parseRendererRpcRequest(wire(1, 'setGasLimit', '0x5208', '1')).success).toBe(false)
 })
 
+test('accepts the ERC-1967 implementation-slot approval type', () => {
+  expect(
+    parseRendererRpcRequest(
+      wire(
+        1,
+        'confirmRequestApproval',
+        { handlerId, account: address, type: 'transaction' },
+        'approveProxyImplementationChange',
+        {}
+      )
+    ).success
+  ).toBe(true)
+})
+
 test('validates companion credential revocation fingerprints', () => {
   expect(parseRendererRpcRequest(wire(1, 'revokeExtensionCredential', 'a'.repeat(43))).success).toBe(true)
   expect(parseRendererRpcRequest(wire(1, 'revokeExtensionCredential', 'not-a-fingerprint')).success).toBe(

@@ -16,6 +16,8 @@ const MAX_RETURN_DATA_BYTES = 128 * 1024
 const MAX_WALLET_CALLS = 16
 const MAX_BALANCE_CHANGE_ACCOUNTS = 128
 const MAX_TRACE_ACCOUNTS = 1024
+const MAX_TRACE_STORAGE_ENTRIES = 8192
+const MAX_PROXY_IMPLEMENTATION_CHANGES = 32
 const MAX_CALL_TRACE_ENTRIES = 100
 const MAX_INSPECTED_CALL_FRAMES = 512
 const MAX_CALL_TRACE_CHILDREN = 256
@@ -24,6 +26,9 @@ const MAX_CALL_TRACE_INPUT_BYTES = 512 * 1024
 const MAX_UINT64 = (1n << 64n) - 1n
 const MAX_UINT256 = (1n << 256n) - 1n
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
+const STORAGE_WORD = /^0x[0-9a-fA-F]{64}$/
+const ZERO_STORAGE_WORD = `0x${'0'.repeat(64)}`
+const ERC1967_IMPLEMENTATION_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
 export { parseDelegationIndicator } from '../../resources/domain/account/code'
 
 type SimulationSource = 'eth_simulateV1' | 'eth_call'
@@ -86,6 +91,34 @@ export interface CallTraceEvidence {
   truncated?: boolean
 }
 
+export interface ProxyImplementationChange {
+  proxy: string
+  kind: 'initialized' | 'changed' | 'cleared'
+  beforeValue: string
+  afterValue: string
+  beforeImplementation?: string
+  afterImplementation?: string
+}
+
+interface ProxyImplementationCheckBase {
+  source: 'debug_traceCall'
+  standard: 'ERC-1967'
+  slot: string
+}
+
+export type ProxyImplementationCheck = ProxyImplementationCheckBase &
+  (
+    | {
+        status: 'succeeded'
+        changes: ProxyImplementationChange[]
+        truncated?: boolean
+      }
+    | {
+        status: 'unavailable' | 'failed'
+        reason: string
+      }
+  )
+
 export interface TransactionSimulation {
   status: SimulationStatus
   source?: SimulationSource
@@ -97,6 +130,7 @@ export interface TransactionSimulation {
   delegation?: AccountDelegationCheck
   nativeBalanceChanges?: NativeBalanceChanges
   callTrace?: CallTraceEvidence
+  proxyImplementationCheck?: ProxyImplementationCheck
 }
 
 export interface SimulationCallData {
@@ -466,17 +500,126 @@ export function parseNativeBalanceChanges(result: unknown):
   return { changes, truncated }
 }
 
-async function readNativeBalanceChanges(
+function findTraceStorageWord(
+  account: RpcCandidate | undefined,
+  slot: string,
+  budget: { inspected: number }
+) {
+  if (!account || !hasOwn(account, 'storage')) return { present: false as const }
+  if (!isRecord(account['storage'])) return
+
+  const storage = account['storage']
+  let word: string | undefined
+  for (const key in storage) {
+    if (!hasOwn(storage, key)) continue
+    budget.inspected += 1
+    if (budget.inspected > MAX_TRACE_STORAGE_ENTRIES) return
+    if (key.toLowerCase() !== slot) continue
+    const value = storage[key]
+    if (word !== undefined || typeof value !== 'string' || !STORAGE_WORD.test(value)) return
+    word = value.toLowerCase()
+  }
+
+  return word === undefined ? { present: false as const } : { present: true as const, word }
+}
+
+function parseStorageAddress(word: string | undefined) {
+  if (word === undefined) return
+  if (!STORAGE_WORD.test(word) || !/^0x0{24}/.test(word)) return
+  return `0x${word.slice(-40).toLowerCase()}`
+}
+
+export function parseProxyImplementationChanges(
+  result: unknown
+): { changes: ProxyImplementationChange[]; truncated: boolean } | undefined {
+  if (!isRecord(result)) return
+  const preAccounts = parseTraceAccounts(result['pre'])
+  const postAccounts = parseTraceAccounts(result['post'])
+  if (!preAccounts || !postAccounts) return
+
+  const addresses = [...new Set([...preAccounts.keys(), ...postAccounts.keys()])].sort()
+  const changes: ProxyImplementationChange[] = []
+  const storageBudget = { inspected: 0 }
+  let changeCount = 0
+
+  for (const proxy of addresses) {
+    const beforeWord = findTraceStorageWord(
+      preAccounts.get(proxy),
+      ERC1967_IMPLEMENTATION_SLOT,
+      storageBudget
+    )
+    const afterWord = findTraceStorageWord(
+      postAccounts.get(proxy),
+      ERC1967_IMPLEMENTATION_SLOT,
+      storageBudget
+    )
+    if (!beforeWord || !afterWord) return
+    if (!beforeWord.present && !afterWord.present) continue
+
+    const beforeValue = beforeWord.present ? beforeWord.word : ZERO_STORAGE_WORD
+    const afterValue = afterWord.present ? afterWord.word : ZERO_STORAGE_WORD
+    if (beforeValue === afterValue) continue
+
+    const beforeImplementation = parseStorageAddress(beforeValue)
+    const afterImplementation = parseStorageAddress(afterValue)
+    const kind =
+      beforeValue === ZERO_STORAGE_WORD
+        ? 'initialized'
+        : afterValue === ZERO_STORAGE_WORD
+          ? 'cleared'
+          : 'changed'
+
+    changeCount += 1
+    if (changes.length < MAX_PROXY_IMPLEMENTATION_CHANGES) {
+      changes.push({
+        proxy,
+        kind,
+        beforeValue,
+        afterValue,
+        ...(beforeImplementation ? { beforeImplementation } : {}),
+        ...(afterImplementation ? { afterImplementation } : {})
+      })
+    }
+  }
+
+  return { changes, truncated: changeCount > changes.length }
+}
+
+interface PrestateTraceEvidence {
+  nativeBalanceChanges: NativeBalanceChanges
+  proxyImplementationCheck: ProxyImplementationCheck
+}
+
+function proxyImplementationCheck(
+  status: 'unavailable' | 'failed',
+  reason: string
+): ProxyImplementationCheck {
+  return {
+    status,
+    source: 'debug_traceCall',
+    standard: 'ERC-1967',
+    slot: ERC1967_IMPLEMENTATION_SLOT,
+    reason
+  }
+}
+
+async function readPrestateTrace(
   transaction: SimulationCallData,
   send: ChainSend,
   targetChain: Chain,
   timeoutMs: number
-): Promise<NativeBalanceChanges> {
+): Promise<PrestateTraceEvidence> {
   if (timeoutMs <= 0) {
     return {
-      status: 'unavailable',
-      source: 'debug_traceCall',
-      reason: 'Native balance-change trace exceeded the simulation time budget'
+      nativeBalanceChanges: {
+        status: 'unavailable',
+        source: 'debug_traceCall',
+        reason: 'Native balance-change trace exceeded the simulation time budget'
+      },
+      proxyImplementationCheck: proxyImplementationCheck(
+        'unavailable',
+        'ERC-1967 net implementation-slot trace exceeded the simulation time budget'
+      )
     }
   }
 
@@ -492,7 +635,7 @@ async function readNativeBalanceChanges(
         {
           tracer: 'prestateTracer',
           timeout: `${Math.ceil(timeoutMs)}ms`,
-          tracerConfig: { diffMode: true, disableCode: true, disableStorage: true }
+          tracerConfig: { diffMode: true, disableCode: true, disableStorage: false }
         }
       ]
     },
@@ -502,51 +645,98 @@ async function readNativeBalanceChanges(
 
   if ('timedOut' in outcome) {
     return {
-      status: 'unavailable',
-      source: 'debug_traceCall',
-      reason: 'Native balance-change trace timed out'
+      nativeBalanceChanges: {
+        status: 'unavailable',
+        source: 'debug_traceCall',
+        reason: 'Native balance-change trace timed out'
+      },
+      proxyImplementationCheck: proxyImplementationCheck(
+        'unavailable',
+        'ERC-1967 net implementation-slot trace timed out'
+      )
     }
   }
-  if (!isRecord(outcome.response)) {
+  if (!isRecord(outcome.response) || outcome.response.id !== 4 || outcome.response.jsonrpc !== '2.0') {
     return {
-      status: 'failed',
-      source: 'debug_traceCall',
-      reason: 'RPC returned an invalid native balance-change response'
+      nativeBalanceChanges: {
+        status: 'failed',
+        source: 'debug_traceCall',
+        reason: 'RPC returned an invalid native balance-change response'
+      },
+      proxyImplementationCheck: proxyImplementationCheck(
+        'failed',
+        'RPC returned an invalid ERC-1967 implementation-slot response'
+      )
     }
   }
   if (outcome.response.error !== undefined) {
     const error = normalizeRpcError(outcome.response.error)
     if (!error) {
       return {
-        status: 'failed',
-        source: 'debug_traceCall',
-        reason: 'RPC returned an invalid native balance-change error'
+        nativeBalanceChanges: {
+          status: 'failed',
+          source: 'debug_traceCall',
+          reason: 'RPC returned an invalid native balance-change error'
+        },
+        proxyImplementationCheck: proxyImplementationCheck(
+          'failed',
+          'RPC returned an invalid ERC-1967 implementation-slot error'
+        )
       }
     }
 
+    const unsupported = isUnsupportedMethod(error)
     return {
-      status: isUnsupportedMethod(error) ? 'unavailable' : 'failed',
-      source: 'debug_traceCall',
-      reason: isUnsupportedMethod(error)
-        ? 'Configured RPC does not support native balance-change tracing'
-        : boundedMessage(error.message, 'Native balance-change trace failed')
+      nativeBalanceChanges: {
+        status: unsupported ? 'unavailable' : 'failed',
+        source: 'debug_traceCall',
+        reason: unsupported
+          ? 'Configured RPC does not support native balance-change tracing'
+          : boundedMessage(error.message, 'Native balance-change trace failed')
+      },
+      proxyImplementationCheck: proxyImplementationCheck(
+        unsupported ? 'unavailable' : 'failed',
+        unsupported
+          ? 'Configured RPC does not support ERC-1967 net implementation-slot tracing'
+          : boundedMessage(error.message, 'ERC-1967 net implementation-slot trace failed')
+      )
     }
   }
 
+  const proxyChanges = parseProxyImplementationChanges(outcome.response.result)
+  const implementationCheck: ProxyImplementationCheck = proxyChanges
+    ? {
+        status: 'succeeded',
+        source: 'debug_traceCall' as const,
+        standard: 'ERC-1967' as const,
+        slot: ERC1967_IMPLEMENTATION_SLOT,
+        changes: proxyChanges.changes,
+        ...(proxyChanges.truncated ? { truncated: true } : {})
+      }
+    : proxyImplementationCheck(
+        'failed',
+        'RPC returned an invalid or oversized ERC-1967 implementation-slot result'
+      )
   const parsed = parseNativeBalanceChanges(outcome.response.result)
   if (!parsed) {
     return {
-      status: 'failed',
-      source: 'debug_traceCall',
-      reason: 'RPC returned an invalid native balance-change result'
+      nativeBalanceChanges: {
+        status: 'failed',
+        source: 'debug_traceCall',
+        reason: 'RPC returned an invalid native balance-change result'
+      },
+      proxyImplementationCheck: implementationCheck
     }
   }
 
   return {
-    status: 'succeeded',
-    source: 'debug_traceCall',
-    changes: parsed.changes,
-    ...(parsed.truncated ? { truncated: true } : {})
+    nativeBalanceChanges: {
+      status: 'succeeded',
+      source: 'debug_traceCall',
+      changes: parsed.changes,
+      ...(parsed.truncated ? { truncated: true } : {})
+    },
+    proxyImplementationCheck: implementationCheck
   }
 }
 
@@ -838,10 +1028,10 @@ export async function simulateTransaction(
   const targetChain: Chain = { type: 'ethereum', id: Number(chainId) }
   const startedAt = Date.now()
   const simulationPromise = simulateExecution(transaction, send, targetChain, timeoutMs)
-  const nativeBalanceChangesPromise = simulationPromise.then((simulation) => {
+  const prestateTracePromise = simulationPromise.then((simulation) => {
     if (simulation.status !== 'succeeded') return undefined
 
-    return readNativeBalanceChanges(
+    return readPrestateTrace(
       transaction,
       send,
       targetChain,
@@ -853,11 +1043,11 @@ export async function simulateTransaction(
 
     return readCallTrace(transaction, send, targetChain, Math.max(0, timeoutMs - (Date.now() - startedAt)))
   })
-  const [simulation, allowance, delegation, nativeBalanceChanges, callTrace] = await Promise.all([
+  const [simulation, allowance, delegation, prestateTrace, callTrace] = await Promise.all([
     simulationPromise,
     readTokenAllowance(transaction, send, targetChain, timeoutMs),
     readAccountDelegation(transaction.from, send, targetChain, timeoutMs),
-    nativeBalanceChangesPromise,
+    prestateTracePromise,
     callTracePromise
   ])
 
@@ -865,7 +1055,10 @@ export async function simulateTransaction(
     ...simulation,
     ...(allowance ? { allowance } : {}),
     ...(delegation.status === 'undelegated' ? {} : { delegation }),
-    ...(nativeBalanceChanges ? { nativeBalanceChanges } : {}),
+    ...(prestateTrace ? { nativeBalanceChanges: prestateTrace.nativeBalanceChanges } : {}),
+    ...(prestateTrace?.proxyImplementationCheck
+      ? { proxyImplementationCheck: prestateTrace.proxyImplementationCheck }
+      : {}),
     ...(callTrace ? { callTrace } : {})
   }
 }

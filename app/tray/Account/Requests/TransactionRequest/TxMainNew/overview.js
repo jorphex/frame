@@ -165,6 +165,23 @@ export function getCallTracePresentation(simulation) {
   }
 }
 
+export function getProxyImplementationChangesPresentation(simulation) {
+  const evidence = simulation?.proxyImplementationCheck
+  if (!evidence) return null
+  if (evidence.status !== 'succeeded') {
+    return { className: '_txMainTagWarning', label: 'ERC-1967 implementation-slot check unavailable' }
+  }
+  if (!evidence.changes.length) return null
+
+  const count = evidence.changes.length
+  return {
+    className: '_txMainTagBad',
+    label: `RPC reports ${evidence.truncated ? 'at least ' : ''}${count} net ERC-1967 implementation slot change${
+      count === 1 ? '' : 's'
+    }${evidence.truncated ? ' (truncated)' : ''}`
+  }
+}
+
 export function getAllowancePresentation(simulation) {
   const allowance = simulation?.allowance
   if (!allowance) return null
@@ -229,6 +246,7 @@ const TxOverview = ({
   const simulationEffects = getSimulationEffectsPresentation(req.simulation, req.account)
   const nativeBalanceChanges = getNativeBalanceChangesPresentation(req.simulation)
   const callTrace = getCallTracePresentation(req.simulation)
+  const proxyImplementationChanges = getProxyImplementationChangesPresentation(req.simulation)
   const allowance = getAllowancePresentation(req.simulation)
   const delegation = getDelegationPresentation(req.simulation)
   const accessList = getAccessListPresentation(req.data)
@@ -293,6 +311,15 @@ const TxOverview = ({
           <ClusterRow>
             <ClusterValue>
               <div className={`_txMainTag ${delegation.className}`}>{delegation.label}</div>
+            </ClusterValue>
+          </ClusterRow>
+        )}
+        {proxyImplementationChanges && (
+          <ClusterRow>
+            <ClusterValue>
+              <div className={`_txMainTag ${proxyImplementationChanges.className}`}>
+                {proxyImplementationChanges.label}
+              </div>
             </ClusterValue>
           </ClusterRow>
         )}

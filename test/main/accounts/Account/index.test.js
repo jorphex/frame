@@ -791,6 +791,111 @@ describe('#addRequest', () => {
     expect(request.approvals).toEqual([])
   })
 
+  it('requires fresh explicit consent for reported ERC-1967 implementation changes', async () => {
+    const proxy = '0x3333333333333333333333333333333333333333'
+    const before = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const after = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    const proxyImplementationCheck = {
+      status: 'succeeded',
+      source: 'debug_traceCall',
+      standard: 'ERC-1967',
+      slot: '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc',
+      changes: [
+        {
+          proxy,
+          kind: 'changed',
+          beforeValue: `0x${'0'.repeat(24)}${before.slice(2)}`,
+          afterValue: `0x${'0'.repeat(24)}${after.slice(2)}`,
+          beforeImplementation: before,
+          afterImplementation: after
+        }
+      ]
+    }
+    const changedProxyImplementation = {
+      ...proxyImplementationCheck,
+      changes: [
+        {
+          ...proxyImplementationCheck.changes[0],
+          afterValue: `0x${'0'.repeat(24)}${proxy.slice(2)}`,
+          afterImplementation: proxy
+        }
+      ]
+    }
+    simulateTransaction
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call', proxyImplementationCheck })
+      .mockResolvedValueOnce({ status: 'succeeded', source: 'eth_call', proxyImplementationCheck })
+      .mockResolvedValueOnce({
+        status: 'succeeded',
+        source: 'eth_call',
+        proxyImplementationCheck: {
+          status: 'unavailable',
+          source: 'debug_traceCall',
+          standard: 'ERC-1967',
+          slot: proxyImplementationCheck.slot,
+          reason: 'Configured RPC does not support tracing'
+        }
+      })
+      .mockResolvedValueOnce({
+        status: 'succeeded',
+        source: 'eth_call',
+        proxyImplementationCheck: changedProxyImplementation
+      })
+      .mockResolvedValueOnce({
+        status: 'succeeded',
+        source: 'eth_call',
+        proxyImplementationCheck: { ...proxyImplementationCheck, changes: [] }
+      })
+    const request = {
+      handlerId: 'proxy-implementation-approval',
+      type: 'transaction',
+      data: { chainId: '0x1', gasLimit: '0x5208' },
+      approvals: [],
+      simulation: { status: 'pending' }
+    }
+
+    account.addRequest(request)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    const approval = request.approvals[0]
+    expect(approval).toMatchObject({
+      type: ApprovalType.ProxyImplementationChangeRisk,
+      approved: false,
+      data: {
+        title: 'ERC-1967 Implementation Slot Change',
+        confirmLabel: 'Approve Upgrade Anyway',
+        riskCount: 1,
+        evidenceKey: `${proxy}:0x${'0'.repeat(24)}${before.slice(2)}->0x${'0'.repeat(24)}${after.slice(2)}`
+      }
+    })
+    expect(approval.data.message).toMatch(/replace the code executed by a proxy/i)
+    approval.approve()
+
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.approvals[0]).toBe(approval)
+    expect(approval.approved).toBe(true)
+
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.approvals[0]).toBe(approval)
+    expect(approval.approved).toBe(true)
+
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.approvals[0]).toBe(approval)
+    expect(approval.approved).toBe(false)
+    expect(approval.data.evidenceKey).toContain(proxy.slice(2))
+
+    account.refreshTransactionSimulation(request, true, true)
+    jest.advanceTimersByTime(1)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(request.approvals).toEqual([])
+  })
+
   it('preserves an acknowledged override across automatic fee rechecks and removes it on success', async () => {
     simulateTransaction
       .mockResolvedValueOnce({ status: 'failed', source: 'eth_simulateV1', reason: 'RPC timeout' })

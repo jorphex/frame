@@ -10,6 +10,7 @@ import {
   getCallTracePresentation,
   getDelegationPresentation,
   getNativeBalanceChangesPresentation,
+  getProxyImplementationChangesPresentation,
   getSimulationEffectsPresentation,
   getSimulationPresentation
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
@@ -18,7 +19,8 @@ import {
   SimulationCallTrace,
   SimulationDelegation,
   SimulationEffects,
-  SimulationNativeBalanceChanges
+  SimulationNativeBalanceChanges,
+  SimulationProxyImplementationChanges
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData/effects'
 import { ViewData } from '../../../../../../app/tray/Account/Requests/TransactionRequest/ViewData'
 import {
@@ -345,6 +347,73 @@ describe('simulation review', () => {
 
     expect(screen.getByText('No native balance changes were reported.')).toBeTruthy()
     expect(screen.queryByText(/Native Balance Increase/i)).toBeNull()
+  })
+
+  it('prominently summarizes and details ERC-1967 implementation changes', () => {
+    const proxy = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    const before = '0xcccccccccccccccccccccccccccccccccccccccc'
+    const after = '0xdddddddddddddddddddddddddddddddddddddddd'
+    const evidence = {
+      status: 'succeeded',
+      source: 'debug_traceCall',
+      standard: 'ERC-1967',
+      slot: '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc',
+      changes: [
+        {
+          proxy,
+          kind: 'changed',
+          beforeValue: `0x${'0'.repeat(24)}${before.slice(2)}`,
+          afterValue: `0x${'0'.repeat(24)}${after.slice(2)}`,
+          beforeImplementation: before,
+          afterImplementation: after
+        }
+      ]
+    }
+
+    expect(getProxyImplementationChangesPresentation({ proxyImplementationCheck: evidence })).toEqual({
+      className: '_txMainTagBad',
+      label: 'RPC reports 1 net ERC-1967 implementation slot change'
+    })
+    render(<SimulationProxyImplementationChanges simulation={{ proxyImplementationCheck: evidence }} />)
+
+    expect(screen.getByText('RPC-Reported ERC-1967 Implementation Slot Changes')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toMatch(/configured RPC/i)
+    expect(screen.getByRole('alert').textContent).toMatch(/not independently verified/i)
+    expect(screen.getByText('Proxy Implementation Slot Changed')).toBeTruthy()
+    expect(screen.getByText(proxy)).toBeTruthy()
+    expect(screen.getByText(before)).toBeTruthy()
+    expect(screen.getByText(after)).toBeTruthy()
+  })
+
+  it('omits absent proxy implementation-change evidence', () => {
+    expect(getProxyImplementationChangesPresentation(undefined)).toBeNull()
+    expect(
+      getProxyImplementationChangesPresentation({
+        proxyImplementationCheck: { status: 'succeeded', source: 'debug_traceCall', changes: [] }
+      })
+    ).toBeNull()
+    render(<SimulationProxyImplementationChanges simulation={{ status: 'succeeded' }} />)
+    expect(screen.queryByText('RPC-Reported ERC-1967 Implementation Slot Changes')).toBeNull()
+  })
+
+  it('shows an inconclusive ERC-1967 check without claiming safety', () => {
+    const proxyImplementationCheck = {
+      status: 'unavailable',
+      source: 'debug_traceCall',
+      standard: 'ERC-1967',
+      slot: '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc',
+      reason: 'Configured RPC does not support tracing'
+    }
+
+    expect(getProxyImplementationChangesPresentation({ proxyImplementationCheck })).toEqual({
+      className: '_txMainTagWarning',
+      label: 'ERC-1967 implementation-slot check unavailable'
+    })
+    render(<SimulationProxyImplementationChanges simulation={{ proxyImplementationCheck }} />)
+
+    expect(screen.getByText('ERC-1967 Implementation Slot Check')).toBeTruthy()
+    expect(screen.getByRole('note').textContent).toMatch(/could not derive net/i)
+    expect(screen.getByRole('note').textContent).toMatch(/does not support tracing/i)
   })
 
   it('summarizes and renders bounded configured-RPC execution frames', () => {

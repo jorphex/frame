@@ -159,6 +159,69 @@ export const SimulationNativeBalanceChanges = ({ simulation }) => {
   )
 }
 
+export const SimulationProxyImplementationChanges = ({ simulation }) => {
+  const evidence = simulation?.proxyImplementationCheck
+  if (!evidence) return null
+
+  if (evidence.status !== 'succeeded') {
+    return (
+      <div className='txViewData'>
+        <div className='txViewDataHeader'>ERC-1967 Implementation Slot Check</div>
+        <div className='simulationEffectsNotice' role='note'>
+          {`Frame could not derive net ERC-1967 implementation-slot changes from the configured RPC. ${
+            evidence.reason || ''
+          }`.trim()}
+        </div>
+      </div>
+    )
+  }
+
+  if (!evidence.changes.length) return null
+
+  return (
+    <div className='txViewData'>
+      <div className='txViewDataHeader'>RPC-Reported ERC-1967 Implementation Slot Changes</div>
+      <div className='simulationEffectsTruncated' role='alert'>
+        Your configured RPC reports net pre/post proxy implementation-slot changes. A new implementation can
+        replace the code executed by the proxy and change control over its assets. Temporary changes restored
+        before execution completes are not detected. This trace evidence is not independently verified.
+      </div>
+      {evidence.changes.map((change) => (
+        <section className='simulationEffect' key={change.proxy}>
+          <div className='simulationEffectTitle simulationEffectRisk'>
+            {`Proxy Implementation Slot ${
+              change.kind === 'initialized'
+                ? 'Initialized'
+                : change.kind === 'cleared'
+                  ? 'Cleared'
+                  : 'Changed'
+            }`}
+          </div>
+          <SimpleJSON
+            humanizeKeys
+            quoteStrings={false}
+            json={{
+              proxy: change.proxy,
+              changeType: change.kind,
+              ...(change.beforeImplementation ? { previousImplementation: change.beforeImplementation } : {}),
+              ...(change.afterImplementation ? { nextImplementation: change.afterImplementation } : {}),
+              previousSlotValue: change.beforeValue,
+              nextSlotValue: change.afterValue,
+              storageSlot: evidence.slot
+            }}
+          />
+        </section>
+      ))}
+      {evidence.truncated && (
+        <div className='simulationEffectsTruncated' role='alert'>
+          Proxy implementation-change preview truncated. Do not proceed without reviewing the complete
+          transaction through another trusted source.
+        </div>
+      )}
+    </div>
+  )
+}
+
 const callTraceTitle = (call) => {
   if (call.type === 'CREATE') return 'Contract Creation'
   if (call.type === 'CREATE2') return 'CREATE2 Contract Creation'

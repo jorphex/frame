@@ -5,6 +5,7 @@ export enum ApprovalType {
   TokenApprovalRisk = 'approveBroadTokenAuthority',
   TokenAllowanceChangeRisk = 'approveExistingTokenAllowanceChange',
   DelegatedAccountRisk = 'approveDelegatedAccountExecution',
+  ProxyImplementationChangeRisk = 'approveProxyImplementationChange',
   TokenPermitRisk = 'approveUnlimitedTokenPermit',
   SignatureRisk = 'approveDangerousSignature'
 }

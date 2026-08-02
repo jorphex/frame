@@ -7,7 +7,8 @@ import {
   SimulationCallTrace,
   SimulationDelegation,
   SimulationEffects,
-  SimulationNativeBalanceChanges
+  SimulationNativeBalanceChanges,
+  SimulationProxyImplementationChanges
 } from './effects'
 
 const txFieldPriority = [
@@ -183,6 +184,7 @@ export class ViewData extends React.Component {
     return (
       <div className='accountViewScroll cardShow'>
         <SimulationDelegation simulation={req.simulation} />
+        <SimulationProxyImplementationChanges simulation={req.simulation} />
         <SimulationAllowance simulation={req.simulation} />
         <SimulationCallTrace simulation={req.simulation} />
         <SimulationNativeBalanceChanges simulation={req.simulation} />

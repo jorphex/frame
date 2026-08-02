@@ -4,6 +4,7 @@ import {
   parseCallTrace,
   parseDelegationIndicator,
   parseNativeBalanceChanges,
+  parseProxyImplementationChanges,
   parseSimulateCallsResult,
   parseSimulateResult,
   simulateTransaction,
@@ -30,6 +31,8 @@ const approvalData = `0x095ea7b3${'0'.repeat(24)}${approvalSpender.slice(2)}${ap
   .toString(16)
   .padStart(64, '0')}`
 const approvalTransaction = { ...transaction, data: approvalData }
+const implementationSlot = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
+const storageAddress = (address) => `0x${'0'.repeat(24)}${address.slice(2)}`
 
 const simulateSuccess = [
   {
@@ -41,6 +44,14 @@ const unsupportedNativeBalanceChanges = {
   status: 'unavailable',
   source: 'debug_traceCall',
   reason: 'Configured RPC does not support native balance-change tracing'
+}
+
+const unsupportedProxyImplementationCheck = {
+  status: 'unavailable',
+  source: 'debug_traceCall',
+  standard: 'ERC-1967',
+  slot: implementationSlot,
+  reason: 'Configured RPC does not support ERC-1967 net implementation-slot tracing'
 }
 
 const callFrame = (overrides = {}) => ({
@@ -64,7 +75,7 @@ const withAccountCode =
       return
     }
     if (payload.method === 'debug_traceCall') {
-      callback(traceResponse)
+      callback({ ...traceResponse, id: payload.id })
       return
     }
 
@@ -182,6 +193,127 @@ it('fails closed on malformed native balance changes and bounds account output',
     oversized[`0x${index.toString(16).padStart(40, '0')}`] = { balance: '0x0' }
   }
   expect(parseNativeBalanceChanges({ pre: oversized, post: {} })).toBeUndefined()
+})
+
+it('strictly parses bounded ERC-1967 implementation-slot changes', () => {
+  const changedProxy = '0x3333333333333333333333333333333333333333'
+  const initializedProxy = '0x4444444444444444444444444444444444444444'
+  const clearedProxy = '0x5555555555555555555555555555555555555555'
+  const before = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  const after = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+
+  expect(
+    parseProxyImplementationChanges({
+      pre: {
+        [changedProxy]: { storage: { [implementationSlot]: storageAddress(before) } },
+        [clearedProxy]: { storage: { [implementationSlot]: storageAddress(before) } }
+      },
+      post: {
+        [changedProxy]: { storage: { [implementationSlot.toUpperCase()]: storageAddress(after) } },
+        [initializedProxy]: { storage: { [implementationSlot]: storageAddress(after) } },
+        [clearedProxy]: { storage: {} }
+      }
+    })
+  ).toEqual({
+    changes: [
+      {
+        proxy: changedProxy,
+        kind: 'changed',
+        beforeValue: storageAddress(before),
+        afterValue: storageAddress(after),
+        beforeImplementation: before,
+        afterImplementation: after
+      },
+      {
+        proxy: initializedProxy,
+        kind: 'initialized',
+        beforeValue: `0x${'0'.repeat(64)}`,
+        afterValue: storageAddress(after),
+        beforeImplementation: '0x0000000000000000000000000000000000000000',
+        afterImplementation: after
+      },
+      {
+        proxy: clearedProxy,
+        kind: 'cleared',
+        beforeValue: storageAddress(before),
+        afterValue: `0x${'0'.repeat(64)}`,
+        beforeImplementation: before,
+        afterImplementation: '0x0000000000000000000000000000000000000000'
+      }
+    ],
+    truncated: false
+  })
+})
+
+it('rejects malformed ERC-1967 evidence and bounds reported changes', () => {
+  expect(parseProxyImplementationChanges({ pre: [], post: {} })).toBeUndefined()
+  const noncanonical = `0x01${'00'.repeat(31)}`
+  expect(
+    parseProxyImplementationChanges({
+      pre: { [transaction.to]: { storage: {} } },
+      post: { [transaction.to]: { storage: { [implementationSlot]: noncanonical } } }
+    })
+  ).toEqual({
+    changes: [
+      {
+        proxy: transaction.to,
+        kind: 'initialized',
+        beforeValue: `0x${'0'.repeat(64)}`,
+        afterValue: noncanonical,
+        beforeImplementation: '0x0000000000000000000000000000000000000000'
+      }
+    ],
+    truncated: false
+  })
+  expect(
+    parseProxyImplementationChanges({
+      pre: { [transaction.to]: { storage: { [implementationSlot]: `0x01${'00'.repeat(31)}` } } },
+      post: { [transaction.to]: { storage: { [implementationSlot]: `0x${'00'.repeat(31)}` } } }
+    })
+  ).toBeUndefined()
+  expect(
+    parseProxyImplementationChanges({
+      pre: {
+        [transaction.to]: {
+          storage: {
+            [implementationSlot]: storageAddress(transaction.from),
+            [implementationSlot.toUpperCase()]: storageAddress(transaction.from)
+          }
+        }
+      },
+      post: { [transaction.to]: { storage: {} } }
+    })
+  ).toBeUndefined()
+
+  const pre = {}
+  const post = {}
+  for (let index = 0; index < 33; index += 1) {
+    const proxy = `0x${(index + 1).toString(16).padStart(40, '0')}`
+    pre[proxy] = { storage: { [implementationSlot]: storageAddress(transaction.from) } }
+    post[proxy] = { storage: { [implementationSlot]: storageAddress(transaction.to) } }
+  }
+  expect(parseProxyImplementationChanges({ pre, post })).toMatchObject({
+    changes: expect.arrayContaining([
+      expect.objectContaining({
+        proxy: '0x0000000000000000000000000000000000000001',
+        beforeImplementation: transaction.from,
+        afterImplementation: transaction.to
+      })
+    ]),
+    truncated: true
+  })
+  expect(parseProxyImplementationChanges({ pre, post }).changes).toHaveLength(32)
+
+  const oversizedStorage = { [implementationSlot]: storageAddress(transaction.from) }
+  for (let index = 0; index < 8192; index += 1) {
+    oversizedStorage[`0x${index.toString(16).padStart(64, '0')}`] = `0x${'0'.repeat(64)}`
+  }
+  expect(
+    parseProxyImplementationChanges({
+      pre: { [transaction.to]: { storage: oversizedStorage } },
+      post: { [transaction.to]: { storage: {} } }
+    })
+  ).toBeUndefined()
 })
 
 it('strictly parses bounded nested calls without exposing raw trace data', () => {
@@ -429,7 +561,8 @@ it('uses eth_simulateV1 without falling back when it succeeds', async () => {
     status: 'succeeded',
     source: 'eth_simulateV1',
     gasUsed: '0x5208',
-    nativeBalanceChanges: unsupportedNativeBalanceChanges
+    nativeBalanceChanges: unsupportedNativeBalanceChanges,
+    proxyImplementationCheck: unsupportedProxyImplementationCheck
   })
   expect(send).toHaveBeenCalledTimes(1)
   expect(send).toHaveBeenCalledWith(
@@ -483,13 +616,60 @@ it('attaches exact configured-RPC native balance changes after execution succeed
         {
           tracer: 'prestateTracer',
           timeout: expect.stringMatching(/^[1-9][0-9]*ms$/),
-          tracerConfig: { diffMode: true, disableCode: true, disableStorage: true }
+          tracerConfig: { diffMode: true, disableCode: true, disableStorage: false }
         }
       ]
     },
     expect.any(Function),
     { type: 'ethereum', id: 1 }
   )
+})
+
+it('attaches exact configured-RPC ERC-1967 implementation changes after execution succeeds', async () => {
+  const before = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  const after = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  const send = jest.fn((payload, callback) => {
+    const tracer = payload.params?.[2]?.tracer
+    const result =
+      payload.method === 'eth_getCode'
+        ? '0x'
+        : tracer === 'prestateTracer'
+          ? {
+              pre: {
+                [transaction.to]: {
+                  balance: '0x0',
+                  storage: { [implementationSlot]: storageAddress(before) }
+                }
+              },
+              post: {
+                [transaction.to]: { storage: { [implementationSlot]: storageAddress(after) } }
+              }
+            }
+          : tracer === 'callTracer'
+            ? callFrame()
+            : simulateSuccess
+    callback({ id: payload.id, jsonrpc: '2.0', result })
+  })
+
+  await expect(simulateTransaction(transaction, { send })).resolves.toMatchObject({
+    status: 'succeeded',
+    proxyImplementationCheck: {
+      status: 'succeeded',
+      source: 'debug_traceCall',
+      standard: 'ERC-1967',
+      slot: implementationSlot,
+      changes: [
+        {
+          proxy: transaction.to,
+          kind: 'changed',
+          beforeValue: storageAddress(before),
+          afterValue: storageAddress(after),
+          beforeImplementation: before,
+          afterImplementation: after
+        }
+      ]
+    }
+  })
 })
 
 it('attaches a correlated configured-RPC call trace after execution succeeds', async () => {
@@ -602,6 +782,10 @@ it('qualifies malformed and unsupported native balance traces without weakening 
       status: 'failed',
       source: 'debug_traceCall',
       reason: 'RPC returned an invalid native balance-change result'
+    },
+    proxyImplementationCheck: {
+      status: 'failed',
+      reason: 'RPC returned an invalid or oversized ERC-1967 implementation-slot result'
     }
   })
 
@@ -612,7 +796,8 @@ it('qualifies malformed and unsupported native balance traces without weakening 
   )
   await expect(simulateTransaction(transaction, { send: unsupported })).resolves.toMatchObject({
     status: 'succeeded',
-    nativeBalanceChanges: unsupportedNativeBalanceChanges
+    nativeBalanceChanges: unsupportedNativeBalanceChanges,
+    proxyImplementationCheck: unsupportedProxyImplementationCheck
   })
 })
 
@@ -636,6 +821,10 @@ it('shares the execution timeout budget with native balance tracing', async () =
       status: 'unavailable',
       source: 'debug_traceCall',
       reason: 'Native balance-change trace exceeded the simulation time budget'
+    },
+    proxyImplementationCheck: {
+      status: 'unavailable',
+      reason: 'ERC-1967 net implementation-slot trace exceeded the simulation time budget'
     }
   })
 })
@@ -736,7 +925,8 @@ it.each([-32601, -32004])('falls back to eth_call for unsupported-method code %s
   await expect(simulateTransaction(transaction, { send: withAccountCode(send) })).resolves.toEqual({
     status: 'succeeded',
     source: 'eth_call',
-    nativeBalanceChanges: unsupportedNativeBalanceChanges
+    nativeBalanceChanges: unsupportedNativeBalanceChanges,
+    proxyImplementationCheck: unsupportedProxyImplementationCheck
   })
   expect(send.mock.calls[1][0]).toEqual({
     id: 1,
@@ -1087,7 +1277,8 @@ it('attaches an exact configured-RPC allowance read to an approval simulation', 
       currentAmount: '7',
       requestedAmount: '42'
     },
-    nativeBalanceChanges: unsupportedNativeBalanceChanges
+    nativeBalanceChanges: unsupportedNativeBalanceChanges,
+    proxyImplementationCheck: unsupportedProxyImplementationCheck
   })
   expect(send).toHaveBeenCalledTimes(2)
   expect(send.mock.calls[1][0]).toEqual({
@@ -1123,7 +1314,8 @@ it.each([
     status: 'succeeded',
     source: 'eth_simulateV1',
     gasUsed: '0x5208',
-    nativeBalanceChanges: unsupportedNativeBalanceChanges
+    nativeBalanceChanges: unsupportedNativeBalanceChanges,
+    proxyImplementationCheck: unsupportedProxyImplementationCheck
   })
 })
 
@@ -1148,6 +1340,13 @@ it('bounds a missing allowance response without changing a successful execution 
       status: 'unavailable',
       source: 'debug_traceCall',
       reason: 'Native balance-change trace exceeded the simulation time budget'
+    },
+    proxyImplementationCheck: {
+      status: 'unavailable',
+      source: 'debug_traceCall',
+      standard: 'ERC-1967',
+      slot: implementationSlot,
+      reason: 'ERC-1967 net implementation-slot trace exceeded the simulation time budget'
     }
   })
 })

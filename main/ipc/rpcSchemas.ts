@@ -68,6 +68,7 @@ const ApprovalTypeSchema = z.enum([
   'approveBroadTokenAuthority',
   'approveExistingTokenAllowanceChange',
   'approveDelegatedAccountExecution',
+  'approveProxyImplementationChange',
   'approveUnlimitedTokenPermit',
   'approveDangerousSignature'
 ])

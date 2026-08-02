@@ -505,6 +505,7 @@ class FrameAccount {
     this.removeApproval(req, ApprovalType.TokenApprovalRisk)
     this.removeApproval(req, ApprovalType.TokenAllowanceChangeRisk)
     this.removeApproval(req, ApprovalType.DelegatedAccountRisk)
+    this.removeApproval(req, ApprovalType.ProxyImplementationChangeRisk)
   }
 
   private syncSimulationApproval(req: TransactionRequest, simulation: TransactionSimulation) {
@@ -629,6 +630,33 @@ class FrameAccount {
     })
   }
 
+  private syncProxyImplementationChangeRisk(req: TransactionRequest, simulation: TransactionSimulation) {
+    const evidence = simulation.proxyImplementationCheck
+    if (!evidence || evidence.status !== 'succeeded') return
+    if (!evidence.changes.length) {
+      this.removeApproval(req, ApprovalType.ProxyImplementationChangeRisk)
+      return
+    }
+
+    const count = evidence.changes.length
+    const subject = evidence.truncated
+      ? `at least ${count} ERC-1967 proxy implementation slots`
+      : `${count} ERC-1967 proxy implementation slot${count === 1 ? '' : 's'}`
+    this.syncManagedApproval(req, ApprovalType.ProxyImplementationChangeRisk, {
+      title:
+        count === 1 && !evidence.truncated
+          ? 'ERC-1967 Implementation Slot Change'
+          : 'ERC-1967 Implementation Slot Changes',
+      message: `Your configured RPC reports that this transaction causes a net pre/post change to ${subject}. This can replace the code executed by a proxy and change control over its assets. Verify every proxy and implementation value before proceeding.`,
+      confirmLabel: 'Approve Upgrade Anyway',
+      riskCount: count,
+      truncated: evidence.truncated === true,
+      evidenceKey: evidence.changes
+        .map((change) => `${change.proxy}:${change.beforeValue}->${change.afterValue}`)
+        .join(',')
+    })
+  }
+
   syncPermitApprovalRisk(req: PermitSignatureRequest) {
     const amount = parseTokenBaseUnitAmount(req.typedMessage?.data?.message?.value)
     if (amount !== MAX_UINT256) {
@@ -670,6 +698,7 @@ class FrameAccount {
     this.syncTokenApprovalRisk(req, simulation)
     this.syncTokenAllowanceChangeRisk(req, simulation)
     this.syncDelegatedAccountRisk(req, simulation)
+    this.syncProxyImplementationChangeRisk(req, simulation)
     this.update()
   }
 
