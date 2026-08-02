@@ -14,7 +14,12 @@ const RISK_MESSAGES = {
   'permit2-maximum-amount': () =>
     'At least one Permit2 amount is the maximum value supported by this permission type.',
   'permit2-noncanonical-contract': ({ permit2 }) =>
-    `The verifying contract ${permit2?.verifyingContract || 'is unknown and'} is not the canonical Uniswap Permit2 deployment.`
+    `The verifying contract ${permit2?.verifyingContract || 'is unknown and'} is not the canonical Uniswap Permit2 deployment.`,
+  'eip3009-transfer': ({ eip3009 }) =>
+    eip3009?.kind === 'transfer'
+      ? 'This ERC-3009 signature directly authorizes the displayed token transfer without an onchain approval transaction. Anyone holding the signature can relay this transfer.'
+      : 'This ERC-3009 signature directly authorizes the displayed token transfer without an onchain approval transaction. The displayed recipient must submit the receive authorization.',
+  'eip3009-maximum-amount': () => 'This ERC-3009 transfer uses the maximum uint256 token amount.'
 }
 
 const displayKey = (key) => key.replace(/([A-Z])/g, ' $1').trim()
@@ -105,6 +110,35 @@ const Permit2Authority = ({ authority }) => {
   )
 }
 
+const Eip3009Authorization = ({ authorization }) => {
+  if (!authorization) return null
+
+  return (
+    <Section title='ERC-3009 Authorization'>
+      <SimpleJSON
+        humanizeKeys
+        quoteStrings={false}
+        json={{
+          operation:
+            authorization.kind === 'cancel'
+              ? 'Cancel authorization'
+              : authorization.kind === 'receive'
+                ? 'Recipient-submitted transfer'
+                : 'Relayed transfer',
+          tokenContract: authorization.verifyingContract,
+          authorizer: authorization.authorizer,
+          ...(authorization.from ? { from: authorization.from } : {}),
+          ...(authorization.to ? { to: authorization.to } : {}),
+          ...(authorization.value ? { amountBaseUnits: authorization.value } : {}),
+          ...(authorization.validAfter ? { validAfterUnixSeconds: authorization.validAfter } : {}),
+          ...(authorization.validBefore ? { validBeforeUnixSeconds: authorization.validBefore } : {}),
+          nonce: authorization.nonce
+        }}
+      />
+    </Section>
+  )
+}
+
 const SigningContext = ({ chainName, context, origin, originName, typedMessage }) => {
   const structured = !Array.isArray(typedMessage.data)
   const requestChainId = context?.requestChainId
@@ -127,6 +161,7 @@ const SigningContext = ({ chainName, context, origin, originName, typedMessage }
       </Section>
       <TypedDataWarnings context={context} />
       <Permit2Authority authority={context?.permit2} />
+      <Eip3009Authorization authorization={context?.eip3009} />
     </>
   )
 }

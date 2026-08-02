@@ -19,7 +19,9 @@ const REQUIRED_RISKS: Record<SignatureRiskKind, readonly string[]> = {
     'permit2-allowance',
     'permit2-transfer',
     'permit2-maximum-amount',
-    'permit2-noncanonical-contract'
+    'permit2-noncanonical-contract',
+    'eip3009-transfer',
+    'eip3009-maximum-amount'
   ]
 }
 

@@ -141,6 +141,41 @@ it('shows normalized Permit2 authority before the raw typed data', () => {
   expect(screen.getByText(/creates standing token allowances/)).toBeTruthy()
 })
 
+it('shows normalized ERC-3009 transfer authority', () => {
+  const eip3009 = {
+    kind: 'receive',
+    primaryType: 'ReceiveWithAuthorization',
+    verifyingContract: '0x3333333333333333333333333333333333333333',
+    authorizer: '0x1111111111111111111111111111111111111111',
+    from: '0x1111111111111111111111111111111111111111',
+    to: '0x2222222222222222222222222222222222222222',
+    value: '100',
+    validAfter: '0',
+    validBefore: '2000000000',
+    nonce: `0x${'ab'.repeat(32)}`,
+    grantsAuthority: true,
+    maximumAmount: false
+  }
+  render(
+    <SimpleTypedData
+      req={request({
+        context: {
+          requestChainId: 1,
+          domainChainId: '1',
+          eip3009,
+          risks: ['eip3009-transfer']
+        }
+      })}
+    />
+  )
+
+  expect(screen.getByText('ERC-3009 Authorization')).toBeTruthy()
+  expect(screen.getByText('Recipient-submitted transfer')).toBeTruthy()
+  expect(screen.getByText(eip3009.to)).toBeTruthy()
+  expect(screen.getByText(/directly authorizes/)).toBeTruthy()
+  expect(screen.getByText(/recipient must submit/)).toBeTruthy()
+})
+
 it('uses the same complete view for specialized permit requests', () => {
   render(<SimpleTypedData req={request({ type: 'signErc20Permit' })} />)
 

@@ -196,6 +196,8 @@ export type TypedDataRisk =
   | 'permit2-transfer'
   | 'permit2-maximum-amount'
   | 'permit2-noncanonical-contract'
+  | 'eip3009-transfer'
+  | 'eip3009-maximum-amount'
 
 export interface Permit2Permission {
   token: string
@@ -223,11 +225,27 @@ export interface Permit2Authority {
   maximumAmount: boolean
 }
 
+export interface Eip3009Authorization {
+  kind: 'transfer' | 'receive' | 'cancel'
+  primaryType: 'TransferWithAuthorization' | 'ReceiveWithAuthorization' | 'CancelAuthorization'
+  verifyingContract: string
+  authorizer: string
+  from?: string
+  to?: string
+  value?: string
+  validAfter?: string
+  validBefore?: string
+  nonce: string
+  grantsAuthority: boolean
+  maximumAmount: boolean
+}
+
 export interface TypedDataContext {
   requestChainId: number
   domainChainId?: string
   risks: TypedDataRisk[]
   permit2?: Permit2Authority
+  eip3009?: Eip3009Authorization
 }
 
 export type SignTypedDataRequest = DefaultSignTypedDataRequest | PermitSignatureRequest

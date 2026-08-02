@@ -2698,6 +2698,40 @@ describe('#send', () => {
       }
     }
 
+    const authorizationData = (authorizer = address) => ({
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' }
+        ],
+        TransferWithAuthorization: [
+          { name: 'from', type: 'address' },
+          { name: 'to', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'validAfter', type: 'uint256' },
+          { name: 'validBefore', type: 'uint256' },
+          { name: 'nonce', type: 'bytes32' }
+        ]
+      },
+      primaryType: 'TransferWithAuthorization',
+      domain: {
+        name: 'USD Coin',
+        version: '2',
+        chainId: 1,
+        verifyingContract: '0x3333333333333333333333333333333333333333'
+      },
+      message: {
+        from: authorizer,
+        to: '0x2222222222222222222222222222222222222222',
+        value: '100',
+        validAfter: '0',
+        validBefore: '2000000000',
+        nonce: `0x${'ab'.repeat(32)}`
+      }
+    })
+
     const validRequests = [
       {
         method: 'eth_signTypedData',
@@ -2874,6 +2908,40 @@ describe('#send', () => {
           }
         }
       })
+    })
+
+    it('keeps matching-owner ERC-3009 authorization on the exact generic typed-data path', () => {
+      const authorization = authorizationData()
+
+      send({ method: 'eth_signTypedData_v4', params: [address, authorization] })
+
+      expect(accountRequests).toHaveLength(1)
+      expect(accountRequests[0]).toMatchObject({
+        type: 'signTypedData',
+        typedMessage: { data: authorization, version: SignTypedDataVersion.V4 },
+        context: {
+          risks: ['eip3009-transfer'],
+          eip3009: { authorizer: address, value: '100', grantsAuthority: true }
+        }
+      })
+    })
+
+    it('rejects an ERC-3009 authorization owned by another account', () => {
+      const authorization = authorizationData('0x1111111111111111111111111111111111111111')
+      const response = jest.fn()
+
+      send({ method: 'eth_signTypedData_v4', params: [address, authorization] }, response)
+
+      expect(response).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: {
+            code: -32602,
+            message: 'Invalid params: authorization owner does not match signing address'
+          }
+        })
+      )
+      expect(accountRequests).toHaveLength(0)
+      expect(provider.handlers).toEqual({})
     })
 
     it('rejects an EIP-2612 owner mismatch before allocating request state', () => {

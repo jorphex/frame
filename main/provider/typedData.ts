@@ -7,6 +7,7 @@ import type {
   TypedMessage
 } from '../accounts/types'
 import { getPermit2Authority } from '../signatures/permit2'
+import { getEip3009Authorization } from '../signatures/eip3009'
 
 interface UnknownRecord extends Record<string, unknown> {
   name?: unknown
@@ -276,7 +277,8 @@ export function getTypedDataContext(typedMessage: TypedMessage, requestChainId: 
   }
 
   const permit2 = getPermit2Authority(typedMessage)
-  const permit2Context = permit2 ? { permit2 } : {}
+  const eip3009 = getEip3009Authorization(typedMessage)
+  const authorityContext = { ...(permit2 ? { permit2 } : {}), ...(eip3009 ? { eip3009 } : {}) }
   const risks: TypedDataRisk[] = []
   const { domain } = typedMessage.data
 
@@ -287,18 +289,20 @@ export function getTypedDataContext(typedMessage: TypedMessage, requestChainId: 
     if (permit2.maximumAmount) risks.push('permit2-maximum-amount')
     if (!permit2.canonicalContract) risks.push('permit2-noncanonical-contract')
   }
+  if (eip3009?.grantsAuthority) risks.push('eip3009-transfer')
+  if (eip3009?.maximumAmount) risks.push('eip3009-maximum-amount')
 
   if (!hasOwn(domain, 'chainId')) {
     risks.push('domain-chain-missing')
-    return { requestChainId, risks, ...permit2Context }
+    return { requestChainId, risks, ...authorityContext }
   }
 
   const domainChainId = normalizeDomainChainId(domain.chainId)
   if (domainChainId === undefined) {
     risks.push('domain-chain-invalid')
-    return { requestChainId, risks, ...permit2Context }
+    return { requestChainId, risks, ...authorityContext }
   }
 
   if (domainChainId !== String(requestChainId)) risks.push('domain-chain-mismatch')
-  return { requestChainId, domainChainId, risks, ...permit2Context }
+  return { requestChainId, domainChainId, risks, ...authorityContext }
 }

@@ -219,6 +219,52 @@ describe('#parseTypedMessage', () => {
 describe('#getTypedDataContext', () => {
   const message = (data, version = SignTypedDataVersion.V4) => ({ data, version })
 
+  it('attaches ERC-3009 direct-transfer authority and risk', () => {
+    const authorization = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' }
+        ],
+        TransferWithAuthorization: [
+          { name: 'from', type: 'address' },
+          { name: 'to', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'validAfter', type: 'uint256' },
+          { name: 'validBefore', type: 'uint256' },
+          { name: 'nonce', type: 'bytes32' }
+        ]
+      },
+      primaryType: 'TransferWithAuthorization',
+      domain: {
+        name: 'USD Coin',
+        version: '2',
+        chainId: 1,
+        verifyingContract: '0x3333333333333333333333333333333333333333'
+      },
+      message: {
+        from: '0x1111111111111111111111111111111111111111',
+        to: '0x2222222222222222222222222222222222222222',
+        value: '100',
+        validAfter: '0',
+        validBefore: '2000000000',
+        nonce: `0x${'ab'.repeat(32)}`
+      }
+    }
+
+    expect(getTypedDataContext(message(authorization), 1)).toMatchObject({
+      risks: ['eip3009-transfer'],
+      eip3009: {
+        kind: 'transfer',
+        authorizer: authorization.message.from,
+        value: '100',
+        grantsAuthority: true
+      }
+    })
+  })
+
   it('attaches Permit2 authority and consent risks to exact canonical data', () => {
     const permit2 = {
       types: {

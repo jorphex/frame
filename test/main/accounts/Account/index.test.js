@@ -495,6 +495,20 @@ describe('#addRequest', () => {
     })
   })
 
+  it('requires explicit consent for ERC-3009 direct transfer authority', () => {
+    const request = typedRequest(['eip3009-transfer', 'eip3009-maximum-amount'])
+
+    account.addRequest(request)
+
+    expect(request.approvals[0]).toMatchObject({
+      type: ApprovalType.SignatureRisk,
+      data: {
+        title: 'Risky Typed Signature',
+        riskCodes: 'eip3009-transfer,eip3009-maximum-amount'
+      }
+    })
+  })
+
   it('composes typed-data and unlimited-permit approvals independently', () => {
     const request = permitRequest(maxTokenAmount.toString(10), 'risky-unlimited-permit')
     request.context.risks = ['domain-chain-mismatch']

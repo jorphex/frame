@@ -1093,8 +1093,16 @@ export class Provider extends EventEmitter {
       }
     }
 
-    const handlerId = this.addRequestHandler(res)
     const context = getTypedDataContext(typedMessage, targetChain.id)
+    if (context.eip3009 && context.eip3009.authorizer.toLowerCase() !== targetAccount.address.toLowerCase()) {
+      return resError(
+        { code: -32602, message: 'Invalid params: authorization owner does not match signing address' },
+        payload,
+        res
+      )
+    }
+
+    const handlerId = this.addRequestHandler(res)
 
     const req: SignTypedDataRequest = {
       handlerId,
