@@ -125,6 +125,17 @@ describe('openExternal', () => {
       'https://github.com/jorphex/frame-extension/releases/tag/v0.12.1'
     )
   })
+
+  it('opens fork update releases but rejects upstream and lookalike pages', () => {
+    openExternal('https://github.com/jorphex/frame/releases/tag/v0.7.0-rc.1')
+    openExternal('https://github.com/floating/frame/releases/tag/v0.7.0-rc.1')
+    openExternal('https://github.com.evil.example/jorphex/frame/releases/tag/v0.7.0-rc.1')
+
+    expect(shell.openExternal).toHaveBeenCalledTimes(1)
+    expect(shell.openExternal).toHaveBeenCalledWith(
+      'https://github.com/jorphex/frame/releases/tag/v0.7.0-rc.1'
+    )
+  })
 })
 
 describe('openBlockExplorer', () => {
