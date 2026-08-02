@@ -14,9 +14,9 @@ for (const renderer of renderers) {
   if (!existsSync(htmlPath)) throw new Error(`missing ${basename(htmlPath)}`)
 
   const html = readFileSync(htmlPath, 'utf8')
-  const references = [...html.matchAll(/(?:src|href)="([^"#?]+)"/g)].map(([, reference]) =>
-    basename(reference)
-  )
+  const references = [
+    ...html.matchAll(/\b(?:src|href)\s*=\s*(?:"([^"#?]+)"|'([^'#?]+)'|([^\s"'<>#?]+))/gi)
+  ].map(([, doubleQuoted, singleQuoted, unquoted]) => basename(doubleQuoted || singleQuoted || unquoted))
 
   for (const reference of references) {
     if (!existsSync(join(root, reference))) {
