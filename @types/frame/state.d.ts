@@ -24,6 +24,8 @@ interface Frame {
   id: string
   currentView: string
   views: Record<string, ViewMetadata>
+  fullscreen?: boolean
+  maximized?: boolean
 }
 
 type SignerType = 'ring' | 'seed' | 'trezor' | 'ledger' | 'lattice'

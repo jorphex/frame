@@ -3,6 +3,7 @@ import log from 'electron-log'
 
 import { FrameInstance } from './frameInstances'
 import store from '../../store'
+import { requireStoreAction } from '../../store/action'
 import server from '../../dapps/server'
 import { createViewInstance } from '../window'
 
@@ -21,6 +22,9 @@ const extract = (l: string): Extract => {
 export default {
   // Create a view instance on a frame
   create: (frameInstance: FrameInstance, view: ViewMetadata) => {
+    const frame = store('main.frames', frameInstance.frameId) as Frame | undefined
+    if (!frame) throw new Error(`Frame ${frameInstance.frameId} is unavailable while creating a view`)
+
     const viewInstance = createViewInstance(view.ens)
     const { session } = extract(view.url)
 
@@ -57,7 +61,7 @@ export default {
       }
     })
 
-    const { fullscreen } = store('main.frames', frameInstance.frameId)
+    const fullscreen = !!frame.fullscreen
 
     const { width, height } = frameInstance.getBounds()
 
@@ -93,7 +97,7 @@ export default {
       )
 
     viewInstance.webContents.on('did-finish-load', () => {
-      store.updateFrameView(frameInstance.frameId, view.id, { ready: true })
+      requireStoreAction('updateFrameView')(frameInstance.frameId, view.id, { ready: true })
     })
 
     // Keep reference to view on frame instance
@@ -104,21 +108,28 @@ export default {
     const views = frameInstance.views || {}
     const { frameId } = frameInstance
 
-    const { url } = store('main.frames', frameId, 'views', viewId)
-    const { ens, session } = extract(url)
-    server.sessions.remove(ens, session)
-
-    if (frameInstance && !frameInstance.isDestroyed()) {
-      frameInstance.contentView.removeChildView(views[viewId])
+    const viewMetadata = store('main.frames', frameId, 'views', viewId) as ViewMetadata | undefined
+    if (viewMetadata) {
+      const { ens, session } = extract(viewMetadata.url)
+      server.sessions.remove(ens, session)
     }
 
-    views[viewId].webContents.close({ waitForBeforeUnload: false })
+    const view = views[viewId]
+    if (!view) return
+
+    if (frameInstance && !frameInstance.isDestroyed()) {
+      frameInstance.contentView.removeChildView(view)
+    }
+
+    view.webContents.close({ waitForBeforeUnload: false })
 
     delete views[viewId]
   },
   position: (frameInstance: FrameInstance, viewId: string) => {
     const { frameId } = frameInstance
-    const { fullscreen } = store('main.frames', frameId)
+    const frame = store('main.frames', frameId) as Frame | undefined
+    if (!frame) return
+    const fullscreen = !!frame.fullscreen
     const viewInstance = (frameInstance.views || {})[viewId]
     if (viewInstance) {
       const { width, height } = frameInstance.getBounds()

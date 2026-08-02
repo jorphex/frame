@@ -30,6 +30,13 @@ const createFrameWindow = () => ({
   views: {}
 })
 
+beforeEach(() => {
+  jest.clearAllMocks()
+  store.mockReset()
+  frameInstances.create.mockReset()
+  viewInstances.create.mockReset()
+})
+
 describe('FrameManager WebContentsView ownership', () => {
   it('attaches the active view and detaches it when it is no longer current', () => {
     const manager = new FrameManager()
@@ -65,6 +72,23 @@ describe('FrameManager WebContentsView ownership', () => {
     manager.manageFrames({ frame }, '')
     listeners.resize()
 
+    expect(viewInstances.position).toHaveBeenCalledWith(frameWindow, 'view')
+  })
+
+  it('attaches the view instance created during the same state update', () => {
+    const manager = new FrameManager()
+    const view = { webContents: { focus: jest.fn() } }
+    const frameWindow = createFrameWindow()
+    manager.frameInstances = { frame: frameWindow }
+    viewInstances.create.mockImplementation((instance, metadata) => {
+      instance.views[metadata.id] = view
+    })
+
+    const frame = { currentView: 'view', views: { view: { id: 'view', ready: true } } }
+    manager.manageViews({ frame })
+
+    expect(viewInstances.create).toHaveBeenCalledWith(frameWindow, frame.views.view)
+    expect(frameWindow.contentView.addChildView).toHaveBeenCalledWith(view)
     expect(viewInstances.position).toHaveBeenCalledWith(frameWindow, 'view')
   })
 })

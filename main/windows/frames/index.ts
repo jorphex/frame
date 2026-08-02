@@ -2,6 +2,7 @@
 // They are rendered based on the state of `main.frames`
 import log from 'electron-log'
 import store from '../../store'
+import { requireStoreAction } from '../../store/action'
 
 import frameInstances, { FrameInstance } from './frameInstances'
 import viewInstances from './viewInstances'
@@ -33,25 +34,27 @@ export default class FrameManager {
     frameIds
       .filter((frameId) => !instanceIds.includes(frameId))
       .forEach((frameId) => {
-        const frameInstance = frameInstances.create(frames[frameId])
+        const frame = frames[frameId]
+        if (!frame) return
+        const frameInstance = frameInstances.create(frame)
 
         this.frameInstances[frameId] = frameInstance
 
         frameInstance.on('closed', () => {
           this.removeFrameInstance(frameId)
-          store.removeFrame(frameId)
+          requireStoreAction('removeFrame')(frameId)
         })
 
         frameInstance.on('maximize', () => {
-          store.updateFrame(frameId, { maximized: true })
+          requireStoreAction('updateFrame')(frameId, { maximized: true })
         })
 
         frameInstance.on('unmaximize', () => {
-          store.updateFrame(frameId, { maximized: false })
+          requireStoreAction('updateFrame')(frameId, { maximized: false })
         })
 
         frameInstance.on('enter-full-screen', () => {
-          store.updateFrame(frameId, { fullscreen: true })
+          requireStoreAction('updateFrame')(frameId, { fullscreen: true })
         })
 
         frameInstance.on('leave-full-screen', () => {
@@ -61,15 +64,15 @@ export default class FrameManager {
             if (frameInstance.isMaximized()) {
               // Trigger views to reposition
               setTimeout(() => {
-                const frame = frames[frameId]
-                viewInstances.position(frameInstance, frame.currentView)
+                const frame = getFrames()[frameId]
+                if (frame?.currentView) viewInstances.position(frameInstance, frame.currentView)
               }, 100)
-              store.updateFrame(frameId, { maximized: true })
+              requireStoreAction('updateFrame')(frameId, { maximized: true })
             } else {
-              store.updateFrame(frameId, { maximized: false })
+              requireStoreAction('updateFrame')(frameId, { maximized: false })
             }
           } else {
-            store.updateFrame(frameId, { fullscreen: false })
+            requireStoreAction('updateFrame')(frameId, { fullscreen: false })
           }
         })
 
@@ -80,11 +83,9 @@ export default class FrameManager {
 
         frameInstance.on('focus', () => {
           // Give focus to current view
-          const { currentView } = frames[frameId]
-          if (currentView && frameInstance) {
-            frameInstance.views = frameInstance.views || {}
-            frameInstance.views[currentView].webContents.focus()
-          }
+          const currentView = getFrames()[frameId]?.currentView
+          const view = currentView ? frameInstance.views?.[currentView] : undefined
+          view?.webContents.focus()
         })
       })
 
@@ -100,9 +101,9 @@ export default class FrameManager {
       })
 
     if (inFocus) {
-      const focusedFrame = this.frameInstances[inFocus] || { isFocused: () => true }
+      const focusedFrame = this.frameInstances[inFocus]
 
-      if (!focusedFrame.isFocused()) {
+      if (focusedFrame && !focusedFrame.isFocused()) {
         focusedFrame.show()
         focusedFrame.focus()
       }
@@ -117,6 +118,7 @@ export default class FrameManager {
       if (!frameInstance) return log.error('Instance not found when managing views')
 
       const frame = frames[frameId]
+      if (!frame) return
       const frameInstanceViews = frameInstance.views || {}
       const frameViewIds = Object.keys(frame.views)
       const instanceViewIds = Object.keys(frameInstanceViews)
@@ -127,11 +129,13 @@ export default class FrameManager {
 
       // For each view in the store that belongs to this frame
       frameViewIds.forEach((frameViewId) => {
-        const viewData = frame.views[frameViewId] || {}
-        const viewInstance = frameInstanceViews[frameViewId] || {}
+        const viewData = frame.views[frameViewId]
+        if (!viewData) return
 
         // Create them
         if (!instanceViewIds.includes(frameViewId)) viewInstances.create(frameInstance, viewData)
+        const viewInstance = frameInstance.views?.[frameViewId]
+        if (!viewInstance) return
 
         // Show the correct one
         if (
@@ -155,6 +159,7 @@ export default class FrameManager {
 
   removeFrameInstance(frameId: string) {
     const frameInstance = this.frameInstances[frameId]
+    if (!frameInstance) return
 
     Object.keys(frameInstance.views || {}).forEach((viewId) => {
       viewInstances.destroy(frameInstance, viewId)
@@ -190,7 +195,7 @@ export default class FrameManager {
 
   reloadFrames() {
     Object.keys(this.frameInstances).forEach((win) => {
-      this.frameInstances[win].webContents.reload()
+      this.frameInstances[win]?.webContents.reload()
     })
   }
 
@@ -211,6 +216,6 @@ export default class FrameManager {
   }
 
   isFrameShowing() {
-    return Object.keys(this.frameInstances).some((win) => this.frameInstances[win].isVisible())
+    return Object.keys(this.frameInstances).some((win) => this.frameInstances[win]?.isVisible() || false)
   }
 }

@@ -3,10 +3,11 @@ import { PNG } from 'pngjs'
 const SAMPLE_HEIGHT = 37
 
 function mode(colors: string[]) {
-  if (colors.length === 0) throw new Error('Cannot extract color from an empty image')
+  const firstColor = colors[0]
+  if (!firstColor) throw new Error('Cannot extract color from an empty image')
 
   const counts: Record<string, number> = {}
-  let selected = colors[0]
+  let selected = firstColor
   let maxCount = 0
 
   for (const color of colors) {
@@ -31,15 +32,23 @@ export default function pixelColor(image: Electron.NativeImage) {
   const colors = []
 
   for (let offset = 0; offset < limit; offset += 4) {
-    colors.push(`${data[offset]}, ${data[offset + 1]}, ${data[offset + 2]}`)
+    const red = data[offset]
+    const green = data[offset + 1]
+    const blue = data[offset + 2]
+    if (red === undefined || green === undefined || blue === undefined) break
+    colors.push(`${red}, ${green}, ${blue}`)
   }
 
   const colorArray = mode(colors).split(', ').map(Number)
+  const [red, green, blue] = colorArray
+  if (red === undefined || green === undefined || blue === undefined) {
+    throw new Error('Extracted pixel color is incomplete')
+  }
 
   return {
     background: `rgb(${colorArray.join(', ')})`,
     backgroundShade: `rgb(${colorArray.map((value) => Math.max(value - 5, 0)).join(', ')})`,
     backgroundLight: `rgb(${colorArray.map((value) => Math.min(value + 50, 255)).join(', ')})`,
-    text: textColor(...(colorArray as [number, number, number]))
+    text: textColor(red, green, blue)
   }
 }

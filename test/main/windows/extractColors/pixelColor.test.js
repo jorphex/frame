@@ -51,3 +51,13 @@ test('ignores pixels below the 37-row sample', () => {
 test('rejects malformed PNG data', () => {
   expect(() => pixelColor({ toPNG: () => Buffer.from('not a png') })).toThrow()
 })
+
+test('rejects decoded images without pixels', () => {
+  const read = jest.spyOn(PNG.sync, 'read').mockReturnValue({ data: Buffer.alloc(0), width: 0, height: 0 })
+
+  expect(() => pixelColor({ toPNG: () => Buffer.alloc(0) })).toThrow(
+    'Cannot extract color from an empty image'
+  )
+
+  read.mockRestore()
+})

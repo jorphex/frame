@@ -13,6 +13,7 @@ import EventEmitter from 'events'
 import { hexToInt } from '../../resources/utils'
 
 import store from '../store'
+import { requireStoreAction } from '../store/action'
 import FrameManager from './frames'
 import { createWindow } from './window'
 import { SystemTray, SystemTrayEventHandlers } from './systemTray'
@@ -53,12 +54,12 @@ const app = {
   show: () => {
     tray.show()
     if (dash.hiddenByAppHide || dash.isVisible()) {
-      store.setDash({ showing: true })
+      requireStoreAction('setDash')({ showing: true })
     }
   },
   toggle: () => {
-    const eventName = tray.isVisible() ? 'hide' : 'show'
-    app[eventName as keyof typeof app]()
+    if (tray.isVisible()) app.hide()
+    else app.show()
   }
 }
 const systemTrayEventHandlers: SystemTrayEventHandlers = {
@@ -76,9 +77,10 @@ const getDisplaySummonShortcut = () => store('main.shortcuts.altSlash')
 const topRight = (window: BrowserWindow) => {
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
   const screenSize = area
-  const windowSize = window.getSize()
+  const [windowWidth] = window.getSize()
+  if (windowWidth === undefined) throw new Error('Window width is unavailable')
   return {
-    x: Math.floor(screenSize.x + screenSize.width - windowSize[0]),
+    x: Math.floor(screenSize.x + screenSize.width - windowWidth),
     y: screenSize.y
   }
 }
@@ -86,10 +88,13 @@ const topRight = (window: BrowserWindow) => {
 const center = (window: BrowserWindow) => {
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
   const screenSize = area
-  const windowSize = window.getSize()
+  const [windowWidth, windowHeight] = window.getSize()
+  if (windowWidth === undefined || windowHeight === undefined) {
+    throw new Error('Window dimensions are unavailable')
+  }
   return {
-    x: Math.floor(screenSize.x + screenSize.width / 2 - windowSize[0] / 2),
-    y: Math.floor(screenSize.y + screenSize.height / 2 - windowSize[1] / 2)
+    x: Math.floor(screenSize.x + screenSize.width / 2 - windowWidth / 2),
+    y: Math.floor(screenSize.y + screenSize.height / 2 - windowHeight / 2)
   }
 }
 
@@ -127,8 +132,10 @@ function initWindow(id: string, opts: Electron.BrowserWindowConstructorOptions) 
     ? `http://localhost:1234/${id}/index.dev.html`
     : new URL(path.join(process.env.BUNDLE_LOCATION, `${id}.html`), 'file:')
 
-  windows[id] = createWindow(id, opts)
-  windows[id].loadURL(url.toString())
+  const window = createWindow(id, opts)
+  windows[id] = window
+  window.loadURL(url.toString())
+  return window
 }
 
 function initTrayWindow() {
@@ -139,23 +146,25 @@ function initTrayWindow() {
   if (isMacOS) {
     trayOpts.type = 'panel'
   }
-  initWindow('tray', trayOpts)
+  const trayWindow = initWindow('tray', trayOpts)
 
-  windows.tray.on('closed', () => delete windows.tray)
-  windows.tray.webContents.session.setPermissionRequestHandler((webContents, permission, res) => res(false))
-  windows.tray.setResizable(false)
-  windows.tray.setMovable(false)
+  trayWindow.on('closed', () => {
+    if (windows.tray === trayWindow) delete windows.tray
+  })
+  trayWindow.webContents.session.setPermissionRequestHandler((webContents, permission, res) => res(false))
+  trayWindow.setResizable(false)
+  trayWindow.setMovable(false)
 
   const { width, height, x, y } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
-  windows.tray.setPosition(width + x, height + y)
+  trayWindow.setPosition(width + x, height + y)
 
-  windows.tray.on('show', () => {
+  trayWindow.on('show', () => {
     if (process.platform === 'win32') {
       systemTray.closeContextMenu()
     }
     systemTray.setContextMenu('hide', { displaySummonShortcut: getDisplaySummonShortcut() })
   })
-  windows.tray.on('hide', () => {
+  trayWindow.on('hide', () => {
     if (process.platform === 'win32') {
       systemTray.closeContextMenu()
     }
@@ -163,7 +172,8 @@ function initTrayWindow() {
   })
 
   setTimeout(() => {
-    windows.tray.on('focus', () => {
+    if (trayWindow.isDestroyed()) return
+    trayWindow.on('focus', () => {
       if (isMacOS) {
         glide = false
       }
@@ -172,21 +182,22 @@ function initTrayWindow() {
   }, 2000)
 
   if (devToolsEnabled) {
-    windows.tray.webContents.openDevTools()
+    trayWindow.webContents.openDevTools()
   }
 
   setTimeout(() => {
-    windows.tray.on('blur', () => {
+    if (trayWindow.isDestroyed()) return
+    trayWindow.on('blur', () => {
       setTimeout(() => {
         if (tray.canAutoHide()) {
           tray.hide()
         }
       }, 100)
     })
-    windows.tray.focus()
+    trayWindow.focus()
   }, 1260)
 
-  windows.tray.once('ready-to-show', () => {
+  trayWindow.once('ready-to-show', () => {
     if (!openedAtLogin) {
       tray.show()
     }
@@ -218,11 +229,17 @@ export class Tray {
       systemTray.setTitle(title)
     })
     this.readyHandler = () => {
+      const trayWindow = windows.tray
+      if (!trayWindow || trayWindow.isDestroyed()) {
+        log.error(new Error('Tray window is unavailable when the renderer becomes ready'))
+        return
+      }
+
       this.ready = true
-      systemTray.init(windows.tray)
+      systemTray.init(trayWindow)
       systemTray.setContextMenu('hide', { displaySummonShortcut: getDisplaySummonShortcut() })
       if (showOnReady) {
-        store.trayOpen(true)
+        requireStoreAction('trayOpen')(true)
       }
 
       const showOnboardingWindow = !store('main.mute.onboardingWindow')
@@ -230,23 +247,23 @@ export class Tray {
 
       if (store('windows.dash.showing') || showOnboardingWindow) {
         setTimeout(() => {
-          store.setDash({ showing: true })
+          requireStoreAction('setDash')({ showing: true })
         }, 300)
       } else if (shouldForceDashOnStartup && !openedAtLogin) {
         setTimeout(() => {
-          store.setDash({ showing: true })
+          requireStoreAction('setDash')({ showing: true })
         }, 300)
       }
 
       if (showOnboardingWindow && !showNotifyWindow) {
         setTimeout(() => {
-          store.setOnboard({ showing: true })
+          requireStoreAction('setOnboard')({ showing: true })
         }, 600)
       }
 
       if (showNotifyWindow) {
         setTimeout(() => {
-          store.setNotify({ showing: true })
+          requireStoreAction('setNotify')({ showing: true })
         }, 600)
       }
     }
@@ -259,7 +276,7 @@ export class Tray {
   }
 
   isVisible() {
-    return (windows.tray as BrowserWindow).isVisible()
+    return windows.tray?.isVisible() ?? false
   }
 
   canAutoHide() {
@@ -286,8 +303,8 @@ export class Tray {
       this.recentDisplayEvent = false
     }, 150)
 
-    store.toggleDash('hide')
-    store.trayOpen(false)
+    requireStoreAction('toggleDash')('hide')
+    requireStoreAction('trayOpen')(false)
     if (store('main.reveal')) {
       detectMouse()
     }
@@ -297,7 +314,8 @@ export class Tray {
 
   public show() {
     clearTimeout(mouseTimeout)
-    if (!windows.tray) {
+    const trayWindow = windows.tray
+    if (!trayWindow || trayWindow.isDestroyed()) {
       return init()
     }
     if (this.recentDisplayEvent) {
@@ -310,33 +328,33 @@ export class Tray {
     }, 150)
 
     if (isMacOS) {
-      windows.tray.setPosition(0, 0)
+      trayWindow.setPosition(0, 0)
     } else {
-      windows.tray.setAlwaysOnTop(true)
+      trayWindow.setAlwaysOnTop(true)
     }
-    windows.tray.setVisibleOnAllWorkspaces(true, {
+    trayWindow.setVisibleOnAllWorkspaces(true, {
       visibleOnFullScreen: true,
       skipTransformProcessType: true
     })
-    windows.tray.setResizable(false) // Keeps height consistent
+    trayWindow.setResizable(false) // Keeps height consistent
     const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
     const height = isDev && !fullheight ? devHeight : area.height
-    windows.tray.setMinimumSize(trayWidth, height)
-    windows.tray.setSize(trayWidth, height)
-    windows.tray.setMaximumSize(trayWidth, height)
-    const pos = topRight(windows.tray)
-    windows.tray.setPosition(pos.x, pos.y)
-    store.trayOpen(true)
+    trayWindow.setMinimumSize(trayWidth, height)
+    trayWindow.setSize(trayWidth, height)
+    trayWindow.setMaximumSize(trayWidth, height)
+    const pos = topRight(trayWindow)
+    trayWindow.setPosition(pos.x, pos.y)
+    requireStoreAction('trayOpen')(true)
     if (glide && isMacOS) {
-      windows.tray.showInactive()
+      trayWindow.showInactive()
     } else {
-      windows.tray.show()
+      trayWindow.show()
     }
     events.emit('tray:show')
-    if (windows && windows.tray && windows.tray.focus && !glide) {
-      windows.tray.focus()
+    if (!glide) {
+      trayWindow.focus()
     }
-    windows.tray.setVisibleOnAllWorkspaces(false, {
+    trayWindow.setVisibleOnAllWorkspaces(false, {
       visibleOnFullScreen: true,
       skipTransformProcessType: true
     })
@@ -369,28 +387,35 @@ class Dash {
     } else if (process.platform === 'linux') {
       dashOpts.type = 'toolbar'
     }
-    initWindow('dash', dashOpts)
+    const dashWindow = initWindow('dash', dashOpts)
 
     if (process.platform === 'linux') {
+      const trayWindow = windows.tray
+      if (!trayWindow || trayWindow.isDestroyed()) {
+        throw new Error('Tray window is unavailable while creating the dash')
+      }
+
       const positionDash = () => {
         setTimeout(() => this.positionNextToTray(), 0)
         setTimeout(() => this.positionNextToTray(), 50)
         setTimeout(() => this.positionNextToTray(), 150)
       }
 
-      windows.tray.on('show', positionDash)
-      windows.tray.on('move', positionDash)
-      windows.dash.on('show', positionDash)
+      trayWindow.on('show', positionDash)
+      trayWindow.on('move', positionDash)
+      dashWindow.on('show', positionDash)
     }
   }
 
   private positionNextToTray(height?: number) {
-    if (!windows.tray || !windows.dash) return
+    const trayWindow = windows.tray
+    const dashWindow = windows.dash
+    if (!trayWindow || !dashWindow || trayWindow.isDestroyed() || dashWindow.isDestroyed()) return
 
-    const trayBounds = windows.tray.getBounds()
-    const dashBounds = windows.dash.getBounds()
+    const trayBounds = trayWindow.getBounds()
+    const dashBounds = dashWindow.getBounds()
 
-    windows.dash.setBounds(
+    dashWindow.setBounds(
       {
         x: trayBounds.x - dashBounds.width - 5,
         y: trayBounds.y,
@@ -429,39 +454,43 @@ class Dash {
       this.recentDisplayEvent = false
     }, 150)
     setTimeout(() => {
-      if (!windows.tray.isVisible()) tray.show()
+      const trayWindow = windows.tray
+      const dashWindow = windows.dash
+      if (!trayWindow || !dashWindow || trayWindow.isDestroyed() || dashWindow.isDestroyed()) return
+
+      if (!trayWindow.isVisible()) tray.show()
 
       if (isMacOS) {
-        windows.dash.setPosition(0, 0)
+        dashWindow.setPosition(0, 0)
       } else {
-        windows.dash.setAlwaysOnTop(true)
+        dashWindow.setAlwaysOnTop(true)
       }
-      windows.dash.setVisibleOnAllWorkspaces(true, {
+      dashWindow.setVisibleOnAllWorkspaces(true, {
         visibleOnFullScreen: true,
         skipTransformProcessType: true
       })
-      windows.dash.setResizable(false) // Keeps height consistent
+      dashWindow.setResizable(false) // Keeps height consistent
       const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
       const height = isDev && !fullheight ? devHeight : area.height
-      windows.dash.setMinimumSize(trayWidth, height)
-      windows.dash.setSize(trayWidth, height)
-      windows.dash.setMaximumSize(trayWidth, height)
+      dashWindow.setMinimumSize(trayWidth, height)
+      dashWindow.setSize(trayWidth, height)
+      dashWindow.setMaximumSize(trayWidth, height)
       this.positionNextToTray(height)
-      windows.dash.show()
+      dashWindow.show()
       setTimeout(() => this.positionNextToTray(height), 50)
-      windows.dash.focus()
-      windows.dash.setVisibleOnAllWorkspaces(false, {
+      dashWindow.focus()
+      dashWindow.setVisibleOnAllWorkspaces(false, {
         visibleOnFullScreen: true,
         skipTransformProcessType: true
       })
       if (devToolsEnabled) {
-        windows.dash.webContents.openDevTools()
+        dashWindow.webContents.openDevTools()
       }
     }, 10)
   }
 
   isVisible() {
-    return (windows.dash as BrowserWindow).isVisible()
+    return windows.dash?.isVisible() ?? false
   }
 }
 
@@ -489,41 +518,46 @@ class Onboard {
       return
     }
 
-    const cleanupHandler = () => windows.onboard?.off('close', closeHandler)
+    const onboardWindow = windows.onboard
+    if (!onboardWindow || onboardWindow.isDestroyed()) return
+
+    const cleanupHandler = () => onboardWindow.off('close', closeHandler)
 
     const closeHandler = () => {
-      store.completeOnboarding()
-      windows.tray.focus()
+      requireStoreAction('completeOnboarding')()
+      windows.tray?.focus()
 
       electronApp.off('before-quit', cleanupHandler)
-      delete windows.onboard
+      if (windows.onboard === onboardWindow) delete windows.onboard
     }
 
     setTimeout(() => {
+      if (onboardWindow.isDestroyed()) return
+
       electronApp.on('before-quit', cleanupHandler)
-      windows.onboard.once('close', closeHandler)
+      onboardWindow.once('close', closeHandler)
 
       const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
       const height = (isDev && !fullheight ? devHeight : area.height) - 160
       const maxWidth = Math.floor(height * 1.24)
       const targetWidth = 600 // area.width - 460
       const width = targetWidth > maxWidth ? maxWidth : targetWidth
-      windows.onboard.setMinimumSize(600, 300)
-      windows.onboard.setSize(width, height)
-      const pos = topRight(windows.onboard)
+      onboardWindow.setMinimumSize(600, 300)
+      onboardWindow.setSize(width, height)
+      const pos = topRight(onboardWindow)
 
       // const x = (pos.x * 2 - width * 2 - 810) / 2
       const x = pos.x - 880
-      windows.onboard.setPosition(x, pos.y + 80)
+      onboardWindow.setPosition(x, pos.y + 80)
       // windows.onboard.setAlwaysOnTop(true)
-      windows.onboard.show()
-      windows.onboard.focus()
-      windows.onboard.setVisibleOnAllWorkspaces(false, {
+      onboardWindow.show()
+      onboardWindow.focus()
+      onboardWindow.setVisibleOnAllWorkspaces(false, {
         visibleOnFullScreen: true,
         skipTransformProcessType: true
       })
       if (devToolsEnabled) {
-        windows.onboard.webContents.openDevTools()
+        onboardWindow.webContents.openDevTools()
       }
     }, 10)
   }
@@ -559,52 +593,57 @@ class Notify {
       return
     }
 
-    const cleanupHandler = () => windows.notify?.off('close', closeHandler)
+    const notifyWindow = windows.notify
+    if (!notifyWindow || notifyWindow.isDestroyed()) return
+
+    const cleanupHandler = () => notifyWindow.off('close', closeHandler)
 
     const closeHandler = () => {
       if (!store('main.mute.migrateToPylon')) {
-        store.migrateToPylonConnections()
-        store.mutePylonMigrationNotice()
+        requireStoreAction('migrateToPylonConnections')()
+        requireStoreAction('mutePylonMigrationNotice')()
       }
 
       if (!store('main.mute.onboardingWindow')) {
-        store.setNotify({ showing: false })
-        store.setOnboard({ showing: true })
+        requireStoreAction('setNotify')({ showing: false })
+        requireStoreAction('setOnboard')({ showing: true })
       }
-      windows.tray.focus()
+      windows.tray?.focus()
 
       electronApp.off('before-quit', cleanupHandler)
-      delete windows.notify
+      if (windows.notify === notifyWindow) delete windows.notify
     }
 
     setTimeout(() => {
+      if (notifyWindow.isDestroyed()) return
+
       electronApp.on('before-quit', cleanupHandler)
-      windows.notify.once('close', closeHandler)
+      notifyWindow.once('close', closeHandler)
 
       // const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
       const height = 512
       const maxWidth = Math.floor(height * 1.24)
       const targetWidth = 600 // area.width - 460
       const width = targetWidth > maxWidth ? maxWidth : targetWidth
-      windows.notify.setMinimumSize(600, 300)
-      windows.notify.setSize(width, height)
-      const pos = center(windows.notify)
+      notifyWindow.setMinimumSize(600, 300)
+      notifyWindow.setSize(width, height)
+      const pos = center(notifyWindow)
       let x = pos.x - (trayWidth - 10) / 2
       if (store('windows.dash.showing')) {
-        const pos = topRight(windows.notify)
+        const pos = topRight(notifyWindow)
         x = pos.x - 880
       }
 
-      windows.notify.setPosition(x, pos.y)
+      notifyWindow.setPosition(x, pos.y)
       // windows.onboard.setAlwaysOnTop(true)
-      windows.notify.show()
-      windows.notify.focus()
-      windows.notify.setVisibleOnAllWorkspaces(false, {
+      notifyWindow.show()
+      notifyWindow.focus()
+      notifyWindow.setVisibleOnAllWorkspaces(false, {
         visibleOnFullScreen: true,
         skipTransformProcessType: true
       })
       if (devToolsEnabled) {
-        windows.notify.webContents.openDevTools()
+        notifyWindow.webContents.openDevTools()
       }
     }, 10)
   }
@@ -636,7 +675,7 @@ if (isDev) {
   electronApp.once('ready', () => {
     globalShortcut.register('CommandOrControl+R', () => {
       Object.keys(windows).forEach((win) => {
-        windows[win].reload()
+        windows[win]?.reload()
       })
 
       // frameManager.reloadFrames()
@@ -675,7 +714,7 @@ const init = () => {
       dash.show()
     } else {
       dash.hide()
-      windows.tray.focus()
+      windows.tray?.focus()
     }
   }, 'windows:dash')
 
@@ -688,7 +727,7 @@ const init = () => {
       onboard.show()
     } else if (onboard) {
       onboard.hide()
-      windows.tray.focus()
+      windows.tray?.focus()
     }
   }, 'windows:onboard')
 
@@ -701,7 +740,7 @@ const init = () => {
       notify.show()
     } else if (notify) {
       notify.hide()
-      windows.tray.focus()
+      windows.tray?.focus()
     }
   }, 'windows:notify')
 
@@ -726,8 +765,9 @@ const init = () => {
 }
 
 const send = (id: string, channel: string, ...args: string[]) => {
-  if (windows[id] && !windows[id].isDestroyed()) {
-    windows[id].webContents.send(channel, ...args)
+  const window = windows[id]
+  if (window && !window.isDestroyed()) {
+    window.webContents.send(channel, ...args)
   } else {
     log.error(new Error(`A window with id "${id}" does not exist (windows.send)`))
   }
