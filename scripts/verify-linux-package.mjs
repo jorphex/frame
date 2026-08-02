@@ -46,9 +46,19 @@ const packagedExecutable = path.join(dist, 'linux-unpacked', 'frame')
 const packagedModuleProbe = `
 const path = require('node:path')
 const modules = ['node-hid', 'usb', '@trezor/transport/node_modules/usb']
+const ledgerPackages = [
+  '@ledgerhq/hw-app-eth',
+  '@ledgerhq/hw-transport',
+  '@ledgerhq/hw-transport-node-hid-noevents',
+  '@ledgerhq/hw-transport-node-hid-singleton'
+]
 const appRoot = path.resolve('dist/linux-unpacked/resources/app.asar')
 const appModules = path.join(appRoot, 'node_modules')
 for (const module of modules) require(path.join(appModules, module))
+const ledgerModules = ledgerPackages.map((module) => require(path.join(appModules, module)))
+const ledgerVersions = Object.fromEntries(
+  ledgerPackages.map((module) => [module, require(path.join(appModules, module, 'package.json')).version])
+)
 const { SiweMessage } = require(path.join(appModules, 'siwe'))
 const ethers = require(path.join(appModules, 'ethers'))
 const siwe = new SiweMessage(\`example.com wants you to sign in with your Ethereum account:
@@ -80,6 +90,8 @@ Promise.all([modernModules.loadKuboModule(), modernModules.loadUnixFsModule()])
     electron: process.versions.electron,
     abi: process.versions.modules,
     modules,
+    ledgerApis: ledgerModules.map((module) => typeof module.default),
+    ledgerVersions,
     siweDomain: siwe.domain,
     ethersVersion: ethers.version,
     ethersBrowserProvider: typeof ethers.BrowserProvider,
@@ -106,6 +118,15 @@ const probeResult = JSON.parse(probe.stdout)
 const packageJson = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
 assert.equal(probeResult.electron, packageJson.devDependencies.electron)
 assert.deepEqual(probeResult.modules, ['node-hid', 'usb', '@trezor/transport/node_modules/usb'])
+assert.ok(probeResult.ledgerApis.every((api) => api === 'function'))
+assert.deepEqual(probeResult.ledgerVersions, {
+  '@ledgerhq/hw-app-eth': packageJson.dependencies['@ledgerhq/hw-app-eth'],
+  '@ledgerhq/hw-transport': packageJson.dependencies['@ledgerhq/hw-transport'],
+  '@ledgerhq/hw-transport-node-hid-noevents':
+    packageJson.dependencies['@ledgerhq/hw-transport-node-hid-noevents'],
+  '@ledgerhq/hw-transport-node-hid-singleton':
+    packageJson.dependencies['@ledgerhq/hw-transport-node-hid-singleton']
+})
 assert.equal(probeResult.siweDomain, 'example.com')
 assert.equal(probeResult.ethersVersion, packageJson.dependencies.ethers)
 assert.equal(probeResult.ethersBrowserProvider, 'function')
@@ -134,5 +155,7 @@ await writeFile(path.join(dist, 'SHA256SUMS'), `${checksums.join('\n')}\n`)
 console.log(
   `Verified ${artifacts.join(' and ')} with Electron ${probeResult.electron} ABI ${
     probeResult.abi
-  } hardware-wallet native, SIWE, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
+  } hardware-wallet native, Ledger ${
+    probeResult.ledgerVersions['@ledgerhq/hw-app-eth']
+  }, SIWE, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )
