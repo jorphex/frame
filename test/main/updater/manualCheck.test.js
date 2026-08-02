@@ -70,6 +70,12 @@ it('ignores a release on the prerelease track', () => {
   return expect(checkForUpdates({ prereleaseTrack: false })).resolves.toBeFalsy()
 })
 
+it('ignores a release with incomplete metadata', () => {
+  mockApiResponse(200, [{ prerelease: false, tag_name: `v${nextVersion}` }, ...githubReleasesResponse])
+
+  return expect(checkForUpdates()).resolves.toBeFalsy()
+})
+
 it('handles an HTTP status error', async () => {
   mockApiResponse(403, '{"message":"API rate limit exceeded"}')
 

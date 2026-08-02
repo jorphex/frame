@@ -27,7 +27,16 @@ interface CheckOptions {
 
 function parseResponse(rawData: string) {
   try {
-    return JSON.parse(rawData) as GithubRelease[]
+    const releases: unknown = JSON.parse(rawData)
+    if (!Array.isArray(releases)) return []
+    return releases.filter(
+      (release): release is GithubRelease =>
+        typeof release === 'object' &&
+        release !== null &&
+        typeof release.prerelease === 'boolean' &&
+        typeof release.tag_name === 'string' &&
+        typeof release.html_url === 'string'
+    )
   } catch (e) {
     log.warn('Manual check for update returned invalid JSON response', e)
     return []
@@ -83,9 +92,9 @@ export default function (opts?: CheckOptions) {
           }
 
           const releases = parseResponse(rawData).filter((r) => !r.prerelease || opts?.prereleaseTrack) || []
-          const latestRelease = releases[0] || { tag_name: '' }
+          const latestRelease = releases[0]
 
-          if (latestRelease.tag_name) {
+          if (latestRelease?.tag_name) {
             const latestVersion = extractVersion(latestRelease.tag_name)
             if (!latestVersion) {
               log.warn('Manual check found release with unparseable version tag', {

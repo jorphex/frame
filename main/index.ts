@@ -9,6 +9,7 @@ process.env.BUNDLE_LOCATION = process.env.BUNDLE_LOCATION || path.resolve(__dirn
 import windows from './windows'
 import menu from './menu'
 import store from './store'
+import { requireStoreAction } from './store/action'
 import { addRequestedChain } from './chains/addRequestedChain'
 import dapps from './dapps'
 import accounts from './accounts'
@@ -124,7 +125,7 @@ ipcMain.on('tray:resetAllSettings', () => {
 })
 
 ipcMain.on('tray:replaceTx', async (e, id, type) => {
-  store.navBack('panel')
+  requireStoreAction('navBack')('panel')
   setTimeout(async () => {
     try {
       await accounts.replaceTx(id, type)
@@ -139,17 +140,17 @@ ipcMain.on('tray:clipboardData', (e, data) => {
 })
 
 ipcMain.on('tray:installAvailableUpdate', () => {
-  store.updateBadge('')
+  requireStoreAction('updateBadge')('')
 
   updater.fetchUpdate()
 })
 
 ipcMain.on('tray:dismissUpdate', (e, version, remind) => {
   if (!remind) {
-    store.dontRemind(version)
+    requireStoreAction('dontRemind')(version)
   }
 
-  store.updateBadge('')
+  requireStoreAction('updateBadge')('')
 
   updater.dismissUpdate()
 })
@@ -185,7 +186,7 @@ ipcMain.on('tray:clearRequestsByOrigin', (e, account, origin) => {
 
 ipcMain.on('tray:openExternal', (e, url) => {
   openExternal(url)
-  store.setDash({ showing: false })
+  requireStoreAction('setDash')({ showing: false })
 })
 
 ipcMain.on('tray:openExplorer', (e, chain, hash, account) => {
@@ -205,7 +206,7 @@ ipcMain.handle('tray:addChain', async (e, chain, requestReference) => {
     if (requestReference) {
       await addRequestedChain(chain, requestReference)
     } else {
-      store.addNetwork(chain)
+      requireStoreAction('addNetwork')(chain)
     }
 
     return { success: true }
@@ -228,7 +229,7 @@ ipcMain.handle('tray:getTokenDetails', async (e, contractAddress, chainId) => {
 ipcMain.on('tray:addToken', (e, token, req) => {
   if (token) {
     log.info('adding custom token', token)
-    store.addCustomTokens([token])
+    requireStoreAction('addCustomTokens')([token])
   }
   if (req) accounts.resolveRequest(req)
 })
@@ -237,8 +238,8 @@ ipcMain.on('tray:removeToken', (e, token) => {
   if (token) {
     log.info('removing custom token', token)
 
-    store.removeBalance(token.chainId, token.address)
-    store.removeCustomTokens([token])
+    requireStoreAction('removeBalance')(token.chainId, token.address)
+    requireStoreAction('removeCustomTokens')([token])
   }
 })
 
@@ -252,18 +253,18 @@ ipcMain.on('tray:resetNonce', (e, handlerId) => {
 
 ipcMain.on('tray:removeOrigin', (e, handlerId) => {
   accounts.removeRequests(handlerId)
-  store.removeOrigin(handlerId)
+  requireStoreAction('removeOrigin')(handlerId)
 })
 
 ipcMain.on('tray:clearOrigins', () => {
   Object.keys(store('main.origins')).forEach((handlerId) => {
     accounts.removeRequests(handlerId)
   })
-  store.clearOrigins()
+  requireStoreAction('clearOrigins')()
 })
 
 ipcMain.on('tray:syncPath', (e, path, value) => {
-  store.syncPath(path, value)
+  requireStoreAction('syncPath')(path, value)
 })
 
 ipcMain.on('tray:ready', () => {
@@ -316,7 +317,7 @@ ipcMain.on('*:addFrame', (e, id) => {
   if (existingFrame) {
     windows.refocusFrame(id)
   } else {
-    store.addFrame({
+    requireStoreAction('addFrame')({
       id,
       currentView: '',
       views: {}

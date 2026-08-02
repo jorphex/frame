@@ -3,6 +3,7 @@ import log from 'electron-log'
 import crypto from 'crypto'
 
 import store from '../store'
+import { requireStoreAction } from '../store/action'
 import nebulaApi from '../nebula'
 import server from './server'
 import extractColors from '../windows/extractColors'
@@ -14,7 +15,9 @@ import type { Dapp } from '../store/state'
 const nebula = nebulaApi()
 
 function getDapp(dappId: string): Dapp {
-  return store('main.dapps', dappId)
+  const dapp = store('main.dapps', dappId)
+  if (!dapp) throw new Error(`Dapp ${dappId} is not installed`)
+  return dapp
 }
 
 async function getDappColors(dappId: string) {
@@ -25,7 +28,7 @@ async function getDappColors(dappId: string) {
   const url = `http://${dapp.ens}.localhost:8421/?session=${session}`
   try {
     const colors = await extractColors(url, dapp.ens)
-    store.updateDapp(dappId, { colors })
+    requireStoreAction('updateDapp')(dappId, { colors })
   } catch (e) {
     log.error(e)
   } finally {
@@ -50,7 +53,7 @@ const cacheDapp = async (dappId: string, hash: string) => {
 async function updateDappContent(dappId: string, content: string, manifest: Record<string, unknown>) {
   // Only publish a downloaded cache after its full directory CID is verified.
   await cacheDapp(dappId, content)
-  store.updateDapp(dappId, { content, manifest })
+  requireStoreAction('updateDapp')(dappId, { content, manifest })
 }
 
 let retryTimer: NodeJS.Timeout
@@ -58,7 +61,11 @@ let retryTimer: NodeJS.Timeout
 // Takes dappId and checks if the dapp is up to date
 async function checkStatus(dappId: string) {
   clearTimeout(retryTimer)
-  const dapp = store('main.dapps', dappId) as Dapp
+  const dapp = store('main.dapps', dappId) as Dapp | undefined
+  if (!dapp) {
+    log.warn(`Stopped status check for removed dapp ${dappId}`)
+    return
+  }
   const { checkStatusRetryCount, openWhenReady } = dapp
 
   try {
@@ -75,7 +82,7 @@ async function checkStatus(dappId: string) {
 
     log.info(`Resolved content for ${dapp.ens}, version: ${version || 'unknown'}`)
 
-    store.updateDapp(dappId, { record })
+    requireStoreAction('updateDapp')(dappId, { record })
 
     const isDappCurrent = async () => {
       return (
@@ -87,14 +94,14 @@ async function checkStatus(dappId: string) {
     if (!(await isDappCurrent())) {
       log.info(`Updating content for dapp ${dappId} from hash ${content}`)
       // Sets status to 'updating' when updating the bundle
-      store.updateDapp(dappId, { status: 'updating' })
+      requireStoreAction('updateDapp')(dappId, { status: 'updating' })
       // Update dapp assets
       await updateDappContent(dappId, content, manifest)
     } else {
       log.info(`Dapp ${dapp.ens} already up to date: ${content}`)
     }
     // Sets status to 'ready' when done
-    store.updateDapp(dappId, { status: 'ready', openWhenReady: false })
+    requireStoreAction('updateDapp')(dappId, { status: 'ready', openWhenReady: false })
 
     // The frame id 'dappLauncher' needs to refrence target frame
     if (openWhenReady) surface.open('dappLauncher', dapp.ens)
@@ -103,10 +110,13 @@ async function checkStatus(dappId: string) {
     const retry = checkStatusRetryCount || 0
     if (retry < 4) {
       retryTimer = setTimeout(() => {
-        store.updateDapp(dappId, { status: 'initial', checkStatusRetryCount: retry + 1 })
+        requireStoreAction('updateDapp')(dappId, {
+          status: 'initial',
+          checkStatusRetryCount: retry + 1
+        })
       }, 1000)
     } else {
-      store.updateDapp(dappId, { status: 'failed', checkStatusRetryCount: 0 })
+      requireStoreAction('updateDapp')(dappId, { status: 'failed', checkStatusRetryCount: 0 })
     }
   }
 }
@@ -115,9 +125,12 @@ const refreshDapps = ({ statusFilter = '' } = {}) => {
   const dapps = store('main.dapps')
 
   Object.keys(dapps || {})
-    .filter((id) => !statusFilter || dapps[id].status === statusFilter)
+    .filter((id) => {
+      const dapp = dapps[id]
+      return dapp !== undefined && (!statusFilter || dapp.status === statusFilter)
+    })
     .forEach((id) => {
-      store.updateDapp(id, { status: 'loading' })
+      requireStoreAction('updateDapp')(id, { status: 'loading' })
       if (nebula.ready()) {
         checkStatus(id)
       } else {
@@ -153,21 +166,26 @@ const surface = {
     const existingDapp = store('main.dapps', id)
 
     // If ens name has not been installed, start install
-    if (!existingDapp) store.appDapp({ id, ens, status, config, manifest: {}, current: {} })
+    if (!existingDapp) requireStoreAction('appDapp')({ id, ens, status, config, manifest: {}, current: {} })
   },
   addServerSession(_namehash: string /* , session */) {
     // server.sessions.add(namehash, session)
   },
   unsetCurrentView(frameId: string) {
-    store.setCurrentFrameView(frameId, '')
+    requireStoreAction('setCurrentFrameView')(frameId, '')
   },
   open(frameId: string, ens: string) {
-    const session = crypto.randomBytes(6).toString('hex')
     const dappId = hash(ens)
 
-    const dapp = store('main.dapps', dappId)
+    const dapp = getDapp(dappId)
 
     if (dapp.status === 'ready') {
+      if (!store('main.frames', frameId)) {
+        log.warn(`Attempted to open frame "${frameId}" for ${ens} but frame does not exist`)
+        return
+      }
+
+      const session = crypto.randomBytes(6).toString('hex')
       const url = `http://${ens}.localhost:8421/?session=${session}`
       const view = {
         id: getId(),
@@ -178,14 +196,9 @@ const surface = {
       }
 
       server.sessions.add(ens, session)
-
-      if (store('main.frames', frameId)) {
-        store.addFrameView(frameId, view)
-      } else {
-        log.warn(`Attempted to open frame "${frameId}" for ${ens} but frame does not exist`)
-      }
+      requireStoreAction('addFrameView')(frameId, view)
     } else {
-      store.updateDapp(dappId, { ens, status: 'initial', openWhenReady: true })
+      requireStoreAction('updateDapp')(dappId, { ens, status: 'initial', openWhenReady: true })
     }
   }
 }

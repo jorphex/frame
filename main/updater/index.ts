@@ -1,6 +1,7 @@
 import log from 'electron-log'
 
 import store from '../store'
+import { requireStoreAction } from '../store/action'
 import { openExternal } from '../windows/window'
 import AutoUpdater from './autoUpdater'
 import manualCheck from './manualCheck'
@@ -120,7 +121,7 @@ class Updater {
       const remindOk = !store('main.updater.dontRemind').includes(version)
 
       if (remindOk) {
-        store.updateBadge('updateAvailable', this.availableVersion)
+        requireStoreAction('updateBadge')('updateAvailable', this.availableVersion)
       } else {
         log.verbose(`Update to version ${version} is available but user chose to skip`)
       }
@@ -133,7 +134,7 @@ class Updater {
   private readyForInstall() {
     this.installerReady = true
 
-    store.updateBadge('updateReady')
+    requireStoreAction('updateBadge')('updateReady')
   }
 
   private checkForAutoUpdate() {
