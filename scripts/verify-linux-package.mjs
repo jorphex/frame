@@ -5,6 +5,7 @@ import { createReadStream } from 'node:fs'
 import { access, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { pathToFileURL } from 'node:url'
 
 const dist = path.resolve('dist')
 const artifactWaitTimeout = 30_000
@@ -44,6 +45,7 @@ await Promise.all(nativeModules.map((modulePath) => access(modulePath)))
 
 const packagedExecutable = path.join(dist, 'linux-unpacked', 'frame')
 const packagedModuleProbe = `
+const { createRequire } = require('node:module')
 const path = require('node:path')
 const modules = ['node-hid', 'usb', '@trezor/transport/node_modules/usb']
 const ledgerPackages = [
@@ -63,7 +65,8 @@ const { SiweMessage } = require(path.join(appModules, 'siwe'))
 const ethers = require(path.join(appModules, 'ethers'))
 const sigUtil = require(path.join(appModules, '@metamask/eth-sig-util'))
 const tarFs = require(path.join(appModules, 'tar-fs'))
-const tarStream = require(path.join(appModules, 'tar-stream'))
+const tarFsRequire = createRequire(path.join(appModules, 'tar-fs', 'package.json'))
+const tarStream = tarFsRequire('tar-stream')
 const electronLog = require(path.join(appModules, 'electron-log'))
 const { z } = require(path.join(appModules, 'zod'))
 const siwe = new SiweMessage(\`example.com wants you to sign in with your Ethereum account:
@@ -143,7 +146,7 @@ Promise.all([
     signatureVersion: require(path.join(appModules, '@metamask/eth-sig-util/package.json')).version,
     archiveVersions: {
       'tar-fs': require(path.join(appModules, 'tar-fs/package.json')).version,
-      'tar-stream': require(path.join(appModules, 'tar-stream/package.json')).version
+      'tar-stream': tarFsRequire('tar-stream/package.json').version
     },
     archiveApis: [typeof tarFs.extract, typeof tarStream.extract],
     electronLogVersion: require(path.join(appModules, 'electron-log/package.json')).version,
@@ -186,6 +189,25 @@ const probe = spawnSync(packagedExecutable, ['-e', packagedModuleProbe], {
 assert.equal(probe.status, 0, `Packaged module probe failed:\n${probe.error || probe.stderr}`)
 const probeResult = JSON.parse(probe.stdout)
 const packageJson = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
+const packageLock = JSON.parse(await readFile(path.resolve('package-lock.json'), 'utf8'))
+const builderPackage = JSON.parse(
+  await readFile(path.resolve('node_modules/electron-builder/package.json'), 'utf8')
+)
+const notarizePackage = JSON.parse(
+  await readFile(path.resolve('node_modules/@electron/notarize/package.json'), 'utf8')
+)
+const [{ notarize }, { default: notarizeHook }, { default: builderConfig }] = await Promise.all([
+  import('@electron/notarize'),
+  import(pathToFileURL(path.resolve('build/notarize.js')).href),
+  import(pathToFileURL(path.resolve('build/electron-builder-standard.js')).href)
+])
+assert.equal(builderPackage.version, packageJson.devDependencies['electron-builder'])
+assert.equal(notarizePackage.version, packageJson.devDependencies['@electron/notarize'])
+assert.equal(typeof notarize, 'function')
+assert.equal(typeof notarizeHook, 'function')
+assert.deepEqual(builderConfig.win.signtoolOptions.publisherName, 'Frame Labs, Inc.')
+assert.equal(builderConfig.win.publisherName, undefined)
+await notarizeHook({})
 assert.equal(probeResult.electron, packageJson.devDependencies.electron)
 assert.deepEqual(probeResult.modules, ['node-hid', 'usb', '@trezor/transport/node_modules/usb'])
 assert.ok(probeResult.ledgerApis.every((api) => api === 'function'))
@@ -203,7 +225,9 @@ assert.equal(probeResult.ethersBrowserProvider, 'function')
 assert.equal(probeResult.signatureVersion, packageJson.dependencies['@metamask/eth-sig-util'])
 assert.deepEqual(probeResult.archiveVersions, {
   'tar-fs': packageJson.dependencies['tar-fs'],
-  'tar-stream': packageJson.devDependencies['tar-stream']
+  'tar-stream':
+    packageLock.packages['node_modules/tar-fs/node_modules/tar-stream']?.version ??
+    packageLock.packages['node_modules/tar-stream'].version
 })
 assert.deepEqual(probeResult.archiveApis, ['function', 'function'])
 assert.equal(probeResult.electronLogVersion, packageJson.dependencies['electron-log'])
@@ -249,5 +273,5 @@ console.log(
     probeResult.abi
   } hardware-wallet native, Ledger ${
     probeResult.ledgerVersions['@ledgerhq/hw-app-eth']
-  }, SIWE, EIP-712, Zod 4, electron-log 5, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
+  }, electron-builder 26/notarize 3, SIWE, EIP-712, Zod 4, electron-log 5, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )
