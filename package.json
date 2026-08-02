@@ -65,7 +65,8 @@
     "test:e2e": "node -e \"console.error('E2E tests are disabled until they use an isolated app profile and ports.'); process.exit(1)\"",
     "test:usbAdapters": "ELECTRON_RUN_AS_NODE=true ./node_modules/.bin/electron ./node_modules/jest/bin/jest.js --runTestsByPath ./test/main/signers/ledger/adapter.test.js --testPathIgnorePatterns='^$'",
     "test:unixfs": "npm run compile && node scripts/test-unixfs.mjs",
-    "verify:privacy": "node scripts/verify-no-upstream-telemetry.mjs",
+    "verify:privacy": "node scripts/verify-no-upstream-telemetry.mjs && node scripts/verify-log-hygiene.mjs",
+    "audit:release": "npm audit --audit-level=high",
     "local:rpc": "ganache-cli --account=\"0x2d6945dbddb8dcf5492004e6f720f8e971196ff61a61c4be99714ebc71e06c00,  5000000000000000000000\" --account=\"0xaef6a68a47c1628081e4e6df195f5f712ae4eb7da332a6d74dca06ae32a3e7ae,5000\""
   },
   "author": {
@@ -164,14 +165,12 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-testing-library": "7.16.2",
     "globals": "17.8.0",
-    "hardhat": "2.22.18",
     "husky": "8.0.3",
     "jest": "30.4.2",
     "jest-environment-jsdom": "30.4.1",
     "lint-staged": "13.1.2",
     "nock": "13.3.0",
     "node-abi": "3.33.0",
-    "node-gyp": "9.3.1",
     "node-watch": "0.7.3",
     "parcel": "2.16.4",
     "prebuild-install": "7.1.1",
@@ -250,11 +249,17 @@
     "base-x@>=3.0.0 <=3.0.10": "3.0.11",
     "base-x@5.0.0": "5.0.1",
     "bn.js@>=4.0.0 <4.12.3": "4.12.3",
+    "brace-expansion@<=1.1.16": "1.1.17",
+    "brace-expansion@>=2.0.0 <2.1.3": "2.1.4",
     "fast-uri@>=3.0.0 <=3.1.3": "3.1.4",
+    "joi@<17.13.4": "17.13.4",
     "js-yaml@>=4.0.0 <4.3.0": "4.3.0",
     "lodash@>=4.0.0 <4.18.1": "4.18.1",
+    "minimatch@<3.1.4": "3.1.5",
+    "minimatch@>=8.0.0 <8.0.6": "8.0.7",
     "picomatch@>=2.0.0 <2.3.2": "2.3.2",
     "picomatch@>=4.0.0 <4.0.4": "4.0.4",
+    "yaml@>=2.0.0 <2.8.3": "2.9.0",
     "@babel/helpers@>=7.0.0 <7.26.10": "7.29.7",
     "@babel/runtime@>=7.0.0 <7.26.10": "7.29.7",
     "@scure/bip32@1.1.5": {
@@ -309,16 +314,11 @@
       "@trezor/connect>@trezor/utxo-lib>tiny-secp256k1": false,
       "electron-builder>app-builder-lib>electron-builder-squirrel-windows>electron-winstaller": false,
       "gridplus-sdk>secp256k1": false,
-      "hardhat>@metamask/eth-sig-util>ethereumjs-util>ethereum-cryptography>secp256k1": false,
-      "hardhat>@nomicfoundation/ethereumjs-tx>ethereum-cryptography>secp256k1": false,
-      "hardhat>@nomicfoundation/ethereumjs-util>ethereum-cryptography>secp256k1": false,
-      "hardhat>ethereumjs-abi>ethereumjs-util>ethereum-cryptography>secp256k1": false,
       "jest>@jest/core>jest-resolve>unrs-resolver#1.12.2": false,
       "node-hid": false,
       "parcel>@parcel/fs>@parcel/watcher": false,
       "parcel>@parcel/package-manager>@swc/core": false,
-      "@parcel/core>@parcel/cache>lmdb#2.8.5": true,
-      "hardhat>keccak#3.0.4": true
+      "@parcel/core>@parcel/cache>lmdb#2.8.5": true
     }
   }
 }

@@ -1002,7 +1002,7 @@ export class Accounts extends EventEmitter {
   }
 
   addRequest(req: AnyAccountRequest, res?: RPCRequestCallback) {
-    log.info('addRequest', JSON.stringify(req))
+    log.info('addRequest', { handlerId: req.handlerId, type: req.type })
 
     const currentAccount = this.current()
     if (currentAccount && !currentAccount.requests[req.handlerId]) {

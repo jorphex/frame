@@ -32,6 +32,7 @@ reproducible artifacts have not yet been demonstrated.
    nvm use
    npm install --global npm@11.12.0
    npm run setup:ci
+   npm run audit:release
    npm run format:check
    npm run lint
    npm run compile

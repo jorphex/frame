@@ -515,9 +515,10 @@ export class Provider extends EventEmitter {
     }
 
     const signAndSend = (requestToSign: TransactionRequest) => {
-      // remove callback from logging
-      const { res, ...txToLog } = requestToSign
-      log.info('approveRequest', txToLog)
+      log.info('approveRequest', {
+        handlerId: requestToSign.handlerId,
+        type: requestToSign.type
+      })
 
       this.signAndSend(requestToSign, cb)
     }
@@ -835,7 +836,10 @@ export class Provider extends EventEmitter {
         const populatedTransaction = populateTransaction(tx, chainConfig, gas)
         const checkedTransaction = checkExistingNonceGas(populatedTransaction)
 
-        log.verbose('Successfully populated transaction', checkedTransaction)
+        log.verbose('Successfully populated transaction', {
+          chainId: checkedTransaction.chainId,
+          type: checkedTransaction.type || 'legacy'
+        })
 
         cb(null, { tx: checkedTransaction, approvals })
       } catch (error) {
@@ -904,7 +908,7 @@ export class Provider extends EventEmitter {
 
       const currentAccount = accounts.current()
 
-      log.verbose(`sendTransaction(${JSON.stringify(tx)}`)
+      log.verbose('sendTransaction', { chainId: tx.chainId, type: tx.type || 'legacy' })
 
       const from = tx.from || (currentAccount && currentAccount.id)
 
@@ -1179,7 +1183,7 @@ export class Provider extends EventEmitter {
   }
 
   subscribe(payload: RPC.Subscribe.Request, res: RPCSuccessCallback) {
-    log.debug('provider subscribe', { payload })
+    log.debug('provider subscribe', { type: payload.params[0] })
 
     const subId = this.createSubscription(payload)
 
@@ -1631,7 +1635,7 @@ export class Provider extends EventEmitter {
     const targetChain = this.parseTargetChain(payload)
 
     if (!targetChain) {
-      log.warn('received request with unknown chain', JSON.stringify(payload))
+      log.warn('received request with unknown chain', { method, chainId: payload.chainId })
       return resError({ message: `unknown chain: ${payload.chainId}`, code: 4901 }, payload, res)
     }
 

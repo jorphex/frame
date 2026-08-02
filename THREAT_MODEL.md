@@ -28,6 +28,11 @@ broadcast remain available.
 - Transaction, typed-data, and personal-message contents.
 - Network configuration, account metadata, and application update integrity.
 
+Production logs retain operational identifiers and status, but exclude request,
+transaction, typed-data, message, pairing-response, and signer-result payloads.
+Explicitly enabled diagnostic logging may still expose non-secret account and
+network metadata and should be handled as sensitive support data.
+
 ## Trust Boundaries
 
 ### Host And Local Clients

@@ -194,7 +194,7 @@ class TrezorBridge extends EventEmitter {
   }
 
   pairingEntered(deviceId: string, payload: TrezorPairingResponse) {
-    log.debug('pairing response entered for device', { deviceId, payload })
+    log.debug('pairing response entered for device', deviceId)
 
     TrezorConnect.uiResponse({ type: UI.RECEIVE_THP_PAIRING_TAG, payload })
 
