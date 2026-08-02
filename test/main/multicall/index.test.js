@@ -2,7 +2,7 @@ import ethProvider from 'eth-provider'
 import log from 'electron-log'
 
 import multicall from '../../../main/multicall'
-import { toBeHex } from 'ethers'
+import { Interface, toBeHex } from 'ethers'
 
 jest.mock('eth-provider', () => () => ({ request: jest.fn() }))
 
@@ -33,6 +33,31 @@ it('rejects calls without a function signature', async () => {
     /function signature is required/
   )
   expect(eth.request).not.toHaveBeenCalled()
+})
+
+it.each([
+  {
+    chainId: 137,
+    method: 'aggregate',
+    abi: 'function aggregate(tuple(address target, bytes callData)[] calls) returns (uint256 blockNumber, bytes[] returndata)',
+    result: [1n, ['0x']]
+  },
+  {
+    chainId: 1,
+    method: 'tryAggregate',
+    abi: 'function tryAggregate(bool requireSuccess, tuple(address target, bytes callData)[] calls) returns (tuple(bool success, bytes returndata)[] result)',
+    result: [[[true, '0x']]]
+  }
+])('rejects a $method response that omits a requested result', async ({ chainId, method, abi, result }) => {
+  const responseInterface = new Interface([abi])
+  eth.request.mockResolvedValue(responseInterface.encodeFunctionResult(method, result))
+  const calls = Array.from({ length: 2 }, (_, index) => ({
+    target: `0x${String(index + 1).padStart(40, '0')}`,
+    call: ['function value() returns (uint256 result)'],
+    returns: [(value) => value]
+  }))
+
+  await expect(multicall(chainId, eth).call(calls)).rejects.toThrow(/returned 1 results for 2 calls/)
 })
 
 it('encodes aggregated calls correctly', async () => {

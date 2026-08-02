@@ -95,6 +95,9 @@ async function aggregate<R, T>(calls: Call<R, T>[], config: MulticallConfig): Pr
   const response = await makeCall('aggregate', [aggData], config)
   const returndata = response[1]
   if (!Array.isArray(returndata)) throw new Error('multicall aggregate returned malformed data')
+  if (returndata.length !== calls.length) {
+    throw new Error(`multicall aggregate returned ${returndata.length} results for ${calls.length} calls`)
+  }
 
   return calls.map(({ call, returns, target }, i) => {
     const result = returndata[i]
@@ -110,6 +113,9 @@ async function tryAggregate<R, T>(calls: Call<R, T>[], config: MulticallConfig) 
   const response = await makeCall('tryAggregate', [false, aggData], config)
   const results = response[0]
   if (!Array.isArray(results)) throw new Error('multicall tryAggregate returned malformed data')
+  if (results.length !== calls.length) {
+    throw new Error(`multicall tryAggregate returned ${results.length} results for ${calls.length} calls`)
+  }
 
   return calls.map(({ call, returns, target }, i) => {
     const result = results[i]

@@ -10,7 +10,12 @@ export interface RpcAccessListEntry {
 
 export type RpcAccessList = RpcAccessListEntry[]
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+interface AccessListCandidate extends Record<string, unknown> {
+  address?: unknown
+  storageKeys?: unknown
+}
+
+function isRecord(value: unknown): value is AccessListCandidate {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 

@@ -12,6 +12,21 @@ export type BroadTokenAuthorityIntent = {
   delegate: string
 }
 
+interface EffectCandidate extends Record<string, unknown> {
+  owner?: unknown
+  contract?: unknown
+  spender?: unknown
+  operator?: unknown
+  type?: unknown
+  standard?: unknown
+  amount?: unknown
+  approved?: unknown
+}
+
+function isEffectCandidate(value: unknown): value is EffectCandidate {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function sameAddress(left: unknown, right: unknown) {
   return typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase()
 }
@@ -44,24 +59,21 @@ export function effectReportsBroadTokenAuthorityIntent(
   account: unknown,
   contract: unknown
 ) {
-  if (typeof effect !== 'object' || effect === null || Array.isArray(effect)) return false
+  if (!isEffectCandidate(effect)) return false
 
-  const candidate = effect as Record<string, unknown>
   if (
-    !sameAddress(candidate.owner, account) ||
-    !sameAddress(candidate.contract, contract) ||
-    !sameAddress(candidate.spender ?? candidate.operator, intent.delegate)
+    !sameAddress(effect.owner, account) ||
+    !sameAddress(effect.contract, contract) ||
+    !sameAddress(effect.spender ?? effect.operator, intent.delegate)
   ) {
     return false
   }
 
   if (intent.type === 'max-approve') {
     return (
-      candidate.type === 'approval' &&
-      candidate.standard === 'erc20' &&
-      candidate.amount === MAX_UINT256.toString(10)
+      effect.type === 'approval' && effect.standard === 'erc20' && effect.amount === MAX_UINT256.toString(10)
     )
   }
 
-  return candidate.type === 'operator-approval' && candidate.approved === true
+  return effect.type === 'operator-approval' && effect.approved === true
 }

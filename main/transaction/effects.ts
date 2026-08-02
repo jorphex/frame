@@ -45,8 +45,19 @@ export interface ParsedSimulationEffects {
   truncated: boolean
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+interface SimulationLogCandidate extends Record<string, unknown> {
+  removed?: unknown
+  address?: unknown
+  topics?: unknown
+  data?: unknown
+}
+
+function isRecord(value: unknown): value is SimulationLogCandidate {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function areTopics(values: Array<string | undefined>): values is string[] {
+  return values.every((value) => value !== undefined)
 }
 
 function parseAddress(value: unknown) {
@@ -215,23 +226,22 @@ function parseLog(value: unknown): { effects: SimulationEffect[]; truncated: boo
 
   const topics = value.topics.map(parseTopic)
   const words = parseDataWords(value.data)
-  if (topics.some((topic) => !topic) || !words) return
+  if (!areTopics(topics) || !words) return
 
-  const normalizedTopics = topics as string[]
-  const topic = normalizedTopics[0]
+  const topic = topics[0]
   const effect =
     topic === TRANSFER_TOPIC
-      ? parseTransfer(token, normalizedTopics, words)
+      ? parseTransfer(token, topics, words)
       : topic === APPROVAL_TOPIC
-        ? parseApproval(token, normalizedTopics, words)
+        ? parseApproval(token, topics, words)
         : topic === APPROVAL_FOR_ALL_TOPIC
-          ? parseApprovalForAll(token, normalizedTopics, words)
+          ? parseApprovalForAll(token, topics, words)
           : topic === TRANSFER_SINGLE_TOPIC
-            ? parseTransferSingle(token, normalizedTopics, words)
+            ? parseTransferSingle(token, topics, words)
             : undefined
 
   if (effect) return { effects: [effect], truncated: false }
-  if (topic === TRANSFER_BATCH_TOPIC) return parseTransferBatch(token, normalizedTopics, words)
+  if (topic === TRANSFER_BATCH_TOPIC) return parseTransferBatch(token, topics, words)
   return undefined
 }
 

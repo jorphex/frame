@@ -83,7 +83,27 @@ interface SimulationDependencies {
 
 type RpcOutcome = { response: RPCResponsePayload } | { timedOut: true }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+interface RpcCandidate extends Record<string, unknown> {
+  message?: unknown
+  code?: unknown
+  data?: unknown
+  error?: unknown
+  result?: unknown
+  gasUsed?: unknown
+  returnData?: unknown
+  status?: unknown
+  logs?: unknown
+  calls?: unknown
+}
+
+interface BuiltSimulationCall extends Record<string, unknown> {
+  input?: unknown
+  nonce?: unknown
+  type?: unknown
+  data?: unknown
+}
+
+function isRecord(value: unknown): value is RpcCandidate {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
@@ -171,7 +191,7 @@ function copyCallField(target: Record<string, unknown>, key: string, value: unkn
 }
 
 export function buildSimulationCall(transaction: SimulationCallData) {
-  const call: Record<string, unknown> = {}
+  const call: BuiltSimulationCall = {}
 
   copyCallField(call, 'type', transaction.type)
   copyCallField(call, 'nonce', transaction.nonce)

@@ -2,7 +2,15 @@ import { MAX_UINT256 } from './quantity'
 
 const MAX_UINT256_DECIMAL = MAX_UINT256.toString(10)
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+interface EffectCandidate extends Record<string, unknown> {
+  owner?: unknown
+  type?: unknown
+  standard?: unknown
+  amount?: unknown
+  approved?: unknown
+}
+
+function isRecord(value: unknown): value is EffectCandidate {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
