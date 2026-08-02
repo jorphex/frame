@@ -6,6 +6,7 @@ import {
   decodeBridgeMessage,
   encodeBridgeMessage,
   getRendererTargetOrigin,
+  getRendererRole,
   isTrustedBridgeEvent
 } from './protocol'
 
@@ -13,6 +14,7 @@ const safeOrigins = ['file://'].concat(
   process.env.NODE_ENV === 'development' ? ['http://localhost:1234'] : []
 )
 const targetOrigin = getRendererTargetOrigin(window.location)
+const rendererRole = getRendererRole(process.argv)
 const postToRenderer = (message) => window.postMessage(encodeBridgeMessage(message), targetOrigin)
 
 window.addEventListener(
@@ -20,7 +22,7 @@ window.addEventListener(
   (e) => {
     if (!isTrustedBridgeEvent(e, window, safeOrigins)) return
 
-    const data = decodeBridgeMessage(e.data, LINK_SOURCE)
+    const data = decodeBridgeMessage(e.data, LINK_SOURCE, rendererRole)
     if (!data) return
 
     if (data.method === 'rpc') {

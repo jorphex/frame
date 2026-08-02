@@ -42,7 +42,7 @@ afterAll(() => {
 
 describe('createWindow', () => {
   it('preserves square frameless windows on Linux', () => {
-    createWindow('test')
+    createWindow('tray')
 
     const options = BrowserWindow.mock.calls[0][0]
     expect(options).toEqual(
@@ -50,6 +50,7 @@ describe('createWindow', () => {
         frame: false,
         webPreferences: expect.objectContaining({
           contextIsolation: true,
+          additionalArguments: ['--frame-renderer-role=tray'],
           nodeIntegration: false,
           sandbox: true
         })
@@ -61,6 +62,25 @@ describe('createWindow', () => {
     } else {
       expect(options).not.toHaveProperty('roundedCorners')
     }
+  })
+
+  it.each([
+    ['dash', 'dash'],
+    ['notify', 'notify'],
+    ['onboard', 'onboard'],
+    ['tray', 'tray'],
+    ['frameInstance', 'dapp']
+  ])('maps %s windows to the %s renderer role', (windowName, role) => {
+    createWindow(windowName, undefined, { additionalArguments: ['--existing'] })
+
+    expect(BrowserWindow.mock.calls[0][0].webPreferences.additionalArguments).toEqual([
+      '--existing',
+      `--frame-renderer-role=${role}`
+    ])
+  })
+
+  it('rejects windows without an explicit renderer role', () => {
+    expect(() => createWindow('unknown')).toThrow('has no renderer IPC role')
   })
 })
 

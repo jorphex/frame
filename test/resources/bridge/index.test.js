@@ -15,8 +15,16 @@ describe('preload renderer bridge', () => {
   let listeners
   let rendererWindow
 
-  beforeEach(() => {
+  const loadBridge = (role = 'tray') => {
+    globalThis.process.argv = globalThis.process.argv.filter(
+      (arg) => !arg.startsWith('--frame-renderer-role=')
+    )
+    if (role) globalThis.process.argv.push(`--frame-renderer-role=${role}`)
     jest.resetModules()
+    jest.isolateModules(() => jest.requireActual('../../../resources/bridge'))
+  }
+
+  beforeEach(() => {
     mockIpcRenderer.invoke.mockReset()
     mockIpcRenderer.on.mockReset()
     mockIpcRenderer.send.mockReset()
@@ -32,11 +40,14 @@ describe('preload renderer bridge', () => {
     }
     globalThis.window = rendererWindow
 
-    jest.isolateModules(() => jest.requireActual('../../../resources/bridge'))
+    loadBridge()
   })
 
   afterEach(() => {
     delete globalThis.window
+    globalThis.process.argv = globalThis.process.argv.filter(
+      (arg) => !arg.startsWith('--frame-renderer-role=')
+    )
   })
 
   const dispatch = (data, overrides = {}) =>
@@ -62,6 +73,19 @@ describe('preload renderer bridge', () => {
 
     expect(mockIpcRenderer.send).toHaveBeenCalledTimes(1)
     expect(mockIpcRenderer.send).toHaveBeenCalledWith('tray:ready')
+  })
+
+  test('fails closed without a role and applies limited renderer capabilities', () => {
+    loadBridge(null)
+    dispatch(JSON.stringify({ source: LINK_SOURCE, method: 'rpc', id, args: ['getState'] }))
+    expect(mockRpc).not.toHaveBeenCalled()
+
+    loadBridge('notify')
+    dispatch(JSON.stringify({ source: LINK_SOURCE, method: 'rpc', id, args: ['signTransaction'] }))
+    dispatch(JSON.stringify({ source: LINK_SOURCE, method: 'rpc', id, args: ['getState'] }))
+
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith('getState', expect.any(Function))
   })
 
   test('returns main RPC callbacks through a bounded bridge response', () => {

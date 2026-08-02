@@ -6,12 +6,22 @@ import store from '../store'
 
 import type { ChainId } from '../store/state'
 
+export type RendererRole = 'dash' | 'dapp' | 'notify' | 'onboard' | 'tray'
+
+const rendererRoleForWindow = (name: string): RendererRole => {
+  if (name === 'frameInstance') return 'dapp'
+  if (name === 'dash' || name === 'notify' || name === 'onboard' || name === 'tray') return name
+
+  throw new Error(`Window "${name}" has no renderer IPC role`)
+}
+
 export function createWindow(
   name: string,
   opts?: BrowserWindowConstructorOptions,
   webPreferences: BrowserWindowConstructorOptions['webPreferences'] = {}
 ) {
   log.verbose(`Creating ${name} window`)
+  const rendererRole = rendererRoleForWindow(name)
 
   const browserWindow = new BrowserWindow({
     ...opts,
@@ -24,6 +34,10 @@ export function createWindow(
     skipTaskbar: process.platform !== 'linux',
     webPreferences: {
       ...webPreferences,
+      additionalArguments: [
+        ...(webPreferences?.additionalArguments || []),
+        `--frame-renderer-role=${rendererRole}`
+      ],
       preload: path.resolve(process.env.BUNDLE_LOCATION, 'bridge.js'),
       backgroundThrottling: false, // Allows repaint when window is hidden
       contextIsolation: true,

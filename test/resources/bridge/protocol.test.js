@@ -5,6 +5,7 @@ import {
   decodeBridgeMessage,
   encodeBridgeMessage,
   getRendererTargetOrigin,
+  getRendererRole,
   isTrustedBridgeEvent
 } from '../../../resources/bridge/protocol'
 
@@ -14,18 +15,27 @@ const encode = (message) => encodeBridgeMessage(message)
 describe('renderer bridge protocol', () => {
   test('accepts bounded requests for registered IPC channels and main RPC methods', () => {
     expect(
-      decodeBridgeMessage(encode({ source: LINK_SOURCE, method: 'event', args: ['tray:ready'] }), LINK_SOURCE)
+      decodeBridgeMessage(
+        encode({ source: LINK_SOURCE, method: 'event', args: ['tray:ready'] }),
+        LINK_SOURCE,
+        'tray'
+      )
     ).toEqual({ source: LINK_SOURCE, method: 'event', args: ['tray:ready'] })
 
     expect(
       decodeBridgeMessage(
         encode({ source: LINK_SOURCE, method: 'invoke', id, args: ['tray:addChain', { chainId: '0x1' }] }),
-        LINK_SOURCE
+        LINK_SOURCE,
+        'dash'
       )
     ).toEqual({ source: LINK_SOURCE, method: 'invoke', id, args: ['tray:addChain', { chainId: '0x1' }] })
 
     expect(
-      decodeBridgeMessage(encode({ source: LINK_SOURCE, method: 'rpc', id, args: ['getState'] }), LINK_SOURCE)
+      decodeBridgeMessage(
+        encode({ source: LINK_SOURCE, method: 'rpc', id, args: ['getState'] }),
+        LINK_SOURCE,
+        'tray'
+      )
     ).toEqual({ source: LINK_SOURCE, method: 'rpc', id, args: ['getState'] })
   })
 
@@ -62,7 +72,7 @@ describe('renderer bridge protocol', () => {
   test.each([undefined, null, {}, '', '{', JSON.stringify(null), 'x'.repeat(MAX_MESSAGE_LENGTH + 1)])(
     'rejects malformed or oversized serialized input %#',
     (value) => {
-      expect(decodeBridgeMessage(value, LINK_SOURCE)).toBeNull()
+      expect(decodeBridgeMessage(value, LINK_SOURCE, 'tray')).toBeNull()
     }
   )
 
@@ -75,22 +85,67 @@ describe('renderer bridge protocol', () => {
       { source: LINK_SOURCE, method: 'rpc', id, args: new Array(65).fill(null) }
     ]
 
-    messages.forEach((message) => expect(decodeBridgeMessage(encode(message), LINK_SOURCE)).toBeNull())
+    messages.forEach((message) =>
+      expect(decodeBridgeMessage(encode(message), LINK_SOURCE, 'tray')).toBeNull()
+    )
   })
 
   test('rejects unregistered one-way and invoke channels', () => {
     expect(
       decodeBridgeMessage(
         encode({ source: LINK_SOURCE, method: 'event', args: ['shell:execute'] }),
-        LINK_SOURCE
+        LINK_SOURCE,
+        'tray'
       )
     ).toBeNull()
     expect(
       decodeBridgeMessage(
         encode({ source: LINK_SOURCE, method: 'invoke', id, args: ['shell:execute'] }),
-        LINK_SOURCE
+        LINK_SOURCE,
+        'tray'
       )
     ).toBeNull()
+  })
+
+  test('parses exactly one known main-process renderer role', () => {
+    for (const role of ['dash', 'dapp', 'notify', 'onboard', 'tray']) {
+      expect(getRendererRole(['electron', `--frame-renderer-role=${role}`])).toBe(role)
+    }
+    expect(getRendererRole(['electron'])).toBeNull()
+    expect(getRendererRole(['electron', '--frame-renderer-role=unknown'])).toBeNull()
+    expect(getRendererRole(['--frame-renderer-role=tray', '--frame-renderer-role=dash'])).toBeNull()
+  })
+
+  test('limits onboard, notify, and dapp request capabilities', () => {
+    const request = (role, method, args, requestId = id) =>
+      decodeBridgeMessage(
+        encode({ source: LINK_SOURCE, method, ...(method === 'event' ? {} : { id: requestId }), args }),
+        LINK_SOURCE,
+        role
+      )
+
+    expect(request('dapp', 'rpc', ['getFrameId'])).not.toBeNull()
+    expect(request('dapp', 'rpc', ['signTransaction'])).toBeNull()
+    expect(request('dapp', 'event', ['tray:action', 'navDash', {}])).not.toBeNull()
+    expect(request('dapp', 'event', ['tray:action', 'removeAccount'])).toBeNull()
+    expect(request('dapp', 'invoke', ['tray:addChain', {}])).toBeNull()
+
+    expect(request('notify', 'rpc', ['getState'])).not.toBeNull()
+    expect(request('notify', 'event', ['tray:action', 'mutePylonMigrationNotice'])).not.toBeNull()
+    expect(request('notify', 'event', ['tray:action', 'navDash'])).toBeNull()
+
+    expect(request('onboard', 'event', ['tray:openExternal', 'https://frame.sh'])).not.toBeNull()
+    expect(request('onboard', 'event', ['tray:action', 'navReplace', 'dash'])).not.toBeNull()
+    expect(request('onboard', 'event', ['tray:action', 'setKeyboardLayout', { isUS: true }])).not.toBeNull()
+    expect(request('onboard', 'event', ['tray:resetAllSettings'])).toBeNull()
+  })
+
+  test('rejects requests without a valid role while preserving responses', () => {
+    const request = encode({ source: LINK_SOURCE, method: 'rpc', id, args: ['getState'] })
+    const response = encode({ source: BRIDGE_SOURCE, method: 'rpc', id, args: [null, {}] })
+
+    expect(decodeBridgeMessage(request, LINK_SOURCE, null)).toBeNull()
+    expect(decodeBridgeMessage(response, BRIDGE_SOURCE, null)).not.toBeNull()
   })
 
   test('requires the current window and an allowed origin', () => {

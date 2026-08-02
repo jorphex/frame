@@ -119,6 +119,15 @@ remain a broad first-party renderer capability and their individual payloads are
 not yet described by a typed per-method schema. A renderer compromise must
 therefore still be treated as a privileged wallet-process compromise.
 
+The main process assigns each shared-preload window a renderer role. Tray and
+dashboard windows retain the full bridge surface; onboarding, notification, and
+local dapp-shell windows are restricted to their enumerated RPC methods, IPC
+channels, and store actions. Missing, unknown, or duplicate role arguments fail
+closed. Remote dapp content runs in separate WebContentsViews and does not receive
+this bridge. Main IPC handlers do not yet independently verify the assigned role,
+so the preload capability check is defense at the context-isolation boundary, not
+a substitute for typed main-process authorization.
+
 Some renderer policies allow broad network or image sources. Embedded dapp views
 load separately partitioned content and depend on session checks and request
 filtering.
