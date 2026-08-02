@@ -1,9 +1,13 @@
 import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
-import tar from 'tar-fs'
+import { PassThrough } from 'stream'
 
-import { installDappArchive } from '../../../main/dapps/cache'
+jest.useRealTimers()
+
+// StreamX captures timer globals at module load, so import it only after restoring real timers.
+const tar = require('tar-fs')
+const { installDappArchive } = require('../../../main/dapps/cache')
 
 const expectedCID = 'bafy-expected'
 const hashDirectory = jest.fn(async () => ({
@@ -14,14 +18,15 @@ async function createArchive(root, content) {
   const source = path.join(root, `source-${Math.random()}`)
   await fs.mkdir(source)
   await fs.writeFile(path.join(source, 'index.html'), content)
-  const archive = tar.pack(source, {
-    entries: ['index.html'],
-    map: (header) => ({ ...header, name: `bafy-root/${header.name}` })
-  })
+  const archive = new PassThrough()
+  tar
+    .pack(source, {
+      entries: ['index.html'],
+      map: (header) => ({ ...header, name: `bafy-root/${header.name}` })
+    })
+    .pipe(archive)
 
-  return (async function* () {
-    for await (const chunk of archive) yield chunk
-  })()
+  return archive
 }
 
 async function stagingEntries(root) {
@@ -29,7 +34,6 @@ async function stagingEntries(root) {
 }
 
 test('publishes a verified archive only after replacing the previous cache', async () => {
-  jest.useRealTimers()
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'frame-dapp-cache-'))
   const target = path.join(root, 'dapp')
 
@@ -53,7 +57,6 @@ test('publishes a verified archive only after replacing the previous cache', asy
 })
 
 test('preserves the previous cache when downloaded content has the wrong CID', async () => {
-  jest.useRealTimers()
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'frame-dapp-cache-'))
   const target = path.join(root, 'dapp')
 
@@ -79,7 +82,6 @@ test('preserves the previous cache when downloaded content has the wrong CID', a
 })
 
 test('preserves the previous cache when the archive stream fails', async () => {
-  jest.useRealTimers()
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'frame-dapp-cache-'))
   const target = path.join(root, 'dapp')
 

@@ -1,10 +1,8 @@
 import crypto from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
 
-import { createDappArchiveExtractor } from './archive'
+import { extractDappArchive } from './archive'
 import { hashDirectory } from './verify'
 
 type DirectoryHash = {
@@ -46,7 +44,7 @@ export async function installDappArchive({
 
   try {
     await fs.mkdir(stagingPath)
-    await pipeline(Readable.from(archive), createDappArchiveExtractor(stagingPath))
+    await extractDappArchive(archive, stagingPath)
 
     const stagedCID = (await calculateHash(stagingPath)).toV1().toString()
     if (stagedCID !== contentCID) {

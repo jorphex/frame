@@ -62,6 +62,8 @@ const ledgerVersions = Object.fromEntries(
 const { SiweMessage } = require(path.join(appModules, 'siwe'))
 const ethers = require(path.join(appModules, 'ethers'))
 const sigUtil = require(path.join(appModules, '@metamask/eth-sig-util'))
+const tarFs = require(path.join(appModules, 'tar-fs'))
+const tarStream = require(path.join(appModules, 'tar-stream'))
 const siwe = new SiweMessage(\`example.com wants you to sign in with your Ethereum account:
 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
@@ -134,6 +136,11 @@ Promise.all([
     ethersVersion: ethers.version,
     ethersBrowserProvider: typeof ethers.BrowserProvider,
     signatureVersion: require(path.join(appModules, '@metamask/eth-sig-util/package.json')).version,
+    archiveVersions: {
+      'tar-fs': require(path.join(appModules, 'tar-fs/package.json')).version,
+      'tar-stream': require(path.join(appModules, 'tar-stream/package.json')).version
+    },
+    archiveApis: [typeof tarFs.extract, typeof tarStream.extract],
     signature,
     signatureHash,
     recoveredSignatureAddress,
@@ -175,6 +182,11 @@ assert.equal(probeResult.siweDomain, 'example.com')
 assert.equal(probeResult.ethersVersion, packageJson.dependencies.ethers)
 assert.equal(probeResult.ethersBrowserProvider, 'function')
 assert.equal(probeResult.signatureVersion, packageJson.dependencies['@metamask/eth-sig-util'])
+assert.deepEqual(probeResult.archiveVersions, {
+  'tar-fs': packageJson.dependencies['tar-fs'],
+  'tar-stream': packageJson.devDependencies['tar-stream']
+})
+assert.deepEqual(probeResult.archiveApis, ['function', 'function'])
 assert.equal(probeResult.signatureHash, 'd07e8b0969c3d3ba7934bcf9134d586ce1c14c96c4396824a3c6b0137c1e4943')
 assert.equal(
   probeResult.signature,
@@ -210,5 +222,5 @@ console.log(
     probeResult.abi
   } hardware-wallet native, Ledger ${
     probeResult.ledgerVersions['@ledgerhq/hw-app-eth']
-  }, SIWE, EIP-712, native fetch, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
+  }, SIWE, EIP-712, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )
