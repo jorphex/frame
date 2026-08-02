@@ -64,6 +64,7 @@ const ethers = require(path.join(appModules, 'ethers'))
 const sigUtil = require(path.join(appModules, '@metamask/eth-sig-util'))
 const tarFs = require(path.join(appModules, 'tar-fs'))
 const tarStream = require(path.join(appModules, 'tar-stream'))
+const electronLog = require(path.join(appModules, 'electron-log'))
 const siwe = new SiweMessage(\`example.com wants you to sign in with your Ethereum account:
 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
@@ -141,6 +142,14 @@ Promise.all([
       'tar-stream': require(path.join(appModules, 'tar-stream/package.json')).version
     },
     archiveApis: [typeof tarFs.extract, typeof tarStream.extract],
+    electronLogVersion: require(path.join(appModules, 'electron-log/package.json')).version,
+    electronLogApis: [
+      typeof electronLog.info,
+      typeof electronLog.error,
+      typeof electronLog.transports.console,
+      typeof electronLog.transports.file,
+      typeof electronLog.transports.file.resolvePathFn
+    ],
     signature,
     signatureHash,
     recoveredSignatureAddress,
@@ -187,6 +196,8 @@ assert.deepEqual(probeResult.archiveVersions, {
   'tar-stream': packageJson.devDependencies['tar-stream']
 })
 assert.deepEqual(probeResult.archiveApis, ['function', 'function'])
+assert.equal(probeResult.electronLogVersion, packageJson.dependencies['electron-log'])
+assert.deepEqual(probeResult.electronLogApis, Array(5).fill('function'))
 assert.equal(probeResult.signatureHash, 'd07e8b0969c3d3ba7934bcf9134d586ce1c14c96c4396824a3c6b0137c1e4943')
 assert.equal(
   probeResult.signature,
@@ -222,5 +233,5 @@ console.log(
     probeResult.abi
   } hardware-wallet native, Ledger ${
     probeResult.ledgerVersions['@ledgerhq/hw-app-eth']
-  }, SIWE, EIP-712, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
+  }, SIWE, EIP-712, electron-log 5, native fetch, tar-fs 3, ethers 6, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )
