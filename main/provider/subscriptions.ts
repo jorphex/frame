@@ -14,6 +14,17 @@ export const enum SubscriptionType {
   NETWORK = 'networkChanged'
 }
 
+const subscriptionTypes = new Set<string>([
+  SubscriptionType.ACCOUNTS,
+  SubscriptionType.ASSETS,
+  SubscriptionType.CHAIN,
+  SubscriptionType.CHAINS,
+  SubscriptionType.NETWORK
+])
+
+export const isFrameSubscriptionType = (value: unknown) =>
+  typeof value === 'string' && subscriptionTypes.has(value)
+
 export type Subscription = {
   id: string
   originId: string

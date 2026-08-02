@@ -3,6 +3,7 @@ import log from 'electron-log'
 
 import provider from '../provider'
 import accounts from '../accounts'
+import type { Chain } from '../chains'
 
 import { createSessionOrigin, isTrusted, parseOrigin, requiresSessionOrigin, updateOrigin } from './origins'
 import parsePayload, { JsonRpcError, MAX_REQUEST_BYTES } from './validPayload'
@@ -11,6 +12,9 @@ import { parseChainId } from '../provider/chainRequests'
 import originSessions from './originSessions'
 import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
 import { bindRequestSignal } from '../provider/requestSignal'
+import { isFrameSubscriptionType } from '../provider/subscriptions'
+import { toRpcQuantity } from '../../resources/domain/transaction/quantity'
+import { isValidUpstreamSubscriptionId, TransportSubscriptionRegistry } from './subscriptionRegistry'
 
 const logTraffic = process.env['LOG_TRAFFIC']
 
@@ -19,19 +23,22 @@ interface PendingRequest {
   timer: NodeJS.Timeout
 }
 
-interface Subscription {
-  id: string
-  origin: string
+interface PollClient {
+  originId: string
+  pollId: string
+  events: string[]
+  eventBytes: number
+  overflowed: boolean
+  pending?: PendingRequest
+  cleanupTimer?: NodeJS.Timeout
 }
 
 interface HTTPPollingPayload extends JSONRPCRequestPayload {
   pollId?: string
 }
 
-const polls: Record<string, string[]> = {}
-const pollSubs: Record<string, Subscription> = {}
-const pending: Record<string, PendingRequest> = {}
-const cleanupTimers: Record<string, NodeJS.Timeout> = {}
+const pollClients = new Map<string, PollClient>()
+const subscriptions = new TransportSubscriptionRegistry<PollClient>()
 const socketOrigins = new WeakMap<IncomingMessage['socket'], string>()
 
 export const HTTP_MAX_CONNECTIONS = 128
@@ -41,6 +48,13 @@ export const HTTP_KEEP_ALIVE_TIMEOUT_MS = 5 * 1000
 export const HTTP_MAX_REQUESTS_PER_SOCKET = 1000
 export const HTTP_REQUEST_RATE_LIMIT: RateLimitOptions = { maxRequests: 3000, windowMs: 10 * 1000 }
 export const HTTP_SOCKET_RATE_LIMIT: RateLimitOptions = { maxRequests: 300, windowMs: 10 * 1000 }
+export const HTTP_MAX_POLL_CLIENTS = 256
+export const HTTP_MAX_SUBSCRIPTIONS_PER_POLL_CLIENT = 128
+export const HTTP_MAX_QUEUED_SUBSCRIPTION_EVENTS = 256
+export const HTTP_MAX_QUEUED_SUBSCRIPTION_BYTES = 4 * 1024 * 1024
+export const HTTP_POLL_IDLE_TIMEOUT_MS = 20 * 1000
+export const HTTP_LONG_POLL_TIMEOUT_MS = 15 * 1000
+export const HTTP_MAX_POLL_ID_BYTES = 128
 
 interface HTTPServerOptions {
   requestRateLimit?: RateLimitOptions
@@ -91,16 +105,70 @@ const rejectRateLimitedRequest = (req: IncomingMessage, res: ServerResponse) => 
   sendTransportError(res, 429, null, { code: -32005, message: 'Request rate limit exceeded' })
 }
 
-const cleanup = (id: string) => {
-  delete polls[id]
-  delete pending[id]
-  Object.keys(pollSubs).forEach((sub) => {
-    const subscription = pollSubs[sub]
-    if (subscription?.id === id) {
-      provider.send({ jsonrpc: '2.0', id: 1, method: 'eth_unsubscribe', params: [sub], _origin: '' })
-      delete pollSubs[sub]
-    }
+const validPollId = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  Buffer.byteLength(value, 'utf8') <= HTTP_MAX_POLL_ID_BYTES &&
+  /^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(value)
+
+const pollClientKey = (originId: string, pollId: string) => `${originId}\u0000${pollId}`
+
+const unsubscribe = (subscription: ReturnType<typeof subscriptions.forOwner>[number]) => {
+  provider.send({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'eth_unsubscribe',
+    params: [subscription.upstreamId],
+    chainId: subscription.chainId,
+    _origin: subscription.originId
   })
+}
+
+const removePollClient = (client: PollClient) => {
+  const key = pollClientKey(client.originId, client.pollId)
+  if (pollClients.get(key) !== client) return
+
+  clearTimeout(client.pending?.timer)
+  clearTimeout(client.cleanupTimer)
+  subscriptions.forOwner(client).forEach((subscription) => {
+    unsubscribe(subscription)
+    subscriptions.remove(subscription.id)
+  })
+  pollClients.delete(key)
+}
+
+const schedulePollCleanup = (client: PollClient) => {
+  clearTimeout(client.cleanupTimer)
+  client.cleanupTimer = setTimeout(() => removePollClient(client), HTTP_POLL_IDLE_TIMEOUT_MS)
+  client.cleanupTimer.unref()
+}
+
+const getPollClient = (originId: string, pollId: string, create = false) => {
+  const key = pollClientKey(originId, pollId)
+  const existing = pollClients.get(key)
+  if (existing || !create || pollClients.size >= HTTP_MAX_POLL_CLIENTS) return existing
+
+  const client: PollClient = {
+    originId,
+    pollId,
+    events: [],
+    eventBytes: 0,
+    overflowed: false
+  }
+  pollClients.set(key, client)
+  schedulePollCleanup(client)
+  return client
+}
+
+const overflowPollClient = (client: PollClient) => {
+  if (client.overflowed) return
+  client.overflowed = true
+  client.events = []
+  client.eventBytes = 0
+  subscriptions.forOwner(client).forEach((subscription) => {
+    unsubscribe(subscription)
+    subscriptions.remove(subscription.id)
+  })
+  client.pending?.send()
 }
 
 const handler = (req: IncomingMessage, res: ServerResponse) => {
@@ -209,46 +277,70 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
         } else {
           if (payload.method === 'eth_pollSubscriptions') {
             const params = Array.isArray(payload.params) ? payload.params : []
-            const id = params[0]
-            if (typeof id !== 'string') {
+            const pollId = params[0]
+            if (!validPollId(pollId)) {
               return respond({
                 id: payload.id,
                 jsonrpc: payload.jsonrpc,
                 error: { code: -32602, message: 'Invalid Client ID' }
               })
             }
+            const client = getPollClient(payload._origin, pollId, true)
+            if (!client) {
+              return respond({
+                id: payload.id,
+                jsonrpc: payload.jsonrpc,
+                error: { code: -32005, message: 'Subscription client limit exceeded' }
+              })
+            }
+            if (client.pending) {
+              return respond({
+                id: payload.id,
+                jsonrpc: payload.jsonrpc,
+                error: { code: -32000, message: 'Subscription poll already pending' }
+              })
+            }
+
             const immediate = params[1] === 'immediate'
             const send = (force: boolean) => {
-              const result = polls[id] || []
-              if (result.length || immediate || force) {
+              if (client.overflowed) {
+                respond({
+                  id: payload.id,
+                  jsonrpc: payload.jsonrpc,
+                  error: { code: -32005, message: 'Subscription queue limit exceeded' }
+                })
+                return removePollClient(client)
+              }
+
+              if (client.events.length || immediate || force) {
+                const result = client.events
+                client.events = []
+                client.eventBytes = 0
+                if (client.pending) {
+                  clearTimeout(client.pending.timer)
+                  delete client.pending
+                }
                 const response = { id: payload.id, jsonrpc: payload.jsonrpc, result }
                 respond(response)
-                delete polls[id]
-                clearTimeout(cleanupTimers[id])
-                cleanupTimers[id] = setTimeout(cleanup.bind(null, id), 20 * 1000)
+                schedulePollCleanup(client)
               } else {
                 const sendResponse = () => {
-                  const pendingRequest = pending[id]
-                  if (pendingRequest && pendingRequest.timer) {
-                    clearTimeout(pendingRequest.timer)
-                  }
-
-                  delete pending[id]
-
+                  if (client.pending !== pendingRequest) return
                   send(true)
                 }
 
                 const pendingRequest = {
                   send: sendResponse,
-                  timer: setTimeout(sendResponse, 15 * 1000)
+                  timer: setTimeout(sendResponse, HTTP_LONG_POLL_TIMEOUT_MS)
                 }
-                pending[id] = pendingRequest
+                client.pending = pendingRequest
                 controller.signal.addEventListener(
                   'abort',
                   () => {
-                    if (pending[id] !== pendingRequest) return
+                    if (client.pending !== pendingRequest) return
                     clearTimeout(pendingRequest.timer)
-                    delete pending[id]
+                    delete client.pending
+                    schedulePollCleanup(client)
                   },
                   { once: true }
                 )
@@ -257,23 +349,111 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
             return send(false)
           }
 
+          const params = Array.isArray(payload.params) ? payload.params : []
+          const pollId = rawPayload.pollId
+          if (payload.method === 'eth_subscribe' && !validPollId(pollId)) {
+            return respond({
+              id: payload.id,
+              jsonrpc: payload.jsonrpc,
+              error: { code: -32602, message: 'Invalid subscription client ID' }
+            })
+          }
+
+          const requestedSubscriptionId = params[0]
+          const ownedSubscription =
+            payload.method === 'eth_unsubscribe' && typeof requestedSubscriptionId === 'string'
+              ? subscriptions.getOwned(
+                  requestedSubscriptionId,
+                  (subscription) =>
+                    subscription.originId === payload._origin && subscription.chainId === chainId
+                )
+              : undefined
+          if (payload.method === 'eth_unsubscribe' && !ownedSubscription) {
+            return respond({ id: payload.id, jsonrpc: payload.jsonrpc, result: false })
+          }
+
+          const forwardedPayload = ownedSubscription
+            ? {
+                ...payload,
+                chainId: ownedSubscription.chainId,
+                params: [ownedSubscription.upstreamId]
+              }
+            : payload
+
           provider.send(
-            payload,
+            forwardedPayload,
             bindRequestSignal((response) => {
-              if (response && response.result) {
-                if (payload.method === 'eth_subscribe') {
-                  if (typeof response.result === 'string') {
-                    pollSubs[response.result] = { id: rawPayload.pollId || '', origin: payload._origin } // Refactor this so you don't need to send a pollId and use the existing subscription id
+              let transportResponse = response
+              if (payload.method === 'eth_subscribe') {
+                if (response.error) {
+                  transportResponse = response
+                } else if (!isValidUpstreamSubscriptionId(response.result)) {
+                  transportResponse = {
+                    id: payload.id,
+                    jsonrpc: payload.jsonrpc,
+                    error: { code: -32603, message: 'Invalid subscription response' }
                   }
-                } else if (payload.method === 'eth_unsubscribe') {
-                  const params = Array.isArray(payload.params) ? payload.params : []
-                  params.forEach((sub) => {
-                    if (typeof sub === 'string' && pollSubs[sub]) delete pollSubs[sub]
+                } else if (controller.signal.aborted) {
+                  provider.send({
+                    id: 1,
+                    jsonrpc: '2.0',
+                    method: 'eth_unsubscribe',
+                    params: [response.result],
+                    chainId,
+                    _origin: payload._origin
                   })
+                  return
+                } else {
+                  const client = getPollClient(payload._origin, pollId as string, true)
+                  const subscriptionCount = client ? subscriptions.forOwner(client).length : 0
+                  const subscription =
+                    client && subscriptionCount < HTTP_MAX_SUBSCRIPTIONS_PER_POLL_CLIENT
+                      ? subscriptions.register({
+                          upstreamId: response.result,
+                          originId: payload._origin,
+                          chainId,
+                          internal: isFrameSubscriptionType(params[0]),
+                          owner: client
+                        })
+                      : undefined
+                  if (!client || subscriptionCount >= HTTP_MAX_SUBSCRIPTIONS_PER_POLL_CLIENT) {
+                    provider.send({
+                      id: 1,
+                      jsonrpc: '2.0',
+                      method: 'eth_unsubscribe',
+                      params: [response.result],
+                      chainId,
+                      _origin: payload._origin
+                    })
+                    transportResponse = {
+                      id: payload.id,
+                      jsonrpc: payload.jsonrpc,
+                      error: { code: -32005, message: 'Subscription client limit exceeded' }
+                    }
+                  } else if (!subscription) {
+                    provider.send({
+                      id: 1,
+                      jsonrpc: '2.0',
+                      method: 'eth_unsubscribe',
+                      params: [response.result],
+                      chainId,
+                      _origin: payload._origin
+                    })
+                    transportResponse = {
+                      id: payload.id,
+                      jsonrpc: payload.jsonrpc,
+                      error: { code: -32603, message: 'Invalid subscription response' }
+                    }
+                  } else {
+                    schedulePollCleanup(client)
+                    transportResponse = { ...response, result: subscription.id }
+                  }
                 }
+              } else if (response && response.result && payload.method === 'eth_unsubscribe') {
+                if (ownedSubscription) subscriptions.remove(ownedSubscription.id)
               }
 
-              respond(response)
+              respond(transportResponse)
             }, controller.signal)
           )
         }
@@ -312,17 +492,30 @@ const withRateLimits = (
   }
 }
 
-provider.on('data:subscription', (payload: RPC.Susbcription.Response) => {
-  const subscription = pollSubs[payload.params.subscription]
-  if (subscription) {
-    const { id } = subscription
+export const handleHttpSubscription = (payload: RPC.Susbcription.Response, chain?: Chain) => {
+  const chainId = chain ? toRpcQuantity(BigInt(chain.id)) : undefined
+  subscriptions.forEvent(payload.params.subscription, chainId).forEach((subscription) => {
+    const client = subscription.owner
+    const event = JSON.stringify({
+      ...payload,
+      params: { ...payload.params, subscription: subscription.id }
+    })
+    const eventBytes = Buffer.byteLength(event, 'utf8')
+    if (
+      client.events.length >= HTTP_MAX_QUEUED_SUBSCRIPTION_EVENTS ||
+      eventBytes > HTTP_MAX_QUEUED_SUBSCRIPTION_BYTES ||
+      client.eventBytes + eventBytes > HTTP_MAX_QUEUED_SUBSCRIPTION_BYTES
+    ) {
+      return overflowPollClient(client)
+    }
 
-    polls[id] = polls[id] || []
+    client.events.push(event)
+    client.eventBytes += eventBytes
+    client.pending?.send()
+  })
+}
 
-    polls[id].push(JSON.stringify(payload))
-    pending[id]?.send()
-  }
-})
+provider.on('data:subscription', handleHttpSubscription)
 
 export default function (options: HTTPServerOptions = {}) {
   const server = http.createServer(

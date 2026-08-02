@@ -197,7 +197,7 @@ export class Provider extends EventEmitter {
 
     this.connection.on('data', (chain, ...args) => {
       if ((args[0] || {}).method === 'eth_subscription') {
-        this.emit('data:subscription', ...args)
+        this.emit('data:subscription', args[0], chain)
       }
 
       this.emit(`data:${chain.type}:${chain.id}`, ...args)

@@ -84,16 +84,24 @@ Frame owns subscriptions named `accountsChanged`, `chainChanged`,
 `chainsChanged`, `networkChanged`, and `assetsChanged`; delivery is checked
 against the origin's account permission. Other `eth_subscribe` requests are
 forwarded to the configured chain. WebSocket notifications are delivered on the
-same authorized socket. HTTP clients use Frame's non-standard
-`eth_pollSubscriptions` polling bridge with a caller-provided `pollId`.
+same authorized socket. Frame returns a transport-generated opaque subscription
+ID rather than exposing the configured RPC's ID; notifications are rewritten to
+that ID, and `eth_unsubscribe` is translated only for the owning socket or HTTP
+origin and original chain. HTTP clients use Frame's non-standard
+`eth_pollSubscriptions` polling bridge with a bounded caller-provided `pollId`
+scoped by canonical origin. The poll token is compatibility state, not native
+process authentication.
 
 ## Transport Limits
 
 - JSON-RPC requests are limited to 1 MiB by the shared parser.
 - HTTP accepts only `POST` and `OPTIONS`, bounds headers/body time, connections,
-  per-socket requests, and request rate, and permits CORS from any origin.
+  per-socket requests, request rate, active poll clients, subscriptions per poll
+  client, queued event count/bytes, and poll idle time, and permits CORS from any
+  origin. Overflow closes the affected subscriptions instead of growing memory.
 - WebSocket bounds payload size, active clients, and per-client message rate and
-  disables per-message compression.
+  subscription count, caps buffered subscription delivery, and disables
+  per-message compression.
 - HTTP(S), WS(S), and browser-extension origins retain their canonical scheme,
   host, and non-default port, so grants do not cross schemes. Existing host-only
   browser grants are intentionally not assigned an invented scheme; browser dapps

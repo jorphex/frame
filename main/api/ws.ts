@@ -6,6 +6,7 @@ import log from 'electron-log'
 import provider from '../provider'
 import accounts from '../accounts'
 import windows from '../windows'
+import type { Chain } from '../chains'
 
 import {
   updateOrigin,
@@ -22,23 +23,23 @@ import { parseChainId } from '../provider/chainRequests'
 import originSessions from './originSessions'
 import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
 import { bindRequestSignal } from '../provider/requestSignal'
+import { isFrameSubscriptionType } from '../provider/subscriptions'
+import { toRpcQuantity } from '../../resources/domain/transaction/quantity'
+import { isValidUpstreamSubscriptionId, TransportSubscriptionRegistry } from './subscriptionRegistry'
 
 const logTraffic = (origin: string) =>
   process.env['LOG_TRAFFIC'] === 'true' || process.env['LOG_TRAFFIC'] === origin
 
-const subs: Record<string, Subscription> = {}
+const subscriptions = new TransportSubscriptionRegistry<FrameWebSocket>()
 
 export const WS_MAX_CLIENTS = 64
 export const WS_MESSAGE_RATE_LIMIT: RateLimitOptions = { maxRequests: 300, windowMs: 10 * 1000 }
+export const WS_MAX_SUBSCRIPTIONS_PER_CLIENT = 256
+export const WS_MAX_BUFFERED_SUBSCRIPTION_BYTES = 4 * 1024 * 1024
 
 interface WebSocketServerOptions {
   maxClients?: number
   messageRateLimit?: RateLimitOptions
-}
-
-interface Subscription {
-  originId: string
-  socket: FrameWebSocket
 }
 
 interface FrameWebSocket extends WebSocket {
@@ -59,6 +60,27 @@ type TransportResponse =
       jsonrpc: '2.0'
       error: { code: number; message: string }
     }
+
+export const handleWebSocketSubscription = (payload: RPC.Susbcription.Response, chain?: Chain) => {
+  const chainId = chain ? toRpcQuantity(BigInt(chain.id)) : undefined
+  subscriptions.forEvent(payload.params.subscription, chainId).forEach((subscription) => {
+    if (subscription.owner.readyState === WebSocket.OPEN) {
+      const event = JSON.stringify({
+        ...payload,
+        params: { ...payload.params, subscription: subscription.id }
+      })
+      if (
+        Buffer.byteLength(event, 'utf8') > MAX_REQUEST_BYTES ||
+        subscription.owner.bufferedAmount + Buffer.byteLength(event, 'utf8') >
+          WS_MAX_BUFFERED_SUBSCRIPTION_BYTES
+      ) {
+        subscription.owner.close(1013, 'Subscription delivery limit exceeded')
+        return
+      }
+      subscription.owner.send(event)
+    }
+  })
+}
 
 const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLimitOptions) => {
   socket.id = uuid()
@@ -174,20 +196,80 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
       if (!accounts.getSelectedAddresses()[0]) error = { message: 'No Frame account selected', code: 4100 }
       res({ id: payload.id, jsonrpc: payload.jsonrpc, error })
     } else {
+      const params = Array.isArray(payload.params) ? payload.params : []
+      const requestedSubscriptionId = params[0]
+      const ownedSubscription =
+        payload.method === 'eth_unsubscribe' && typeof requestedSubscriptionId === 'string'
+          ? subscriptions.getOwned(
+              requestedSubscriptionId,
+              (subscription) => subscription.owner === socket && subscription.chainId === chainId
+            )
+          : undefined
+      if (payload.method === 'eth_unsubscribe' && !ownedSubscription) {
+        return res({ id: payload.id, jsonrpc: payload.jsonrpc, result: false })
+      }
+
+      const forwardedPayload = ownedSubscription
+        ? {
+            ...payload,
+            chainId: ownedSubscription.chainId,
+            params: [ownedSubscription.upstreamId]
+          }
+        : payload
       provider.send(
-        payload,
+        forwardedPayload,
         bindRequestSignal((response) => {
-          if (response && response.result) {
-            if (payload.method === 'eth_subscribe') {
-              if (typeof response.result === 'string') {
-                subs[response.result] = { socket, originId: payload._origin }
+          let transportResponse = response
+          if (payload.method === 'eth_subscribe') {
+            if (response.error) {
+              transportResponse = response
+            } else if (!isValidUpstreamSubscriptionId(response.result)) {
+              transportResponse = {
+                id: payload.id,
+                jsonrpc: payload.jsonrpc,
+                error: { code: -32603, message: 'Invalid subscription response' }
               }
-            } else if (payload.method === 'eth_unsubscribe') {
-              const params = Array.isArray(payload.params) ? payload.params : []
-              params.forEach((sub) => {
-                if (typeof sub === 'string' && subs[sub]) delete subs[sub]
+            } else if (controller.signal.aborted) {
+              provider.send({
+                id: 1,
+                jsonrpc: '2.0',
+                method: 'eth_unsubscribe',
+                params: [response.result],
+                chainId,
+                _origin: payload._origin
               })
+              return
+            } else {
+              const subscription =
+                subscriptions.forOwner(socket).length < WS_MAX_SUBSCRIPTIONS_PER_CLIENT
+                  ? subscriptions.register({
+                      upstreamId: response.result,
+                      originId: payload._origin,
+                      chainId,
+                      internal: isFrameSubscriptionType(params[0]),
+                      owner: socket
+                    })
+                  : undefined
+              if (!subscription) {
+                provider.send({
+                  id: 1,
+                  jsonrpc: '2.0',
+                  method: 'eth_unsubscribe',
+                  params: [response.result],
+                  chainId,
+                  _origin: payload._origin
+                })
+                transportResponse = {
+                  id: payload.id,
+                  jsonrpc: payload.jsonrpc,
+                  error: { code: -32005, message: 'Subscription client limit exceeded' }
+                }
+              } else {
+                transportResponse = { ...response, result: subscription.id }
+              }
             }
+          } else if (response && response.result && payload.method === 'eth_unsubscribe') {
+            if (ownedSubscription) subscriptions.remove(ownedSubscription.id)
           }
 
           if (logTraffic(origin))
@@ -197,7 +279,7 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
               } | <- | ${JSON.stringify(response.result || response.error)}`
             )
 
-          res(response)
+          res(transportResponse)
         }, controller.signal)
       )
     }
@@ -206,18 +288,16 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
   socket.on('close', () => {
     pendingRequests.forEach((controller) => controller.abort())
     pendingRequests.clear()
-    Object.keys(subs).forEach((sub) => {
-      const subscription = subs[sub]
-      if (subscription?.socket.id === socket.id) {
-        provider.send({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'eth_unsubscribe',
-          _origin: subscription.originId,
-          params: [sub]
-        })
-        delete subs[sub]
-      }
+    subscriptions.forOwner(socket).forEach((subscription) => {
+      provider.send({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_unsubscribe',
+        _origin: subscription.originId,
+        chainId: subscription.chainId,
+        params: [subscription.upstreamId]
+      })
+      subscriptions.remove(subscription.id)
     })
   })
 }
@@ -239,13 +319,7 @@ export default function (server: Server, options: WebSocketServerOptions = {}) {
     handler(socket, req, messageRateLimit)
   })
 
-  provider.on('data:subscription', (payload: RPC.Susbcription.Response) => {
-    const subscription = subs[payload.params.subscription]
-
-    if (subscription && subscription.socket.readyState === WebSocket.OPEN) {
-      subscription.socket.send(JSON.stringify(payload))
-    }
-  })
+  provider.on('data:subscription', handleWebSocketSubscription)
 
   return server
 }

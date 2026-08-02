@@ -1,6 +1,9 @@
 import { Agent, request } from 'http'
 
-import createHttpServer from '../../../main/api/http'
+import createHttpServer, {
+  handleHttpSubscription,
+  HTTP_MAX_QUEUED_SUBSCRIPTION_EVENTS
+} from '../../../main/api/http'
 import {
   HTTP_HEADERS_TIMEOUT_MS,
   HTTP_KEEP_ALIVE_TIMEOUT_MS,
@@ -369,4 +372,191 @@ it('returns after rejecting an invalid polling client id', async () => {
     body: { id: 7, jsonrpc: '2.0', error: { code: -32602, message: 'Invalid Client ID' } }
   })
   expect(provider.send).not.toHaveBeenCalled()
+})
+
+it('isolates aliased subscription events and unsubscribe by canonical origin', async () => {
+  const pollId = 'owner-client'
+  const upstreamId = 'upstream-http-subscription'
+  provider.send.mockImplementation((payload, callback) => {
+    if (payload.method === 'eth_subscribe') {
+      callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: upstreamId })
+    } else if (payload.method === 'eth_unsubscribe') {
+      callback?.({ id: payload.id, jsonrpc: payload.jsonrpc, result: true })
+    }
+  })
+
+  const subscribeResponse = await send({
+    body: JSON.stringify({
+      id: 10,
+      jsonrpc: '2.0',
+      method: 'eth_subscribe',
+      params: ['newHeads'],
+      pollId
+    })
+  })
+  const alias = subscribeResponse.body.result
+  expect(alias).toMatch(/^0x[0-9a-f]{32}$/)
+  expect(alias).not.toBe(upstreamId)
+
+  handleHttpSubscription(
+    {
+      jsonrpc: '2.0',
+      method: 'eth_subscription',
+      params: { subscription: upstreamId, result: { number: '0x1' } }
+    },
+    { id: 1 }
+  )
+
+  updateOrigin.mockImplementationOnce((payload) => ({
+    payload: { ...payload, _origin: 'other-origin' },
+    chainId: payload.chainId || '0x1'
+  }))
+  const otherPoll = await send({
+    body: JSON.stringify({
+      id: 11,
+      jsonrpc: '2.0',
+      method: 'eth_pollSubscriptions',
+      params: [pollId, 'immediate']
+    })
+  })
+  expect(otherPoll.body.result).toEqual([])
+
+  const ownerPoll = await send({
+    body: JSON.stringify({
+      id: 12,
+      jsonrpc: '2.0',
+      method: 'eth_pollSubscriptions',
+      params: [pollId, 'immediate']
+    })
+  })
+  expect(ownerPoll.body.result).toHaveLength(1)
+  expect(JSON.parse(ownerPoll.body.result[0]).params.subscription).toBe(alias)
+
+  provider.send.mockClear()
+  updateOrigin.mockImplementationOnce((payload) => ({
+    payload: { ...payload, _origin: 'other-origin' },
+    chainId: payload.chainId || '0x1'
+  }))
+  const denied = await send({
+    body: JSON.stringify({ id: 13, jsonrpc: '2.0', method: 'eth_unsubscribe', params: [alias] })
+  })
+  expect(denied.body.result).toBe(false)
+  expect(provider.send).not.toHaveBeenCalled()
+
+  const removed = await send({
+    body: JSON.stringify({ id: 14, jsonrpc: '2.0', method: 'eth_unsubscribe', params: [alias] })
+  })
+  expect(removed.body.result).toBe(true)
+  expect(provider.send).toHaveBeenCalledWith(
+    expect.objectContaining({ method: 'eth_unsubscribe', params: [upstreamId], chainId: '0x1' }),
+    expect.any(Function)
+  )
+})
+
+it('fails closed and unsubscribes when an HTTP subscription queue overflows', async () => {
+  const pollId = 'overflow-client'
+  const upstreamId = 'upstream-overflow'
+  provider.send.mockImplementation((payload, callback) => {
+    if (payload.method === 'eth_subscribe') {
+      callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: upstreamId })
+    }
+  })
+  const subscribeResponse = await send({
+    body: JSON.stringify({
+      id: 20,
+      jsonrpc: '2.0',
+      method: 'eth_subscribe',
+      params: ['newHeads'],
+      pollId
+    })
+  })
+  expect(subscribeResponse.body.result).toMatch(/^0x[0-9a-f]{32}$/)
+  provider.send.mockClear()
+
+  for (let index = 0; index <= HTTP_MAX_QUEUED_SUBSCRIPTION_EVENTS; index += 1) {
+    handleHttpSubscription(
+      {
+        jsonrpc: '2.0',
+        method: 'eth_subscription',
+        params: { subscription: upstreamId, result: { number: `0x${index.toString(16)}` } }
+      },
+      { id: 1 }
+    )
+  }
+
+  expect(provider.send).toHaveBeenCalledWith(
+    expect.objectContaining({ method: 'eth_unsubscribe', params: [upstreamId], chainId: '0x1' })
+  )
+  const poll = await send({
+    body: JSON.stringify({
+      id: 21,
+      jsonrpc: '2.0',
+      method: 'eth_pollSubscriptions',
+      params: [pollId, 'immediate']
+    })
+  })
+  expect(poll.body.error).toEqual({ code: -32005, message: 'Subscription queue limit exceeded' })
+})
+
+it('unsubscribes a late subscription result after its HTTP client disconnects', async () => {
+  let forwarded
+  let markForwarded
+  const requestForwarded = new Promise((resolve) => {
+    markForwarded = resolve
+  })
+  provider.send.mockImplementation((payload, callback) => {
+    if (payload.method === 'eth_subscribe') {
+      forwarded = callback
+      markForwarded()
+    }
+  })
+  const client = request({ host: '127.0.0.1', port, method: 'POST' })
+  client.on('error', () => {})
+  client.end(
+    JSON.stringify({
+      id: 30,
+      jsonrpc: '2.0',
+      method: 'eth_subscribe',
+      params: ['newHeads'],
+      pollId: 'late-client'
+    })
+  )
+
+  await requestForwarded
+  const signal = getRequestSignal(forwarded)
+  const aborted = new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }))
+  client.socket.destroy()
+  await aborted
+  provider.send.mockClear()
+
+  forwarded({ id: 30, jsonrpc: '2.0', result: 'late-upstream-subscription' })
+
+  expect(provider.send).toHaveBeenCalledWith({
+    id: 1,
+    jsonrpc: '2.0',
+    method: 'eth_unsubscribe',
+    params: ['late-upstream-subscription'],
+    chainId: '0x1',
+    _origin: 'test-origin'
+  })
+})
+
+it('rejects a malformed upstream HTTP subscription result', async () => {
+  provider.send.mockImplementationOnce((payload, callback) =>
+    callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: true })
+  )
+
+  await expect(
+    send({
+      body: JSON.stringify({
+        id: 31,
+        jsonrpc: '2.0',
+        method: 'eth_subscribe',
+        params: ['newHeads'],
+        pollId: 'malformed-client'
+      })
+    })
+  ).resolves.toMatchObject({
+    body: { error: { code: -32603, message: 'Invalid subscription response' } }
+  })
 })

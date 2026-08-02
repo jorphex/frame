@@ -4,7 +4,7 @@ import { EventEmitter } from 'stream'
 import store from '../../../main/store'
 import provider from '../../../main/provider'
 import accounts from '../../../main/accounts'
-import ws from '../../../main/api/ws'
+import ws, { handleWebSocketSubscription, WS_MAX_BUFFERED_SUBSCRIPTION_BYTES } from '../../../main/api/ws'
 import { MAX_REQUEST_BYTES } from '../../../main/api/validPayload'
 import { getRequestSignal } from '../../../main/provider/requestSignal'
 
@@ -106,13 +106,158 @@ it('does not deliver subscriptions to a closing socket', () => {
   regularSocket.readyState = WebSocket.CLOSING
 
   const subscriptionListener = provider.on.mock.calls.at(-1)[1]
-  subscriptionListener({
-    jsonrpc: '2.0',
-    method: 'eth_subscription',
-    params: { subscription: subscriptionId, result: {} }
-  })
+  subscriptionListener(
+    {
+      jsonrpc: '2.0',
+      method: 'eth_subscription',
+      params: { subscription: subscriptionId, result: {} }
+    },
+    { id: 1 }
+  )
 
   expect(regularSocket.send).not.toHaveBeenCalled()
+})
+
+it('aliases subscriptions and denies unsubscribe from another socket', () => {
+  const upstreamId = 'upstream-subscription'
+  provider.send.mockImplementation((payload, callback) => {
+    if (payload.method === 'eth_subscribe') {
+      callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: upstreamId })
+    } else if (payload.method === 'eth_unsubscribe') {
+      callback?.({ id: payload.id, jsonrpc: payload.jsonrpc, result: true })
+    }
+  })
+  const owner = new EventEmitter()
+  owner.readyState = WebSocket.OPEN
+  owner.close = jest.fn()
+  owner.send = jest.fn()
+  const intruder = new EventEmitter()
+  intruder.readyState = WebSocket.OPEN
+  intruder.close = jest.fn()
+  intruder.send = jest.fn()
+  socketConnection.emit('connection', owner, { headers: { origin: 'https://owner.test' } })
+  socketConnection.emit('connection', intruder, { headers: { origin: 'https://intruder.test' } })
+
+  owner.emit(
+    'message',
+    JSON.stringify({ id: 1, jsonrpc: '2.0', method: 'eth_subscribe', params: ['newHeads'] })
+  )
+  const alias = JSON.parse(owner.send.mock.calls[0][0]).result
+  expect(alias).toMatch(/^0x[0-9a-f]{32}$/)
+  expect(alias).not.toBe(upstreamId)
+
+  owner.send.mockClear()
+  handleWebSocketSubscription(
+    {
+      jsonrpc: '2.0',
+      method: 'eth_subscription',
+      params: { subscription: upstreamId, result: { number: '0x1' } }
+    },
+    { id: 1 }
+  )
+  expect(JSON.parse(owner.send.mock.calls[0][0]).params.subscription).toBe(alias)
+  expect(intruder.send).not.toHaveBeenCalled()
+
+  provider.send.mockClear()
+  intruder.emit(
+    'message',
+    JSON.stringify({ id: 2, jsonrpc: '2.0', method: 'eth_unsubscribe', params: [alias] })
+  )
+  expect(JSON.parse(intruder.send.mock.calls[0][0]).result).toBe(false)
+  expect(provider.send).not.toHaveBeenCalled()
+
+  owner.emit('message', JSON.stringify({ id: 3, jsonrpc: '2.0', method: 'eth_unsubscribe', params: [alias] }))
+  expect(provider.send).toHaveBeenCalledWith(
+    expect.objectContaining({ method: 'eth_unsubscribe', params: [upstreamId], chainId: '0x1' }),
+    expect.any(Function)
+  )
+  expect(JSON.parse(owner.send.mock.calls.at(-1)[0]).result).toBe(true)
+})
+
+it('cleans up a socket subscription on its original chain', () => {
+  provider.send.mockImplementationOnce((payload, callback) =>
+    callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: 'upstream-cleanup' })
+  )
+  const owner = new EventEmitter()
+  owner.readyState = WebSocket.OPEN
+  owner.close = jest.fn()
+  owner.send = jest.fn()
+  socketConnection.emit('connection', owner, { headers: { origin: 'https://owner.test' } })
+  owner.emit(
+    'message',
+    JSON.stringify({ id: 1, jsonrpc: '2.0', method: 'eth_subscribe', params: ['newHeads'] })
+  )
+  provider.send.mockClear()
+
+  owner.emit('close')
+
+  expect(provider.send).toHaveBeenCalledWith({
+    id: 1,
+    jsonrpc: '2.0',
+    method: 'eth_unsubscribe',
+    params: ['upstream-cleanup'],
+    chainId: '0x1',
+    _origin: expect.any(String)
+  })
+})
+
+it('unsubscribes a late subscription result after its WebSocket closes', () => {
+  let forwarded
+  provider.send.mockImplementationOnce((_payload, callback) => {
+    forwarded = callback
+  })
+  const owner = new EventEmitter()
+  owner.readyState = WebSocket.OPEN
+  owner.close = jest.fn()
+  owner.send = jest.fn()
+  socketConnection.emit('connection', owner, { headers: { origin: 'https://owner.test' } })
+  owner.emit(
+    'message',
+    JSON.stringify({ id: 1, jsonrpc: '2.0', method: 'eth_subscribe', params: ['newHeads'] })
+  )
+  owner.emit('close')
+  provider.send.mockClear()
+
+  forwarded({ id: 1, jsonrpc: '2.0', result: 'late-websocket-subscription' })
+
+  expect(provider.send).toHaveBeenCalledWith({
+    id: 1,
+    jsonrpc: '2.0',
+    method: 'eth_unsubscribe',
+    params: ['late-websocket-subscription'],
+    chainId: '0x1',
+    _origin: expect.any(String)
+  })
+  expect(owner.send).not.toHaveBeenCalled()
+})
+
+it('closes a slow WebSocket before buffering another subscription event', () => {
+  provider.send.mockImplementationOnce((payload, callback) =>
+    callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: 'buffered-upstream' })
+  )
+  const owner = new EventEmitter()
+  owner.readyState = WebSocket.OPEN
+  owner.bufferedAmount = WS_MAX_BUFFERED_SUBSCRIPTION_BYTES
+  owner.close = jest.fn()
+  owner.send = jest.fn()
+  socketConnection.emit('connection', owner, { headers: { origin: 'https://owner.test' } })
+  owner.emit(
+    'message',
+    JSON.stringify({ id: 1, jsonrpc: '2.0', method: 'eth_subscribe', params: ['newHeads'] })
+  )
+  owner.send.mockClear()
+
+  handleWebSocketSubscription(
+    {
+      jsonrpc: '2.0',
+      method: 'eth_subscription',
+      params: { subscription: 'buffered-upstream', result: { number: '0x1' } }
+    },
+    { id: 1 }
+  )
+
+  expect(owner.close).toHaveBeenCalledWith(1013, 'Subscription delivery limit exceeded')
+  expect(owner.send).not.toHaveBeenCalled()
 })
 
 it('aborts only still-pending provider requests when a WebSocket closes', () => {
