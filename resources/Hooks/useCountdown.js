@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 
 const useCountdown = (targetDate) => {
   const targetTime = new Date(targetDate).getTime()
-  const [countDown, setCountDown] = useState(targetTime - Date.now())
+  const [countDown, setCountDown] = useState(0)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let interval
     const update = () => {
       const remaining = targetTime - Date.now()

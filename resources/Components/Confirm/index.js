@@ -1,5 +1,11 @@
 import { useState } from 'react'
 
+const ResponseButton = ({ text, onClick }) => (
+  <div role='button' className='confirmButton' onClick={onClick}>
+    {text}
+  </div>
+)
+
 export default function ConfirmDialog({
   prompt,
   acceptText = 'OK',
@@ -16,14 +22,6 @@ export default function ConfirmDialog({
     }
   }
 
-  const ResponseButton = ({ text, onClick }) => {
-    return (
-      <div role='button' className='confirmButton' onClick={(evt) => clickHandler(evt, onClick)}>
-        {text}
-      </div>
-    )
-  }
-
   return (
     <div id='confirmationDialog' className='confirmDialog'>
       <div role='heading' className='confirmText'>
@@ -31,8 +29,8 @@ export default function ConfirmDialog({
       </div>
 
       <div className='confirmButtonOptions'>
-        <ResponseButton text={declineText} onClick={onDecline} />
-        <ResponseButton text={acceptText} onClick={onAccept} />
+        <ResponseButton text={declineText} onClick={(evt) => clickHandler(evt, onDecline)} />
+        <ResponseButton text={acceptText} onClick={(evt) => clickHandler(evt, onAccept)} />
       </div>
     </div>
   )

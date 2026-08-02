@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useEffectEvent } from 'react'
 
 import link from '../../../../../resources/link'
 import { Cluster } from '../../../../../resources/Components/Cluster'
@@ -34,8 +34,6 @@ const ChainExpanded = (props) => {
     nativeCurrencyName
   } = props
   const chain = { id, type, name, isTestnet, symbol, explorer, primaryColor }
-  const chainRef = useRef(chain)
-  chainRef.current = chain
 
   // state
   const [currentColor, setPrimaryColor] = useState(primaryColor)
@@ -48,11 +46,10 @@ const ChainExpanded = (props) => {
   const [currentCurrencyIcon, setCurrencyIcon] = useState(nativeCurrencyIcon)
 
   // effects
-  useEffect(() => {
-    const originalChain = chainRef.current
+  const updateNetwork = useEffectEvent(() => {
     const updatedChain = {
-      id: originalChain.id,
-      type: originalChain.type,
+      id: chain.id,
+      type: chain.type,
       primaryColor: currentColor,
       isTestnet: currentTestnet,
       explorer: currentExplorer,
@@ -63,7 +60,11 @@ const ChainExpanded = (props) => {
       nativeCurrencyName: currentNativeCurrencyName
     }
 
-    link.send('tray:action', 'updateNetwork', originalChain, updatedChain)
+    link.send('tray:action', 'updateNetwork', chain, updatedChain)
+  })
+
+  useEffect(() => {
+    updateNetwork()
   }, [
     currentColor,
     currentName,
@@ -75,8 +76,12 @@ const ChainExpanded = (props) => {
     currentCurrencyIcon
   ])
 
+  const updateChainColor = useEffectEvent(() => {
+    link.send('tray:action', 'setChainColor', id, currentColor)
+  })
+
   useEffect(() => {
-    link.send('tray:action', 'setChainColor', chainRef.current.id, currentColor)
+    updateChainColor()
   }, [currentColor])
 
   const isMainnet = id === 1
