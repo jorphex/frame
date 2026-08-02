@@ -125,6 +125,12 @@ renderers use Content Security Policy. A preload bridge and main-process IPC sti
 form a privileged boundary: exposed methods and payloads must be treated as
 untrusted, validated, and limited to the sender that needs them.
 
+Production startup rejects Chromium's `--no-sandbox` switch. AppImage hosts must
+support unprivileged user namespaces rather than falling back to an unsandboxed
+renderer process. Browser permission checks and requests, display capture,
+Bluetooth pairing, device permissions, and HID/USB/serial/Bluetooth selectors are
+denied for every Frame renderer and embedded dapp.
+
 The current preload bridge accepts only bounded serialized envelopes from its own
 window, an expected packaged/development origin, and the expected protocol source
 label. One-way and invoke messages are limited to explicitly registered IPC

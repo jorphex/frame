@@ -1,4 +1,11 @@
-import { BrowserWindow, BrowserWindowConstructorOptions, shell, WebContentsView } from 'electron'
+import {
+  BrowserWindow,
+  BrowserWindowConstructorOptions,
+  Session,
+  shell,
+  WebContents,
+  WebContentsView
+} from 'electron'
 import log from 'electron-log'
 import path from 'path'
 
@@ -7,6 +14,37 @@ import store from '../store'
 import type { ChainId } from '../store/state'
 import { rendererRoleForWindow } from '../../resources/bridge/roles'
 import { registerRendererRole } from '../ipc/renderer'
+
+const hardenedSessions = new WeakSet<Session>()
+
+function denySessionPermissions(session: Session) {
+  if (hardenedSessions.has(session)) return
+  hardenedSessions.add(session)
+  session.setPermissionCheckHandler(() => false)
+  session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+  session.setDevicePermissionHandler(() => false)
+  session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
+  session.setBluetoothPairingHandler((_details, callback) => callback({ confirmed: false }))
+  session.on('select-hid-device', (event, _details, callback) => {
+    event.preventDefault()
+    callback()
+  })
+  session.on('select-usb-device', (event, _details, callback) => {
+    event.preventDefault()
+    callback()
+  })
+  session.on('select-serial-port', (event, _ports, _webContents, callback) => {
+    event.preventDefault()
+    callback('')
+  })
+}
+
+function denyDeviceSelection(webContents: WebContents) {
+  webContents.on('select-bluetooth-device', (event, _devices, callback) => {
+    event.preventDefault()
+    callback('')
+  })
+}
 
 export function createWindow(
   name: string,
@@ -44,6 +82,8 @@ export function createWindow(
     }
   })
   registerRendererRole(browserWindow.webContents, rendererRole)
+  denySessionPermissions(browserWindow.webContents.session)
+  denyDeviceSelection(browserWindow.webContents)
 
   browserWindow.webContents.once('did-finish-load', () => {
     log.info(`Created ${name} renderer process, pid:`, browserWindow.webContents.getOSProcessId())
@@ -75,6 +115,8 @@ export function createViewInstance(
     }
   })
   viewInstance.setBackgroundColor('#00000000')
+  denySessionPermissions(viewInstance.webContents.session)
+  denyDeviceSelection(viewInstance.webContents)
 
   viewInstance.webContents.on('will-navigate', (e) => e.preventDefault())
   viewInstance.webContents.on('will-attach-webview', (e) => e.preventDefault())

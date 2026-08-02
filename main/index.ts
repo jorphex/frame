@@ -23,6 +23,11 @@ import Erc20Contract from './contracts/erc20'
 import { getErrorCode } from '../resources/utils'
 import walletCallEvidenceRuntime from './provider/walletCallEvidenceRuntime'
 import { handleRenderer, onRenderer } from './ipc/renderer'
+import { isPathInsideRoot } from './security/fileAccess'
+import { assertSandboxEnabled } from './security/sandbox'
+
+const isDev = process.env.NODE_ENV === 'development'
+assertSandboxEnabled(app.commandLine)
 
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
@@ -36,7 +41,6 @@ if (process.platform === 'linux') {
 }
 app.commandLine.appendSwitch('force-color-profile', 'srgb')
 
-const isDev = process.env.NODE_ENV === 'development'
 log.transports.console.level = process.env.LOG_LEVEL || (isDev ? 'verbose' : 'info')
 
 if (process.env.LOG_LEVEL === 'debug') {
@@ -317,9 +321,12 @@ app.on('ready', () => {
 
   protocol.interceptFileProtocol('file', (req, cb) => {
     const appOrigin = path.resolve(__dirname, '../../')
-    const filePath = url.fileURLToPath(req.url)
-
-    if (filePath.startsWith(appOrigin)) cb({ path: filePath })
+    try {
+      const filePath = url.fileURLToPath(req.url)
+      cb(isPathInsideRoot(appOrigin, filePath) ? { path: filePath } : { error: -10 })
+    } catch {
+      cb({ error: -10 })
+    }
   })
 })
 

@@ -157,7 +157,6 @@ function initTrayWindow() {
   trayWindow.on('closed', () => {
     if (windows.tray === trayWindow) delete windows.tray
   })
-  trayWindow.webContents.session.setPermissionRequestHandler((webContents, permission, res) => res(false))
   trayWindow.setResizable(false)
   trayWindow.setMovable(false)
 

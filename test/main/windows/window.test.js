@@ -8,10 +8,20 @@ import {
 } from '../../../main/windows/window'
 import store from '../../../main/store'
 
+const createMockSession = () => ({
+  on: jest.fn(),
+  setBluetoothPairingHandler: jest.fn(),
+  setDevicePermissionHandler: jest.fn(),
+  setDisplayMediaRequestHandler: jest.fn(),
+  setPermissionCheckHandler: jest.fn(),
+  setPermissionRequestHandler: jest.fn()
+})
+
 const mockWindow = {
   webContents: {
     on: jest.fn(),
     once: jest.fn(),
+    session: createMockSession(),
     setWindowOpenHandler: jest.fn()
   }
 }
@@ -20,6 +30,7 @@ const mockView = {
   setBackgroundColor: jest.fn(),
   webContents: {
     on: jest.fn(),
+    session: createMockSession(),
     setWindowOpenHandler: jest.fn()
   }
 }
@@ -33,6 +44,12 @@ jest.mock('electron', () => ({
 jest.mock('../../../main/store', () => jest.fn())
 
 const originalBundleLocation = process.env.BUNDLE_LOCATION
+
+beforeEach(() => {
+  mockWindow.webContents.session = createMockSession()
+  mockView.webContents.session = createMockSession()
+  mockView.webContents.on.mockClear()
+})
 
 beforeAll(() => {
   process.env.BUNDLE_LOCATION = '/tmp/frame-test-bundle'
@@ -107,6 +124,46 @@ describe('createViewInstance', () => {
     expect(mockView.webContents.on).toHaveBeenCalledWith('will-navigate', expect.any(Function))
     expect(mockView.webContents.on).toHaveBeenCalledWith('will-attach-webview', expect.any(Function))
     expect(mockView.webContents.setWindowOpenHandler).toHaveBeenCalledWith(expect.any(Function))
+  })
+
+  it('denies browser and device permissions for embedded dapps', () => {
+    createViewInstance('app.example')
+
+    const session = mockView.webContents.session
+    expect(session.setPermissionCheckHandler.mock.calls[0][0]()).toBe(false)
+    expect(session.setDevicePermissionHandler.mock.calls[0][0]()).toBe(false)
+
+    const permissionCallback = jest.fn()
+    session.setPermissionRequestHandler.mock.calls[0][0](null, 'media', permissionCallback)
+    expect(permissionCallback).toHaveBeenCalledWith(false)
+
+    const displayCallback = jest.fn()
+    session.setDisplayMediaRequestHandler.mock.calls[0][0](null, displayCallback)
+    expect(displayCallback).toHaveBeenCalledWith({})
+
+    const pairingCallback = jest.fn()
+    session.setBluetoothPairingHandler.mock.calls[0][0](null, pairingCallback)
+    expect(pairingCallback).toHaveBeenCalledWith({ confirmed: false })
+  })
+
+  it.each([
+    ['select-hid-device', []],
+    ['select-usb-device', []],
+    ['select-serial-port', ['']],
+    ['select-bluetooth-device', ['']]
+  ])('cancels %s selection', (eventName, expectedArguments) => {
+    createViewInstance('app.example')
+    const emitter =
+      eventName === 'select-bluetooth-device' ? mockView.webContents : mockView.webContents.session
+    const registration = emitter.on.mock.calls.find(([name]) => name === eventName)
+    const event = { preventDefault: jest.fn() }
+    const callback = jest.fn()
+
+    if (eventName === 'select-serial-port') registration[1](event, [], null, callback)
+    else registration[1](event, [], callback)
+
+    expect(event.preventDefault).toHaveBeenCalled()
+    expect(callback).toHaveBeenCalledWith(...expectedArguments)
   })
 })
 
