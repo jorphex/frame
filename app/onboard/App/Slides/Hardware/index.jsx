@@ -1,8 +1,7 @@
 import React, { useEffect } from 'react'
-import link from '../../../../../resources/link'
 import svg from '../../../../../resources/svg'
 
-import { Slide, SlideBody, SlideItem, Tag } from '../../styled'
+import { Slide, SlideBody, SlideItem } from '../../styled'
 
 const Extension = ({ setTitle, setProceed }) => {
   useEffect(() => {
@@ -29,18 +28,8 @@ const Extension = ({ setTitle, setProceed }) => {
             justifyContent: 'center'
           }}
         >
-          <div
-            style={{ padding: '10px', cursor: 'pointer' }}
-            onClick={() => link.send('tray:openExternal', '<>')}
-          >
-            {svg.ledger(48)}
-          </div>
-          <div
-            style={{ padding: '10px', cursor: 'pointer' }}
-            onClick={() => link.send('tray:openExternal', '<>')}
-          >
-            {svg.trezor(48)}
-          </div>
+          <div style={{ padding: '10px' }}>{svg.ledger(48)}</div>
+          <div style={{ padding: '10px' }}>{svg.trezor(48)}</div>
         </div>
       </SlideBody>
     </Slide>

@@ -60,12 +60,48 @@ test('enforces limited store actions in the main process', () => {
 
 test('rejects unauthorized invokes and permits privileged invokes', async () => {
   const handler = jest.fn().mockResolvedValue({ success: true })
-  handleRenderer('tray:addChain', handler)
-  const invoke = mockHandlers.get('tray:addChain')
+  handleRenderer('tray:getTokenDetails', handler)
+  const invoke = mockHandlers.get('tray:getTokenDetails')
 
-  expect(() => invoke(sender('dapp'), {})).toThrow('Unauthorized renderer IPC')
-  await expect(invoke(sender('dash'), {})).resolves.toEqual({ success: true })
+  expect(() => invoke(sender('dapp'), '0x0000000000000000000000000000000000000001', 1)).toThrow(
+    'Unauthorized renderer IPC'
+  )
+  await expect(invoke(sender('dash'), '0x0000000000000000000000000000000000000001', 1)).resolves.toEqual({
+    success: true
+  })
   expect(handler).toHaveBeenCalledTimes(1)
+})
+
+test('drops invalid events without calling application handlers', () => {
+  const listener = jest.fn()
+  onRenderer('tray:copyTxHash', listener)
+  const dispatch = mockListeners.get('tray:copyTxHash')
+
+  dispatch(sender('tray'), 'not-a-transaction-hash')
+
+  expect(listener).not.toHaveBeenCalled()
+  expect(mockLog.warn).toHaveBeenCalledWith(
+    'Rejected invalid renderer IPC payload',
+    expect.objectContaining({ channel: 'tray:copyTxHash' })
+  )
+})
+
+test('returns a bounded error for invalid invokes', () => {
+  const handler = jest.fn()
+  handleRenderer('tray:getTokenDetails', handler)
+  const invoke = mockHandlers.get('tray:getTokenDetails')
+
+  expect(() => invoke(sender('dash'), 'invalid', '1')).toThrow('Invalid renderer IPC payload')
+  expect(handler).not.toHaveBeenCalled()
+})
+
+test('refuses handler registration without a schema', () => {
+  expect(() => onRenderer('tray:unknown', jest.fn())).toThrow(
+    'Renderer IPC channel has no event schema: tray:unknown'
+  )
+  expect(() => handleRenderer('tray:unknown', jest.fn())).toThrow(
+    'Renderer IPC channel has no invoke schema: tray:unknown'
+  )
 })
 
 test('does not consume once-only listeners on unauthorized events', () => {
@@ -81,6 +117,22 @@ test('does not consume once-only listeners on unauthorized events', () => {
   dispatch(trayEvent)
   expect(mockIpcMain.removeListener).toHaveBeenCalledWith('tray:ready', dispatch)
   expect(listener).toHaveBeenCalledWith(trayEvent)
+})
+
+test('does not consume once-only listeners on invalid events', () => {
+  const listener = jest.fn()
+  onceRenderer('tray:copyTxHash', listener)
+  const dispatch = mockListeners.get('tray:copyTxHash')
+
+  dispatch(sender('tray'), 'invalid')
+  expect(mockIpcMain.removeListener).not.toHaveBeenCalled()
+  expect(listener).not.toHaveBeenCalled()
+
+  const trayEvent = sender('tray')
+  const hash = `0x${'a'.repeat(64)}`
+  dispatch(trayEvent, hash)
+  expect(mockIpcMain.removeListener).toHaveBeenCalledWith('tray:copyTxHash', dispatch)
+  expect(listener).toHaveBeenCalledWith(trayEvent, hash)
 })
 
 test('authorizes decoded RPC methods and ignores malformed method values', () => {

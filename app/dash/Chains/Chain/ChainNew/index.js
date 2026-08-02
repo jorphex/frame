@@ -99,7 +99,7 @@ export const Chain = ({
   const chainIcon = currentChainIcon === chainDefault.icon ? '' : currentChainIcon
   const updatedChain = {
     type: 'ethereum',
-    id: currentChainId,
+    id: Number(currentChainId),
     name: currentName,
     explorer: currentExplorer,
     nativeCurrencyName: currentNativeCurrencyName,

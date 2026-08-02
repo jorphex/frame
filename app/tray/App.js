@@ -1,7 +1,5 @@
 import React from 'react'
 import Restore from 'react-restore'
-import link from '../../resources/link'
-
 import Account from './Account'
 import Notify from './Notify'
 import Menu from './Menu'
@@ -44,11 +42,6 @@ class Panel extends React.Component {
   //     // const key = event.key; // "ArrowRight", "ArrowLeft", "ArrowUp", or "ArrowDown"
   //   })
   // }
-
-  selectNetwork(network) {
-    const [type, id] = network.split(':')
-    if (network.type !== type || network.id !== id) link.send('tray:action', 'selectNetwork', type, id)
-  }
 
   hexToDisplayGwei(weiHex) {
     return parseInt(weiHex, 'hex') / 1e9 < 1 ? '‹1' : Math.round(parseInt(weiHex, 'hex') / 1e9)

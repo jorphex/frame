@@ -230,11 +230,6 @@ class Settings extends React.Component {
     }
   }
 
-  selectNetwork(network) {
-    const [type, id] = network.split(':')
-    if (network.type !== type || network.id !== id) link.send('tray:action', 'selectNetwork', type, id)
-  }
-
   expandNetwork(e, expand) {
     e.stopPropagation()
     this.setState({ expandNetwork: expand !== undefined ? expand : !this.state.expandNetwork })

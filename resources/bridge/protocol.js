@@ -6,7 +6,7 @@ export const MAX_MESSAGE_LENGTH = 16 * 1024 * 1024
 const MAX_ARGUMENTS = 64
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-const requestEventChannels = new Set([
+export const requestEventChannels = new Set([
   '*:addFrame',
   '*:contextmenu',
   'dash:reloadSigner',
@@ -21,13 +21,10 @@ const requestEventChannels = new Set([
   'tray:action',
   'tray:addToken',
   'tray:adjustNonce',
-  'tray:clearOrigins',
   'tray:clearRequestsByOrigin',
   'tray:clipboardData',
   'tray:copyTxHash',
   'tray:dismissUpdate',
-  'tray:flex:event',
-  'tray:flex:res',
   'tray:giveAccess',
   'tray:installAvailableUpdate',
   'tray:mouseout',
@@ -36,20 +33,16 @@ const requestEventChannels = new Set([
   'tray:quit',
   'tray:ready',
   'tray:rejectRequest',
-  'tray:removeAccount',
-  'tray:removeOrigin',
   'tray:removeToken',
   'tray:renameAccount',
   'tray:replaceTx',
   'tray:resetAllSettings',
   'tray:resetNonce',
   'tray:resolveRequest',
-  'tray:syncPath',
-  'tray:updateRestart',
-  'unsetCurrentView'
+  'tray:updateRestart'
 ])
 
-const requestInvokeChannels = new Set(['tray:addChain', 'tray:getTokenDetails'])
+export const requestInvokeChannels = new Set(['tray:addChain', 'tray:getTokenDetails'])
 const responseEventChannels = new Set(['action', 'dapp', 'flex'])
 const methods = new Set(['event', 'invoke', 'rpc'])
 

@@ -1,4 +1,4 @@
-import { app, protocol, clipboard, powerMonitor, BrowserWindow } from 'electron'
+import { app, protocol, clipboard, powerMonitor } from 'electron'
 import path from 'path'
 import log from 'electron-log'
 import url from 'url'
@@ -19,7 +19,6 @@ import signers from './signers'
 import persist from './store/persist'
 import { showUnhandledExceptionDialog } from './windows/dialog'
 import { openBlockExplorer, openExternal } from './windows/window'
-import { FrameInstance } from './windows/frames/frameInstances'
 import Erc20Contract from './contracts/erc20'
 import { getErrorCode } from '../resources/utils'
 import walletCallEvidenceRuntime from './provider/walletCallEvidenceRuntime'
@@ -156,10 +155,6 @@ onRenderer('tray:dismissUpdate', (e, version, remind) => {
   updater.dismissUpdate()
 })
 
-onRenderer('tray:removeAccount', (e, id) => {
-  accounts.remove(id)
-})
-
 onRenderer('tray:renameAccount', (e, id, name) => {
   accounts.rename(id, name)
 })
@@ -252,22 +247,6 @@ onRenderer('tray:resetNonce', (e, handlerId) => {
   accounts.resetNonce(handlerId)
 })
 
-onRenderer('tray:removeOrigin', (e, handlerId) => {
-  accounts.removeRequests(handlerId)
-  requireStoreAction('removeOrigin')(handlerId)
-})
-
-onRenderer('tray:clearOrigins', () => {
-  Object.keys(store('main.origins')).forEach((handlerId) => {
-    accounts.removeRequests(handlerId)
-  })
-  requireStoreAction('clearOrigins')()
-})
-
-onRenderer('tray:syncPath', (e, path, value) => {
-  requireStoreAction('syncPath')(path, value)
-})
-
 onRenderer('tray:ready', () => {
   require('./api')
   startWalletCallEvidenceRuntime()
@@ -305,11 +284,6 @@ dapps.add({
     key: 'value'
   },
   status: 'initial'
-})
-
-onRenderer('unsetCurrentView', async (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender) as FrameInstance
-  dapps.unsetCurrentView(win.frameId as string)
 })
 
 onRenderer('*:addFrame', (e, id) => {

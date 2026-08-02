@@ -60,11 +60,6 @@ class Settings extends React.Component {
     )
   }
 
-  selectNetwork(network) {
-    const [type, id] = network.split(':')
-    if (network.type !== type || network.id !== id) link.send('tray:action', 'selectNetwork', type, id)
-  }
-
   renderConnections(testnetsOnly = false) {
     const nets = []
     const networks = this.store('main.networks')

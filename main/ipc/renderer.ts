@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import log from 'electron-log'
 
 import { BridgeMethod, RendererRole, hasRendererCapability } from '../../resources/bridge/roles'
+import { assertRendererIpcSchema, parseRendererIpcArgs } from './schemas'
 
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 
@@ -27,25 +28,38 @@ const authorize = (
 }
 
 export const onRenderer = (channel: string, listener: RendererListener) => {
+  assertRendererIpcSchema('event', channel)
   ipcMain.on(channel, (event, ...args) => {
-    if (authorize(event, 'event', channel, args)) listener(event, ...args)
+    if (!authorize(event, 'event', channel, args)) return
+    const parsed = parseRendererIpcArgs('event', channel, args)
+    if (parsed.success) return listener(event, ...(parsed.data as unknown[]))
+    log.warn('Rejected invalid renderer IPC payload', { channel, issues: parsed.error.issues })
   })
 }
 
 export const onceRenderer = (channel: string, listener: RendererListener) => {
+  assertRendererIpcSchema('event', channel)
   const wrapped = (event: IpcMainEvent, ...args: unknown[]) => {
     if (!authorize(event, 'event', channel, args)) return
+    const parsed = parseRendererIpcArgs('event', channel, args)
+    if (!parsed.success) {
+      log.warn('Rejected invalid renderer IPC payload', { channel, issues: parsed.error.issues })
+      return
+    }
     ipcMain.removeListener(channel, wrapped)
-    listener(event, ...args)
+    listener(event, ...(parsed.data as unknown[]))
   }
   ipcMain.on(channel, wrapped)
   return () => ipcMain.removeListener(channel, wrapped)
 }
 
 export const handleRenderer = (channel: string, listener: RendererHandler) => {
+  assertRendererIpcSchema('invoke', channel)
   ipcMain.handle(channel, (event, ...args) => {
     if (!authorize(event, 'invoke', channel, args)) throw new Error('Unauthorized renderer IPC')
-    return listener(event, ...args)
+    const parsed = parseRendererIpcArgs('invoke', channel, args)
+    if (!parsed.success) throw new Error('Invalid renderer IPC payload')
+    return listener(event, ...(parsed.data as unknown[]))
   })
 }
 
