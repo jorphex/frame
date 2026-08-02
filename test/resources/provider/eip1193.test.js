@@ -67,6 +67,49 @@ it('resolves valid requests and removes their pending entries', async () => {
   expect(provider.pending.size).toBe(0)
 })
 
+it.each(['eth_accounts', 'eth_requestAccounts'])(
+  'synchronizes and emits a detached account change from %s results',
+  async (method) => {
+    const { raw, provider } = setup()
+    const accountsChanged = jest.fn()
+    provider.on('accountsChanged', accountsChanged)
+    const accounts = ['0x1111111111111111111111111111111111111111']
+    raw.request.mockResolvedValueOnce(accounts).mockResolvedValueOnce([...accounts])
+
+    await expect(provider.request({ method })).resolves.toBe(accounts)
+    await expect(provider.request({ method })).resolves.toEqual(accounts)
+
+    expect(accountsChanged).toHaveBeenCalledTimes(1)
+    expect(accountsChanged).toHaveBeenCalledWith(accounts)
+    expect(accountsChanged.mock.calls[0][0]).not.toBe(accounts)
+    expect(provider.accounts).toEqual(accounts)
+    expect(provider.accounts).not.toBe(accounts)
+    expect(provider.selectedAddress).toBe(accounts[0])
+    expect(provider.coinbase).toBe(accounts[0])
+  }
+)
+
+it.each(['eth_accounts', 'eth_requestAccounts'])(
+  'rejects malformed %s results without publishing account state',
+  async (method) => {
+    const { raw, provider } = setup()
+    const accountsChanged = jest.fn()
+    provider.on('accountsChanged', accountsChanged)
+    raw.request.mockResolvedValueOnce(['not-an-address'])
+
+    await expect(provider.request({ method })).rejects.toMatchObject({
+      name: 'ProviderRpcError',
+      code: -32603,
+      message: 'Provider returned an invalid account list'
+    })
+
+    expect(accountsChanged).not.toHaveBeenCalled()
+    expect(provider.accounts).toEqual([])
+    expect(provider.selectedAddress).toBeUndefined()
+    expect(provider.coinbase).toBeUndefined()
+  }
+)
+
 it('normalizes RPC and non-error rejections', async () => {
   const { raw, provider } = setup()
   raw.request.mockRejectedValueOnce({ code: 4001, message: 'User rejected', data: { reason: 'declined' } })
@@ -148,11 +191,70 @@ it('forwards canonical events and keeps compatibility account state synchronized
 
   expect(connect).toHaveBeenCalledWith({ chainId: '0x1' })
   expect(chainChanged).toHaveBeenCalledWith('0xa')
+  expect(provider.chainId).toBe('0xa')
   expect(accountsChanged).toHaveBeenCalledWith(accounts)
   expect(provider.accounts).toEqual(accounts)
   expect(provider.selectedAddress).toBe(accounts[0])
   expect(provider.coinbase).toBe(accounts[0])
   expect(message).toHaveBeenCalledWith(notification)
+})
+
+it('emits canonical events only for actual state transitions', () => {
+  const { raw, provider } = setup()
+  const connect = jest.fn()
+  const chainChanged = jest.fn()
+  const accountsChanged = jest.fn()
+  provider.on('connect', connect)
+  provider.on('chainChanged', (chainId) => chainChanged(chainId, provider.chainId))
+  provider.on('accountsChanged', accountsChanged)
+  const firstAccounts = ['0x1111111111111111111111111111111111111111']
+  const nextAccounts = ['0x2222222222222222222222222222222222222222']
+
+  raw.emit('connect', { chainId: '0x1' })
+  raw.emit('connect', { chainId: '0x1' })
+  raw.emit('chainChanged', '0x01')
+  raw.emit('chainChanged', '0xA')
+  raw.emit('chainChanged', '0xa')
+  raw.emit('accountsChanged', firstAccounts)
+  raw.emit('accountsChanged', [...firstAccounts])
+  raw.emit('accountsChanged', nextAccounts)
+
+  expect(connect).toHaveBeenCalledTimes(1)
+  expect(connect).toHaveBeenCalledWith({ chainId: '0x1' })
+  expect(chainChanged).toHaveBeenCalledTimes(1)
+  expect(chainChanged).toHaveBeenCalledWith('0xa', '0xa')
+  expect(accountsChanged).toHaveBeenCalledTimes(2)
+  expect(accountsChanged).toHaveBeenNthCalledWith(1, firstAccounts)
+  expect(accountsChanged).toHaveBeenNthCalledWith(2, nextAccounts)
+})
+
+it('updates compatibility state before account listeners run and ignores malformed events', () => {
+  const { raw, provider } = setup()
+  const observed = []
+  provider.on('accountsChanged', (accounts) => {
+    observed.push({
+      accounts,
+      providerAccounts: [...provider.accounts],
+      selectedAddress: provider.selectedAddress,
+      coinbase: provider.coinbase
+    })
+  })
+  provider.on('chainChanged', (chainId) => observed.push({ chainId }))
+  const accounts = ['0x3333333333333333333333333333333333333333']
+
+  raw.emit('accountsChanged', null)
+  raw.emit('accountsChanged', ['not-an-address'])
+  raw.emit('chainChanged', '1')
+  raw.emit('accountsChanged', accounts)
+
+  expect(observed).toEqual([
+    {
+      accounts,
+      providerAccounts: accounts,
+      selectedAddress: accounts[0],
+      coinbase: accounts[0]
+    }
+  ])
 })
 
 it('delegates legacy methods without changing their call shapes', () => {

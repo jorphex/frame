@@ -75,7 +75,9 @@ a forwarded method.
 ## Events And Subscriptions
 
 The EIP-1193 wrapper exposes `connect`, `disconnect`, `chainChanged`,
-`accountsChanged`, and `message`. It also retains legacy/custom Frame events such
+`accountsChanged`, and `message`. Canonical connection, chain, and account events
+are emitted only for actual state transitions; account compatibility properties
+are updated before listeners run. It also retains legacy/custom Frame events such
 as `networkChanged`, `chainsChanged`, and `assetsChanged`.
 
 Frame owns subscriptions named `accountsChanged`, `chainChanged`,

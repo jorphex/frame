@@ -5,6 +5,7 @@ const INTERNAL_ERROR = -32603
 const DISCONNECTED = 4900
 const DISCONNECT_CLOSE_CODE = 1013
 const CHAIN_ID = /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/
 
 export class ProviderRpcError extends Error {
   constructor(code, message, data) {
@@ -43,7 +44,10 @@ const canonicalChainId = (chainId) => {
 }
 
 const validAccounts = (accounts) =>
-  Array.isArray(accounts) && accounts.every((account) => typeof account === 'string')
+  Array.isArray(accounts) && accounts.every((account) => typeof account === 'string' && ADDRESS.test(account))
+
+const sameAccounts = (current, next) =>
+  current.length === next.length && current.every((account, index) => account === next[index])
 
 export class Eip1193Provider extends EventEmitter {
   constructor(provider) {
@@ -51,6 +55,8 @@ export class Eip1193Provider extends EventEmitter {
     this.provider = provider
     this.pending = new Set()
     this.disconnected = false
+    this.connected = false
+    this.currentChainId = canonicalChainId(provider.chainId)
     this.accounts = validAccounts(provider.accounts) ? [...provider.accounts] : []
     this.selectedAddress = this.accounts[0]
     this.coinbase = this.accounts[0]
@@ -58,12 +64,13 @@ export class Eip1193Provider extends EventEmitter {
     this.eventForwarders = {
       chainChanged: (value) => {
         const chainId = canonicalChainId(value)
-        if (chainId) this.emit('chainChanged', chainId)
+        if (!chainId || chainId === this.currentChainId) return
+        this.currentChainId = chainId
+        this.emit('chainChanged', chainId)
       },
       accountsChanged: (accounts) => {
         if (!validAccounts(accounts)) return
-        this.syncAccounts(accounts)
-        this.emit('accountsChanged', [...accounts])
+        this.syncAccounts(accounts, true)
       },
       message: (message) => this.emit('message', message),
       networkChanged: (...args) => this.emit('networkChanged', ...args),
@@ -77,8 +84,10 @@ export class Eip1193Provider extends EventEmitter {
 
     provider.on('connect', (info) => {
       const chainId = canonicalChainId(info?.chainId ?? provider.chainId)
-      if (!chainId) return
+      if (!chainId || this.connected) return
       this.disconnected = false
+      this.connected = true
+      this.currentChainId = chainId
       this.emit('connect', { chainId })
     })
     provider.on('disconnect', () => this.handleDisconnect())
@@ -91,7 +100,7 @@ export class Eip1193Provider extends EventEmitter {
   }
 
   get chainId() {
-    return canonicalChainId(this.provider.chainId)
+    return this.currentChainId || canonicalChainId(this.provider.chainId)
   }
 
   get networkVersion() {
@@ -102,15 +111,18 @@ export class Eip1193Provider extends EventEmitter {
     return this.provider.status
   }
 
-  syncAccounts(accounts) {
+  syncAccounts(accounts, emitChange = false) {
+    const changed = !sameAccounts(this.accounts, accounts)
     this.accounts = [...accounts]
     this.selectedAddress = accounts[0]
     this.coinbase = accounts[0]
+    if (changed && emitChange) this.emit('accountsChanged', [...accounts])
   }
 
   handleDisconnect() {
     if (this.disconnected) return
     this.disconnected = true
+    this.connected = false
     const requestError = new ProviderRpcError(DISCONNECTED, 'Provider is disconnected from all chains')
     this.pending.forEach((pending) => pending.reject(requestError))
     this.pending.clear()
@@ -148,8 +160,11 @@ export class Eip1193Provider extends EventEmitter {
         .then(() => (active ? this.provider.request(request) : undefined))
         .then((result) => {
           if (!active) return
-          if (['eth_accounts', 'eth_requestAccounts'].includes(request.method) && validAccounts(result)) {
-            this.syncAccounts(result)
+          if (['eth_accounts', 'eth_requestAccounts'].includes(request.method)) {
+            if (!validAccounts(result)) {
+              throw new ProviderRpcError(INTERNAL_ERROR, 'Provider returned an invalid account list')
+            }
+            this.syncAccounts(result, true)
           }
           settle(resolve, result)
         })
