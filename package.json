@@ -73,6 +73,7 @@
     "@ethereumjs/common": "3.2.0",
     "@ethereumjs/tx": "4.2.0",
     "@ethereumjs/util": "8.0.3",
+    "@ethereumjs/wallet": "10.0.0",
     "@ethersproject/contracts": "5.7.0",
     "@ethersproject/providers": "5.7.2",
     "@framelabs/pylon-client": "0.0.10",
@@ -94,7 +95,6 @@
     "electron-updater": "6.8.9",
     "eth-ens-namehash": "2.0.8",
     "eth-provider": "0.13.6",
-    "ethereumjs-wallet": "1.0.2",
     "ethers": "5.7.2",
     "fs-extra": "11.1.0",
     "getos": "3.2.1",
@@ -304,9 +304,6 @@
     "eth-provider": {
       "uuid": "11.1.1"
     },
-    "ethereumjs-wallet": {
-      "uuid": "11.1.1"
-    },
     "@metamask/utils": {
       "uuid": "11.1.1"
     }
@@ -323,8 +320,6 @@
       "@trezor/connect>@trezor/transport>usb": false,
       "@trezor/connect>@trezor/utxo-lib>blake-hash": false,
       "@trezor/connect>@trezor/utxo-lib>tiny-secp256k1": false,
-      "ethereumjs-wallet>ethereum-cryptography>secp256k1": false,
-      "ethereumjs-wallet>ethereumjs-util>ethereum-cryptography>secp256k1": false,
       "gridplus-sdk>secp256k1": false,
       "hardhat>@metamask/eth-sig-util>ethereumjs-util>ethereum-cryptography>secp256k1": false,
       "hardhat>@nomicfoundation/ethereumjs-tx>ethereum-cryptography>secp256k1": false,

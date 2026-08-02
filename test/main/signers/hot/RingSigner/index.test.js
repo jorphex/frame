@@ -7,6 +7,7 @@ import log from 'electron-log'
 const PASSWORD = 'fr@///3_password'
 const SIGNER_PATH = path.resolve(__dirname, '../.userData/signers')
 const FILE_PATH = path.resolve(__dirname, 'keystore.json')
+const V1_FILE_PATH = path.resolve(__dirname, 'keystore-v1.json')
 
 const legacyEncrypt = (plaintext, password) => {
   const salt = crypto.randomBytes(16)
@@ -236,6 +237,7 @@ describe('Ring signer', () => {
         expect(err).toBe(null)
         expect(signer.status).toBe('ok')
         expect(signer.id).not.toBe(undefined)
+        expect(signer.addresses).toEqual(['0xcddfa1bd81f56f4d91eec4f7937714823f51f717'])
         done()
       })
     } catch (e) {
@@ -290,6 +292,22 @@ describe('Ring signer', () => {
       signer.addKeystore(keystore, 'test', PASSWORD, (err) => {
         expect(err).toBe(null)
         expect(signer.addresses.length).toBe(previousLength + 1)
+        done()
+      })
+    } catch (e) {
+      done(e)
+    }
+  }, 2000)
+
+  test('Add private key from a legacy V1 keystore', (done) => {
+    try {
+      const keystore = JSON.parse(fs.readFileSync(V1_FILE_PATH, 'utf8'))
+      const previousLength = signer.addresses.length
+
+      signer.addKeystore(keystore, 'test', PASSWORD, (err) => {
+        expect(err).toBe(null)
+        expect(signer.addresses.length).toBe(previousLength + 1)
+        expect(signer.addresses.at(-1)).toBe('0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f')
         done()
       })
     } catch (e) {

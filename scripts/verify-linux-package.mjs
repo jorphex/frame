@@ -61,6 +61,8 @@ Nonce: 32891756
 Issued At: 2021-09-30T16:25:24Z\`)
 const modernModules = require(path.join(appRoot, 'compiled/main/nebula/modules.js'))
 const signerCrypto = require(path.join(appRoot, 'compiled/main/signers/hot/crypto.js'))
+const { Wallet } = require(path.join(appModules, '@ethereumjs/wallet'))
+const walletAddress = Wallet.fromPrivateKey(Buffer.from('46'.repeat(32), 'hex')).getAddressString()
 const signerSecret = 'packaged-software-signer-probe'
 const encryptedSignerSecret = signerCrypto.encryptSecret(signerSecret, 'package-test-password')
 const decryptedSignerSecret = signerCrypto.decryptSecret(encryptedSignerSecret, 'package-test-password')
@@ -78,6 +80,7 @@ Promise.all([modernModules.loadKuboModule(), modernModules.loadUnixFsModule()])
     abi: process.versions.modules,
     modules,
     siweDomain: siwe.domain,
+    walletAddress,
     signerEncryptionVersion: encryptedSignerSecret.version,
     signerSecretRoundTrip: decryptedSignerSecret.plaintext === signerSecret,
     signerTamperingRejected,
@@ -101,6 +104,7 @@ const packageJson = JSON.parse(await readFile(path.resolve('package.json'), 'utf
 assert.equal(probeResult.electron, packageJson.devDependencies.electron)
 assert.deepEqual(probeResult.modules, ['node-hid', 'usb', '@trezor/transport/node_modules/usb'])
 assert.equal(probeResult.siweDomain, 'example.com')
+assert.equal(probeResult.walletAddress, '0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f')
 assert.equal(probeResult.signerEncryptionVersion, 2)
 assert.equal(probeResult.signerSecretRoundTrip, true)
 assert.equal(probeResult.signerTamperingRejected, true)
@@ -125,5 +129,5 @@ await writeFile(path.join(dist, 'SHA256SUMS'), `${checksums.join('\n')}\n`)
 console.log(
   `Verified ${artifacts.join(' and ')} with Electron ${probeResult.electron} ABI ${
     probeResult.abi
-  } hardware-wallet native, SIWE, software-signer encryption, and IPFS ESM modules`
+  } hardware-wallet native, SIWE, EthereumJS wallet, software-signer encryption, and IPFS ESM modules`
 )
