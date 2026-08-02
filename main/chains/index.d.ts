@@ -1,5 +1,6 @@
 import { Common } from '@ethereumjs/common'
 import { EventEmitter } from 'stream'
+import type { CallbackProvider } from './optimism'
 
 export interface Chain {
   id: number
@@ -15,9 +16,11 @@ declare class Chains extends EventEmitter {
         chainConfig: Common
         primary: {
           connected: boolean
+          provider?: CallbackProvider | null
         }
         secondary: {
           connected: boolean
+          provider?: CallbackProvider | null
         }
       }
     }

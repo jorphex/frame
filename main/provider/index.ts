@@ -69,6 +69,7 @@ import {
 } from './chains'
 import {
   EIP2612TypedData,
+  ApprovalData,
   LegacyTypedData,
   MessageSigningMethod,
   PermitSignatureRequest,
@@ -101,7 +102,7 @@ const SUPPORTED_TRANSACTION_PARAMS = new Set([
 
 interface RequiredApproval {
   type: ApprovalType
-  data: any
+  data: ApprovalData
 }
 
 export interface TransactionMetadata {
@@ -117,6 +118,11 @@ const getAccounts = () => accounts
 const MAX_TOKEN_NAME_LENGTH = 128
 const MAX_TOKEN_SYMBOL_LENGTH = 32
 const TOKEN_METADATA_TIMEOUT_MS = 15_000
+const TRANSACTION_HASH = /^0x[0-9a-fA-F]{64}$/
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined
@@ -139,7 +145,7 @@ export class Provider extends EventEmitter {
   connection = Chains
   private pendingAssetSuggestions = new Set<string>()
 
-  handlers: { [id: string]: any } = {}
+  handlers: Record<string, RPCRequestCallback> = {}
   subscriptions: { [key in SubscriptionType]: Subscription[] } = {
     accountsChanged: [],
     assetsChanged: [],
@@ -241,7 +247,7 @@ export class Provider extends EventEmitter {
       .forEach((subscription) => this.sendSubscriptionData(subscription.id, netId))
   }
 
-  private sendSubscriptionData(subscription: string, result: any) {
+  private sendSubscriptionData(subscription: string, result: unknown) {
     const payload: RPC.Susbcription.Response = {
       jsonrpc: '2.0',
       method: 'eth_subscription',
@@ -250,6 +256,12 @@ export class Provider extends EventEmitter {
 
     proxyConnection.emit('payload', payload)
     this.emit('data:subscription', payload)
+  }
+
+  private respondToRequest(handlerId: string, response: RPCResponsePayload) {
+    const handler = this.handlers[handlerId]
+    if (handler) handler(response)
+    delete this.handlers[handlerId]
   }
 
   getNetVersion(payload: RPCRequestPayload, res: RPCRequestCallback, targetChain: Chain) {
@@ -279,9 +291,8 @@ export class Provider extends EventEmitter {
   }
 
   declineRequest(req: AccountRequest) {
-    const res = (data: any) => {
-      if (this.handlers[req.handlerId]) this.handlers[req.handlerId](data)
-      delete this.handlers[req.handlerId]
+    const res = (data: RPCResponsePayload) => {
+      this.respondToRequest(req.handlerId, data)
     }
 
     const payload = req.payload
@@ -298,9 +309,8 @@ export class Provider extends EventEmitter {
   }
 
   approveSign(req: SignRequest, cb: Callback<string>) {
-    const res = (data: any) => {
-      if (this.handlers[req.handlerId]) this.handlers[req.handlerId](data)
-      delete this.handlers[req.handlerId]
+    const res = (data: RPCResponsePayload) => {
+      this.respondToRequest(req.handlerId, data)
     }
 
     const storedRequest = accounts.current()?.getRequest(req.handlerId)
@@ -341,9 +351,8 @@ export class Provider extends EventEmitter {
   }
 
   approveSignTypedData(req: SignTypedDataRequest, cb: Callback<string>) {
-    const res = (data: unknown) => {
-      if (this.handlers[req.handlerId]) this.handlers[req.handlerId](data)
-      delete this.handlers[req.handlerId]
+    const res = (data: RPCResponsePayload) => {
+      this.respondToRequest(req.handlerId, data)
     }
 
     if (!Array.isArray(req.approvals) || req.approvals.some((approval) => !approval.approved)) {
@@ -352,6 +361,7 @@ export class Provider extends EventEmitter {
 
     const { payload, typedMessage } = req
     const [address] = payload.params
+    if (typeof address !== 'string') return cb(new Error('Typed signature address is missing'))
 
     accounts.signTypedData(address, typedMessage, (err, signature = '') => {
       if (err) {
@@ -385,10 +395,10 @@ export class Provider extends EventEmitter {
       chainId: parseInt(chainId, 16)
     }
 
-    const connection = this.connection.connections['ethereum'][txRequest.chainId] as any
-    const connectedProvider = connection?.primary?.connected
-      ? connection.primary?.provider
-      : connection.secondary?.provider
+    const connection = this.connection.connections['ethereum'][txRequest.chainId]
+    const connectedProvider = connection?.primary.connected
+      ? connection.primary.provider
+      : connection?.secondary.provider
 
     if (!connectedProvider) {
       return 0n
@@ -399,9 +409,8 @@ export class Provider extends EventEmitter {
 
   signAndSend(req: TransactionRequest, cb: Callback<string>) {
     const rawTx = req.data
-    const res = (data: any) => {
-      if (this.handlers[req.handlerId]) this.handlers[req.handlerId](data)
-      delete this.handlers[req.handlerId]
+    const res = (data: RPCResponsePayload) => {
+      this.respondToRequest(req.handlerId, data)
     }
 
     const payload = req.payload
@@ -442,6 +451,11 @@ export class Provider extends EventEmitter {
                     resError(response.error, payload, res)
                     cb(new Error(response.error.message))
                   } else {
+                    if (typeof response.result !== 'string' || !TRANSACTION_HASH.test(response.result)) {
+                      const error = new Error('Invalid transaction hash response')
+                      resError(error.message, payload, res)
+                      return cb(error)
+                    }
                     res(response)
                     cb(null, response.result)
                   }
@@ -483,14 +497,14 @@ export class Provider extends EventEmitter {
 
     this.getNonce(req.data, (response) => {
       if (response.error) {
-        if (this.handlers[req.handlerId]) {
-          this.handlers[req.handlerId](response)
-          delete this.handlers[req.handlerId]
-        }
+        this.respondToRequest(req.handlerId, response)
 
         return cb(new Error(response.error.message))
       }
 
+      if (typeof response.result !== 'string' || parseRpcQuantity(response.result) === undefined) {
+        return cb(new Error('Invalid transaction nonce response'))
+      }
       const updatedReq = accounts.updateNonce(req.handlerId, response.result)
 
       if (updatedReq) {
@@ -705,8 +719,11 @@ export class Provider extends EventEmitter {
             return reject(response.error)
           }
 
-          const estimatedLimit = parseInt(response.result, 16)
-          const paddedLimit = Math.ceil(estimatedLimit * 1.5)
+          const estimatedLimit = parseRpcQuantity(response.result)
+          if (estimatedLimit === undefined) {
+            return reject(new Error('Invalid gas estimate response'))
+          }
+          const paddedLimit = (estimatedLimit * 3n + 1n) / 2n
 
           log.verbose(
             `gas estimate for tx to ${txParams.to}: ${estimatedLimit}, using ${paddedLimit} as gas limit`
@@ -894,9 +911,12 @@ export class Provider extends EventEmitter {
   }
 
   getTransactionByHash(payload: RPCRequestPayload, cb: RPCRequestCallback, targetChain: Chain) {
-    const res = (response: any) => {
-      if (response.result && !response.result.gasPrice && response.result.maxFeePerGas) {
-        return cb({ ...response, result: { ...response.result, gasPrice: response.result.maxFeePerGas } })
+    const res = (response: RPCResponsePayload) => {
+      if (isRecord(response.result) && !response.result['gasPrice'] && response.result['maxFeePerGas']) {
+        return cb({
+          ...response,
+          result: { ...response.result, gasPrice: response.result['maxFeePerGas'] }
+        })
       }
 
       cb(response)
@@ -949,9 +969,8 @@ export class Provider extends EventEmitter {
       approvals: []
     }
 
-    const _res = (data: any) => {
-      if (this.handlers[req.handlerId]) this.handlers[req.handlerId](data)
-      delete this.handlers[req.handlerId]
+    const _res = (data: RPCResponsePayload) => {
+      this.respondToRequest(req.handlerId, data)
     }
 
     accounts.addRequest(req, _res)
@@ -961,14 +980,20 @@ export class Provider extends EventEmitter {
     rawPayload: RPC.SignTypedData.Request,
     version: SignTypedDataVersion | undefined,
     targetChain: Chain,
-    res: RPCCallback<RPC.SignTypedData.Response>
+    res: RPCRequestCallback
   ) {
     // ensure param order is [address, data, ...] regardless of version
-    const rawParams = Array.isArray(rawPayload.params) ? rawPayload.params : []
-    const orderedParams =
-      isAddress(rawParams[1]) && !isAddress(rawParams[0])
-        ? [rawParams[1], rawParams[0], ...rawParams.slice(2)]
-        : [...rawParams]
+    if (!Array.isArray(rawPayload.params)) {
+      return resError({ code: -32602, message: 'Invalid params: expected an array' }, rawPayload, res)
+    }
+    const rawParams = rawPayload.params
+    const swapParams = isAddress(rawParams[1]) && !isAddress(rawParams[0])
+    const address = swapParams ? rawParams[1] : rawParams[0]
+    const rawTypedData = swapParams ? rawParams[0] : rawParams[1]
+    if (typeof address !== 'string') {
+      return resError({ code: -32602, message: 'Invalid params: invalid signing address' }, rawPayload, res)
+    }
+    const orderedParams: RPC.SignTypedData.Request['params'] = [address, rawTypedData, ...rawParams.slice(2)]
 
     const payload = {
       ...rawPayload,
@@ -1467,9 +1492,15 @@ export class Provider extends EventEmitter {
     }
 
     const method = payload.method || ''
+    const params = Array.isArray(payload.params) ? payload.params : []
 
     // method handlers that are not chain-specific can go here, before parsing the target chain
-    if (method === 'eth_unsubscribe' && this.ifSubRemove(payload.params[0]))
+    const subscriptionId = params[0]
+    if (
+      method === 'eth_unsubscribe' &&
+      typeof subscriptionId === 'string' &&
+      this.ifSubRemove(subscriptionId)
+    )
       return res({ id: payload.id, jsonrpc: '2.0', result: true }) // Subscription was ours
     if (method === 'wallet_getPermissions') return this.getPermissions(payload, res)
     if (method === 'wallet_requestPermissions') return this.requestPermissions(payload, res)
@@ -1510,7 +1541,12 @@ export class Provider extends EventEmitter {
     if (method === 'eth_getTransactionByHash') return this.getTransactionByHash(payload, res, targetChain)
     if (method === 'personal_ecRecover') return ecRecover(payload, res)
     if (method === 'web3_clientVersion') return this.clientVersion(payload, res)
-    if (method === 'eth_subscribe' && payload.params[0] in this.subscriptions) {
+    const subscriptionType = params[0]
+    if (
+      method === 'eth_subscribe' &&
+      typeof subscriptionType === 'string' &&
+      subscriptionType in this.subscriptions
+    ) {
       return this.subscribe(payload as RPC.Subscribe.Request, res)
     }
 
@@ -1526,12 +1562,7 @@ export class Provider extends EventEmitter {
       const version = (
         underscoreIndex > 3 ? method.substring(underscoreIndex + 1).toUpperCase() : undefined
       ) as SignTypedDataVersion
-      return this.signTypedData(
-        payload as RPC.SignTypedData.Request,
-        version,
-        targetChain,
-        res as RPCCallback<RPC.SignTypedData.Response>
-      )
+      return this.signTypedData(payload as RPC.SignTypedData.Request, version, targetChain, res)
     }
 
     if (method === 'wallet_watchAsset') return this.addCustomToken(payload, res, targetChain)
@@ -1558,7 +1589,7 @@ export class Provider extends EventEmitter {
     this.connection.send(rpcPayload, res, targetChain)
   }
 
-  override emit(type: string | symbol, ...args: any[]) {
+  override emit(type: string | symbol, ...args: unknown[]) {
     return super.emit(type, ...args)
   }
 }

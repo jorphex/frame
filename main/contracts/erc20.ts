@@ -25,7 +25,7 @@ function callContract(address: Address, chainId: number, fn: string): Promise<Re
 
     provider.sendAsync(wrappedPayload, (error, response) => {
       if (error) return reject(error)
-      if (!response?.result) return reject(new Error(`Missing ${fn} contract result`))
+      if (typeof response?.result !== 'string') return reject(new Error(`Missing ${fn} contract result`))
       try {
         resolve(erc20Interface.decodeFunctionResult(fn, response.result))
       } catch (decodeError) {

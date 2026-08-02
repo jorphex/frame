@@ -26,7 +26,7 @@ export interface OptimismTransactionRequest {
   maxPriorityFeePerGas?: BigNumberish
 }
 
-interface CallbackProvider {
+export interface CallbackProvider {
   sendAsync: (
     payload: { jsonrpc: '2.0'; id: number; method: string; params: unknown[] },
     callback: (error: Error | null, response?: { error?: { message?: string }; result?: unknown }) => void

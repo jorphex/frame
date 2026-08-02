@@ -18,6 +18,7 @@ import walletCallBatchLedger from '../../../main/provider/walletCallLedger'
 import { executeWalletCallRuntime } from '../../../main/provider/walletCallRuntime'
 import walletCallEvidenceRuntime from '../../../main/provider/walletCallEvidenceRuntime'
 import { showWalletCallStatus } from '../../../main/provider/walletCallStatusView'
+import { ApprovalType } from '../../../resources/constants'
 
 const address = '0x22dd63c3619818fdbc262c78baee43cb61e9cccf'
 
@@ -2120,6 +2121,24 @@ describe('#send', () => {
       })
     })
 
+    it.each([null, '1', '0x01'])(
+      'requires explicit approval after a malformed gas estimate: %p',
+      (estimate, done) => {
+        connection.send.mockImplementationOnce((_payload, cb) => cb({ result: estimate }))
+        delete tx.gasLimit
+
+        provider.fillTransaction(tx, (error, metadata) => {
+          expect(error).toBeNull()
+          expect(metadata.tx.gasLimit).toBe('0x00')
+          expect(metadata.approvals).toContainEqual({
+            type: ApprovalType.GasLimitApproval,
+            data: { message: 'Invalid gas estimate response', gasLimit: '0x00' }
+          })
+          done()
+        })
+      }
+    )
+
     it('uses gasPrice from input params for legacy transactions', (done) => {
       tx.gasPrice = '0x00'
 
@@ -3114,6 +3133,23 @@ describe('#signAndSend', () => {
         }
 
         signAndSend()
+      })
+
+      it('rejects a malformed transaction hash before responding', (done) => {
+        connection.send.mockImplementation((_payload, cb) => cb({ result: '0x01' }))
+        const handler = jest.fn()
+        provider.handlers[request.handlerId] = handler
+
+        signAndSend((err) => {
+          expect(err.message).toBe('Invalid transaction hash response')
+          expect(handler).toHaveBeenCalledTimes(1)
+          expect(handler).toHaveBeenCalledWith(
+            expect.objectContaining({
+              error: expect.objectContaining({ message: 'Invalid transaction hash response' })
+            })
+          )
+          done()
+        })
       })
     })
   })

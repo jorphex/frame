@@ -173,10 +173,18 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
           sendJson(res, 200, { id: payload.id, jsonrpc: payload.jsonrpc, error })
         } else {
           if (payload.method === 'eth_pollSubscriptions') {
-            const id = payload.params[0]
+            const params = Array.isArray(payload.params) ? payload.params : []
+            const id = params[0]
+            if (typeof id !== 'string') {
+              return sendTransportError(res, 200, payload.id, {
+                code: -32602,
+                message: 'Invalid Client ID'
+              })
+            }
+            const immediate = params[1] === 'immediate'
             const send = (force: boolean) => {
               const result = polls[id] || []
-              if (result.length || payload.params[1] === 'immediate' || force) {
+              if (result.length || immediate || force) {
                 res.writeHead(200, { 'Content-Type': 'application/json' })
                 const response = { id: payload.id, jsonrpc: payload.jsonrpc, result }
                 if (logTraffic)
@@ -203,20 +211,19 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
                 }
               }
             }
-            if (typeof id === 'string') return send(false)
-            return sendTransportError(res, 200, payload.id, {
-              code: -32602,
-              message: 'Invalid Client ID'
-            })
+            return send(false)
           }
 
           provider.send(payload, (response) => {
             if (response && response.result) {
               if (payload.method === 'eth_subscribe') {
-                pollSubs[response.result] = { id: rawPayload.pollId || '', origin: payload._origin } // Refactor this so you don't need to send a pollId and use the existing subscription id
+                if (typeof response.result === 'string') {
+                  pollSubs[response.result] = { id: rawPayload.pollId || '', origin: payload._origin } // Refactor this so you don't need to send a pollId and use the existing subscription id
+                }
               } else if (payload.method === 'eth_unsubscribe') {
-                payload.params.forEach((sub) => {
-                  if (pollSubs[sub]) delete pollSubs[sub]
+                const params = Array.isArray(payload.params) ? payload.params : []
+                params.forEach((sub) => {
+                  if (typeof sub === 'string' && pollSubs[sub]) delete pollSubs[sub]
                 })
               }
             }

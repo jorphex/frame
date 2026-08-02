@@ -3,11 +3,11 @@ type HexAmount = string
 type InventoryAsset = {
   name: string
   tokenId?: string
-  [field: string]: any
+  [field: string]: unknown
 }
 
 type InventoryCollection = {
-  meta: any
+  meta: unknown
   items: Record<string, InventoryAsset>
 }
 
@@ -50,7 +50,7 @@ interface Account {
   address: Address
   status: AccountStatus
   signer: string
-  requests: Record<string, any>
+  requests: Record<string, unknown>
   ensName: string
   created: string
   balances: {

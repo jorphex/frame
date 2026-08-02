@@ -50,7 +50,11 @@ export async function addRequestedChain(chainData: unknown, requestReference: un
   if (!request || request.type !== 'addChain') throw new Error('Add-chain request is no longer pending')
 
   const chain = requestedChainSchema.parse(chainData)
-  const expectedChainId = parseChainId(request.payload.params[0].chainId)
+  const requestedParams = Array.isArray(request.payload.params) ? request.payload.params[0] : undefined
+  if (!requestedParams || typeof requestedParams !== 'object' || !('chainId' in requestedParams)) {
+    throw new Error('Add-chain request has invalid params')
+  }
+  const expectedChainId = parseChainId(requestedParams.chainId)
 
   if (chain.id !== expectedChainId) throw new Error('Chain ID cannot be changed for a dapp request')
 

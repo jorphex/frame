@@ -19,7 +19,7 @@ import nav from '../../windows/nav'
 import store from '../../store'
 import { requireStoreAction } from '../../store/action'
 import { TransactionData } from '../../../resources/domain/transaction'
-import { MAX_UINT256 } from '../../../resources/domain/transaction/quantity'
+import { MAX_UINT256, parseRpcQuantity } from '../../../resources/domain/transaction/quantity'
 import { isBroadTokenAuthorityEffect } from '../../../resources/domain/transaction/effects'
 import {
   effectReportsBroadTokenAuthorityIntent,
@@ -43,13 +43,26 @@ import {
   type PreparedWalletCallExecutionSnapshot
 } from '../../provider/walletCallPreparedExecution'
 
-import type { PermitSignatureRequest, SignatureRequest, SignRequest, TypedMessage } from '../types'
+import type {
+  ApprovalData,
+  AnyAccountRequest,
+  PermitSignatureRequest,
+  SignatureRequest,
+  SignRequest,
+  TypedMessage,
+  WalletCallsResponder
+} from '../types'
+import type { Breadcrumb } from '../../windows/nav/breadcrumb'
 import { RequestStatus } from '../types'
 import type { Permission } from '../../store/state'
 import type { TransactionSimulation, WalletCallsSimulationResult } from '../../transaction/simulation'
 import { parseErc20ApprovalIntent } from '../../../resources/domain/transaction/allowance'
 
 const nebula = nebulaApi()
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
 
 const storeApi = {
   getPermissions: function (address: Address) {
@@ -91,7 +104,7 @@ class FrameAccount {
   signerStatus: string
 
   accounts: Accounts
-  requests: Record<string, AccountRequest> = {}
+  requests: Record<string, AnyAccountRequest> = {}
   private simulationVersions: Record<string, number> = {}
   private simulationTimers: Record<string, ReturnType<typeof setTimeout>> = {}
   private preparationVersions: Record<string, number> = {}
@@ -171,9 +184,10 @@ class FrameAccount {
             _origin: 'frame-internal',
             params: []
           },
-          (response: any) => {
-            if (response.result)
-              this.created = parseInt(response.result, 16) + ':' + this.created.split(':')[1]
+          (response: RPCResponsePayload) => {
+            const blockNumber = parseRpcQuantity(response.result)
+            if (blockNumber !== undefined)
+              this.created = blockNumber.toString(10) + ':' + this.created.split(':')[1]
             this.update()
           }
         )
@@ -233,7 +247,7 @@ class FrameAccount {
     return this.requests[id] as T
   }
 
-  resolveRequest({ handlerId }: AccountRequest, result?: any) {
+  resolveRequest({ handlerId }: AccountRequest, result?: unknown) {
     const knownRequest = this.requests[handlerId]
 
     if (knownRequest) {
@@ -326,11 +340,11 @@ class FrameAccount {
   addRequiredApproval(
     req: TransactionRequest,
     type: ApprovalType,
-    data: any = {},
-    onApprove: (data: any) => void = () => {}
+    data: ApprovalData = {},
+    onApprove: (data?: ApprovalData) => void = () => {}
   ) {
     // TODO: turn TransactionRequest into its own class
-    const approve = (data: any) => {
+    const approve = (data?: ApprovalData) => {
       const confirmedApproval = req.approvals.find((a) => a.type === type)
 
       if (confirmedApproval) {
@@ -975,7 +989,7 @@ class FrameAccount {
     }
   }
 
-  addRequest(req: any, res: RPCCallback<any> = () => {}) {
+  addRequest(req: AnyAccountRequest, res: RPCRequestCallback | WalletCallsResponder = () => {}) {
     if (
       req?.type === 'walletCalls' &&
       (typeof req.account !== 'string' || req.account.toLowerCase() !== this.address)
@@ -989,13 +1003,13 @@ class FrameAccount {
       return
     }
 
-    const add = (r: AccountRequest) => {
+    const add = (r: AnyAccountRequest) => {
       r.mode = RequestMode.Normal
       r.created = Date.now()
       r.res = res
       this.requests[r.handlerId] = r
 
-      if (['sign', 'signTypedData', 'signErc20Permit'].includes(req.type)) {
+      if (req.type === 'sign' || req.type === 'signTypedData' || req.type === 'signErc20Permit') {
         req.approvals = req.approvals || []
         this.syncSignatureApprovalRisk(req)
       }
@@ -1016,10 +1030,13 @@ class FrameAccount {
       const accountOpen = store('selected.current') === account
 
       // Does the current panel nav include a 'requestView'
-      const panelNav = store('windows.panel.nav') || []
+      const panelNav: Breadcrumb[] = store('windows.panel.nav') || []
+      const firstPanelData = panelNav[0]?.data
       const inExpandedRequestsView =
-        panelNav[0]?.view === 'expandedModule' && panelNav[0]?.data?.id === 'requests'
-      const inRequestView = panelNav.map((crumb: any) => crumb.view).includes('requestView')
+        panelNav[0]?.view === 'expandedModule' &&
+        isRecord(firstPanelData) &&
+        firstPanelData['id'] === 'requests'
+      const inRequestView = panelNav.map((crumb) => crumb.view).includes('requestView')
 
       if (accountOpen) {
         if (inRequestView) {

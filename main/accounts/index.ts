@@ -20,6 +20,7 @@ import { findUnavailableSigners, isSignerReady } from '../../resources/domain/si
 
 import {
   AccountRequest,
+  AnyAccountRequest,
   AccessRequest,
   TransactionRequest,
   TransactionReceipt,
@@ -28,6 +29,8 @@ import {
   RequestMode,
   TypedMessage,
   PermitSignatureRequest,
+  ApprovalData,
+  PreviousFee,
   WalletCallsRequest,
   WalletCallsResponder
 } from './types'
@@ -44,6 +47,19 @@ import type { PreparedWalletCallExecutionSnapshot } from '../provider/walletCall
 
 const MAX_FEE_PER_GAS = 9_999n * 1_000_000_000n
 const MAX_GAS_LIMIT = 12_500_000n
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isTransactionReceipt(value: unknown): value is TransactionReceipt {
+  return (
+    isRecord(value) &&
+    parseRpcQuantity(value['gasUsed']) !== undefined &&
+    parseRpcQuantity(value['blockNumber']) !== undefined &&
+    parseRpcQuantity(value['status']) !== undefined
+  )
+}
 
 function notify(title: string, body: string, action: (event: Electron.Event) => void) {
   const notification = new Notification({ title, body })
@@ -192,7 +208,7 @@ export class Accounts extends EventEmitter {
     return undefined
   }
 
-  confirmRequestApproval(reqId: string, approvalType: ApprovalType, approvalData: any) {
+  confirmRequestApproval(reqId: string, approvalType: ApprovalType, approvalData?: ApprovalData) {
     log.info('confirmRequestApproval', reqId, approvalType)
 
     const currentAccount = this.current()
@@ -208,7 +224,7 @@ export class Accounts extends EventEmitter {
   }
 
   // TODO: can we make this typed for the action type?
-  updateRequest(reqId: string, data: any, actionId: ActionType) {
+  updateRequest(reqId: string, data: Record<string, unknown> = {}, actionId: ActionType) {
     log.verbose('updateRequest', { reqId, actionId })
 
     const currentAccount = this.current()
@@ -239,7 +255,7 @@ export class Accounts extends EventEmitter {
 
     if (request.type === 'signErc20Permit') {
       const permitReq = request as PermitSignatureRequest
-      const amount = parseTokenBaseUnitAmount(data?.amount)
+      const amount = parseTokenBaseUnitAmount(data['amount'])
       if (amount === undefined || !permitReq.typedMessage?.data?.message || !permitReq.permit) {
         log.warn('Ignored invalid token permit amount update', { reqId })
         return
@@ -307,7 +323,7 @@ export class Accounts extends EventEmitter {
       params,
       chainId,
       _origin = frameOriginId
-    }: { method: string; params: any[]; chainId: string; _origin?: string },
+    }: { method: string; params: unknown[]; chainId: string; _origin?: string },
     cb: RPCRequestCallback
   ) {
     provider.send({ id: 1, jsonrpc: '2.0', method, params, chainId, _origin }, cb)
@@ -325,6 +341,8 @@ export class Accounts extends EventEmitter {
         { method: 'eth_blockNumber', params: [], chainId: targetChainId },
         (res: RPCResponsePayload) => {
           if (res.error) return reject(new Error(JSON.stringify(res.error)))
+          const blockHeight = parseRpcQuantity(res.result)
+          if (blockHeight === undefined) return reject(new Error('Invalid block number response'))
 
           this.sendRequest(
             { method: 'eth_getTransactionReceipt', params: [hash], chainId: targetChainId },
@@ -332,12 +350,16 @@ export class Accounts extends EventEmitter {
               if (receiptRes.error) return reject(receiptRes.error)
               if (!this.accounts[account.address]) return reject(new Error('account closed'))
 
-              if (receiptRes.result && account.requests[id]) {
+              const receipt = isTransactionReceipt(receiptRes.result) ? receiptRes.result : undefined
+              if (receiptRes.result && !receipt)
+                return reject(new Error('Invalid transaction receipt response'))
+
+              if (receipt && account.requests[id]) {
                 const txRequest = this.getTransactionRequest(account, id)
 
                 txRequest.tx = {
                   ...txRequest.tx,
-                  receipt: receiptRes.result,
+                  receipt,
                   confirmations: txRequest.tx?.confirmations || 0
                 }
 
@@ -348,13 +370,19 @@ export class Accounts extends EventEmitter {
                   if (network.type === 'ethereum' && network.id === 1) {
                     const ethPrice = store('main.networksMeta.ethereum.1.nativeCurrency.usd.price')
 
-                    if (ethPrice && txRequest.tx && txRequest.tx.receipt && this.accounts[account.address]) {
+                    if (
+                      typeof ethPrice === 'number' &&
+                      Number.isFinite(ethPrice) &&
+                      txRequest.tx &&
+                      txRequest.tx.receipt &&
+                      this.accounts[account.address]
+                    ) {
                       const { gasUsed } = txRequest.tx.receipt
 
                       txRequest.feeAtTime = (
                         Math.round(
                           weiIntToEthInt(
-                            hexToInt(gasUsed) * hexToInt(txRequest.data.gasPrice || '0x0') * res.result.ethusd
+                            hexToInt(gasUsed) * hexToInt(txRequest.data.gasPrice || '0x0') * ethPrice
                           ) * 100
                         ) / 100
                       ).toFixed(2)
@@ -366,11 +394,11 @@ export class Accounts extends EventEmitter {
                   }
                 }
 
-                if (receiptRes.result.status === '0x1' && txRequest.status === RequestStatus.Verifying) {
+                if (receipt.status === '0x1' && txRequest.status === RequestStatus.Verifying) {
                   txRequest.status = RequestStatus.Confirming
                   txRequest.notice = 'Confirming'
                   txRequest.completed = Date.now()
-                  const hash = txRequest.tx.hash || ''
+                  const hash = txRequest.tx?.hash || ''
                   const h = hash.substring(0, 6) + '...' + hash.substring(hash.length - 4)
                   const body = `Transaction ${h} successful! \n Click for details`
 
@@ -392,9 +420,9 @@ export class Accounts extends EventEmitter {
                     openBlockExplorer(targetChain, hash)
                   })
                 }
-                const blockHeight = parseInt(res.result, 16)
-                const receiptBlock = parseInt((txRequest.tx.receipt as TransactionReceipt).blockNumber, 16)
-                resolve(blockHeight - receiptBlock)
+                const receiptBlock = parseRpcQuantity(receipt.blockNumber)
+                if (receiptBlock === undefined) return reject(new Error('Invalid receipt block number'))
+                resolve(Number(blockHeight - receiptBlock))
               }
             }
           )
@@ -490,7 +518,7 @@ export class Accounts extends EventEmitter {
               clearInterval(monitorTimer)
               provider.off(`status:${type}:${id}`, statusHandler)
             }
-          } else if (newHeadRes.result) {
+          } else if (typeof newHeadRes.result === 'string') {
             const headSub = newHeadRes.result
 
             const removeSubscription = async (requestRemoveTimeout: number) => {
@@ -517,8 +545,8 @@ export class Accounts extends EventEmitter {
               }
             }
 
-            const handler = async (payload: RPCRequestPayload) => {
-              if (payload.method === 'eth_subscription' && (payload.params as any).subscription === headSub) {
+            const handler = async (payload: RPC.Susbcription.Response) => {
+              if (payload.params.subscription === headSub) {
                 // const newHead = payload.params.result
                 let confirmations
                 try {
@@ -946,7 +974,7 @@ export class Accounts extends EventEmitter {
     return request
   }
 
-  addRequest(req: AccountRequest, res?: RPCCallback<any>) {
+  addRequest(req: AnyAccountRequest, res?: RPCRequestCallback) {
     log.info('addRequest', JSON.stringify(req))
 
     const currentAccount = this.current()
@@ -955,7 +983,11 @@ export class Accounts extends EventEmitter {
     }
   }
 
-  addRequestForAccount(accountId: string, req: AccountRequest, res?: RPCRequestCallback) {
+  addRequestForAccount(
+    accountId: string,
+    req: AnyAccountRequest,
+    res?: RPCRequestCallback | WalletCallsResponder
+  ) {
     if (
       typeof accountId !== 'string' ||
       !req ||
@@ -1257,7 +1289,7 @@ export class Accounts extends EventEmitter {
     currentAccount: FrameAccount,
     handlerId: string,
     userUpdate: boolean,
-    previousFee: any
+    previousFee: PreviousFee | undefined
   ) {
     const txRequest = this.getTransactionRequest(currentAccount, handlerId)
 
@@ -1392,7 +1424,7 @@ export class Accounts extends EventEmitter {
     tx.gasLimit = toRpcQuantity(this.limitedQuantity(newGasLimit, feeLimitedGas))
 
     // Complete update
-    this.completeTxFeeUpdate(currentAccount, handlerId, userUpdate, false)
+    this.completeTxFeeUpdate(currentAccount, handlerId, userUpdate, undefined)
   }
 
   removeFeeUpdateNotice(handlerId: string, cb: Callback<void>) {
@@ -1432,8 +1464,9 @@ export class Accounts extends EventEmitter {
         this.sendRequest(
           { method: 'eth_getTransactionCount', chainId, params: [from, 'pending'] },
           (res: RPCResponsePayload) => {
-            if (res.result) {
-              const newNonce = parseInt(res.result, 16)
+            const parsedNonce = parseRpcQuantity(res.result)
+            if (parsedNonce !== undefined) {
+              const newNonce = Number(parsedNonce)
               let updatedNonce = nonceAdjust === 1 ? newNonce : newNonce + nonceAdjust
               if (updatedNonce < 0) updatedNonce = 0
               const adjustedNonce = intToHex(updatedNonce)

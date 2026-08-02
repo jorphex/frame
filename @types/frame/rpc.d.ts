@@ -29,13 +29,13 @@ interface Caip27JsonRpcRequest extends RPCId, InternalPayload {
 }
 
 interface JSONRPCRequestPayload extends RPCId {
-  params: readonly any[]
+  params: readonly unknown[] | Readonly<Record<string, unknown>>
   method: string
   chainId?: string
 }
 
 interface JSONRPCSuccessResponsePayload extends RPCId {
-  result?: any
+  result?: unknown
 }
 
 interface JSONRPCErrorResponsePayload extends RPCId {
@@ -52,7 +52,7 @@ type RPCRequestPayload = JSONRPCRequestPayload & InternalPayload
 
 declare namespace RPC {
   namespace SignTypedData {
-    interface Request extends Omit<RPCRequestPayload, ['method', 'params']> {
+    interface Request extends Omit<RPCRequestPayload, 'method' | 'params'> {
       method: 'eth_signTypedData' | 'eth_signTypedData_v1' | 'eth_signTypedData_v3' | 'eth_signTypedData_v4'
       params: [string, LegacyTypedData | TypedData | string, ...unknown[]]
     }
@@ -185,7 +185,10 @@ declare namespace RPC {
     interface Response {
       jsonrpc: '2.0'
       method: 'eth_subscription'
-      params: any
+      params: {
+        subscription: string
+        result: unknown
+      }
     }
   }
 }

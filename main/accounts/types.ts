@@ -61,20 +61,27 @@ export interface AccountRequest<T extends RequestType = RequestType> extends Req
   mode?: RequestMode
   notice?: string
   created?: number
-  res?: (response?: RPCResponsePayload) => void
+  res?: RPCRequestCallback
 }
 
 export interface TransactionReceipt {
   gasUsed: string
   blockNumber: string
+  status: string
+  [field: string]: unknown
 }
+
+export type ApprovalData = Record<string, unknown>
 
 export interface Approval {
   type: string
-  data: any
+  data: ApprovalData
   approved: boolean
-  approve: (data: any) => void
+  approve: (data?: ApprovalData) => void
 }
+
+export type PreviousFee =
+  { type: string; baseFee: string; priorityFee: string } | { type: string; gasPrice: string }
 
 export interface Permit {
   deadline: string | number
@@ -110,7 +117,7 @@ export interface TransactionRequest extends AccountRequest<'transaction'> {
   approvals: Approval[]
   locked?: boolean
   automaticFeeUpdateNotice?: {
-    previousFee: any
+    previousFee: PreviousFee
   }
   recipient?: string // ens name
   updatedFees?: boolean
@@ -194,6 +201,7 @@ export type SignTypedDataRequest = DefaultSignTypedDataRequest | PermitSignature
 export type SignatureRequest = SignTypedDataRequest | SignRequest
 
 export interface DefaultSignTypedDataRequest extends AccountRequest<'signTypedData'> {
+  payload: RPC.SignTypedData.Request
   typedMessage: TypedMessage
   context: TypedDataContext
   approvals: Approval[]
@@ -217,6 +225,7 @@ interface PermitData extends Omit<Permit, 'spender' | 'verifyingContract'> {
 }
 
 export interface PermitSignatureRequest extends AccountRequest<'signErc20Permit'> {
+  payload: RPC.SignTypedData.Request
   typedMessage: {
     data: EIP2612TypedData
     version: SignTypedDataVersion
@@ -255,7 +264,7 @@ export interface WalletCallsRequest extends AccountRequest<'walletCalls'> {
   locked?: boolean
   preparation: WalletCallsPreparation
   simulation: WalletCallsSimulation
-  res?: WalletCallsResponder
+  res?: WalletCallsResponder | RPCRequestCallback
 }
 
 export interface WalletCallsResponder {
@@ -263,6 +272,15 @@ export interface WalletCallsResponder {
   readonly walletCallsLifecycle: true
   accept(id: string): void
 }
+
+export type AnyAccountRequest =
+  | TransactionRequest
+  | SignatureRequest
+  | AccessRequest
+  | AddChainRequest
+  | SwitchChainRequest
+  | AddTokenRequest
+  | WalletCallsRequest
 
 export type WalletCallsPreparation =
   | { status: 'pending' }

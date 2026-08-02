@@ -159,10 +159,13 @@ const handler = (socket: FrameWebSocket, req: IncomingMessage, rateLimit: RateLi
       provider.send(payload, (response) => {
         if (response && response.result) {
           if (payload.method === 'eth_subscribe') {
-            subs[response.result] = { socket, originId: payload._origin }
+            if (typeof response.result === 'string') {
+              subs[response.result] = { socket, originId: payload._origin }
+            }
           } else if (payload.method === 'eth_unsubscribe') {
-            payload.params.forEach((sub) => {
-              if (subs[sub]) delete subs[sub]
+            const params = Array.isArray(payload.params) ? payload.params : []
+            params.forEach((sub) => {
+              if (typeof sub === 'string' && subs[sub]) delete subs[sub]
             })
           }
         }

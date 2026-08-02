@@ -247,7 +247,11 @@ export function getActiveChainDetails() {
 }
 
 export function ecRecover(payload: JSONRPCRequestPayload, res: RPCRequestCallback) {
-  const [message, signed] = payload.params
+  const [message, signed] = Array.isArray(payload.params) ? payload.params : []
+
+  if (typeof message !== 'string' || typeof signed !== 'string') {
+    return resError({ code: -32602, message: 'Invalid personal_ecRecover params' }, payload, res)
+  }
 
   getSignedAddress(signed, message, (err, verifiedAddress) => {
     if (err) return resError(err.message, payload, res)
