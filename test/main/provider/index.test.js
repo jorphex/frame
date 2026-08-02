@@ -1252,6 +1252,56 @@ describe('#send', () => {
       })
     })
 
+    it('accepts required methods supported by the selected signer', (done) => {
+      accounts.addRequest.mockImplementationOnce(grantAccess)
+
+      send(
+        {
+          ...request,
+          params: [
+            {
+              eth_accounts: {
+                requiredMethods: ['personal_sign', 'signTypedData_v4', 'eth_sendTransaction']
+              }
+            }
+          ]
+        },
+        (response) => {
+          expect(response.error).toBeUndefined()
+          expect(response.result[0].parentCapability).toBe('eth_accounts')
+          expect(accounts.addRequest).toHaveBeenCalledTimes(1)
+          done()
+        }
+      )
+    })
+
+    it.each([
+      ['an unsupported wallet method', 'wallet_unknownMethod', 'ring'],
+      ['typed data unsupported by the signer', 'eth_signTypedData_v3', SignerType.Trezor],
+      ['signing from a watch-only account', 'personal_sign', 'address']
+    ])('rejects %s before prompting', (_description, requiredMethod, signerType, done) => {
+      accounts.get.mockReturnValueOnce({
+        id: address,
+        address,
+        lastSignerType: signerType
+      })
+
+      send(
+        {
+          ...request,
+          params: [{ eth_accounts: { requiredMethods: [requiredMethod] } }]
+        },
+        (response) => {
+          expect(response.error).toEqual({
+            code: 4200,
+            message: `Selected account does not support required method: ${requiredMethod}`
+          })
+          expect(accounts.addRequest).not.toHaveBeenCalled()
+          done()
+        }
+      )
+    })
+
     it('returns immediately when access is already granted', (done) => {
       store.set('main.permissions', address, {
         [originId]: { handlerId: originId, origin: 'test.frame', provider: true }
@@ -1354,7 +1404,7 @@ describe('#send', () => {
       ['missing params', undefined],
       ['multiple request objects', [{ eth_accounts: {} }, { eth_accounts: {} }]],
       ['an unsupported capability', [{ eth_signTransaction: {} }]],
-      ['an unsupported caveat', [{ eth_accounts: { requiredMethods: ['personal_sign'] } }]]
+      ['an unsupported caveat', [{ eth_accounts: { unknownCaveat: true } }]]
     ])('rejects %s before prompting', (_description, params, done) => {
       send({ ...request, params }, (response) => {
         expect(response.error.code).toBe(-32602)

@@ -37,6 +37,7 @@ import { getTypedDataContext, parseTypedMessage } from './typedData'
 import { parseAddChainRequest, parseChainRequestId } from './chainRequests'
 import { parseWatchAssetRequest } from './watchAsset'
 import {
+  findUnsupportedRequiredMethod,
   grantedAccountPermission,
   parseGetPermissions,
   parseRequestPermissions,
@@ -1498,8 +1499,9 @@ export class Provider extends EventEmitter {
   }
 
   private async requestPermissions(payload: RPCRequestPayload, res: RPCRequestCallback) {
+    let permissionRequest: ReturnType<typeof parseRequestPermissions>
     try {
-      parseRequestPermissions(payload.params)
+      permissionRequest = parseRequestPermissions(payload.params)
     } catch (error) {
       return resError(error as EVMError, payload, res)
     }
@@ -1507,6 +1509,21 @@ export class Provider extends EventEmitter {
     const initialAccess = getOriginAccess(payload)
     if (!initialAccess) {
       return resError({ code: 4100, message: 'No account is available to grant permission' }, payload, res)
+    }
+
+    const selectedAccount = accounts.get(initialAccess.address.toLowerCase())
+    if (!selectedAccount) {
+      return resError({ code: 4100, message: 'No account is available to grant permission' }, payload, res)
+    }
+
+    const capabilities = getSignerCapabilities({ type: selectedAccount.lastSignerType || '' })
+    const unsupportedMethod = findUnsupportedRequiredMethod(permissionRequest.requiredMethods, capabilities)
+    if (unsupportedMethod) {
+      return resError(
+        { code: 4200, message: `Selected account does not support required method: ${unsupportedMethod}` },
+        payload,
+        res
+      )
     }
 
     let granted: boolean
