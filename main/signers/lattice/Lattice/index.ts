@@ -186,7 +186,7 @@ export default class Lattice extends Signer {
   }
 
   async pair(pairingCode: string) {
-    log.info(`pairing to Lattice ${this.deviceId} with code`, pairingCode)
+    log.info(`pairing to Lattice ${this.deviceId}`)
 
     this.status = Status.PAIRING
     this.emit('update')

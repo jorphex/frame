@@ -232,6 +232,17 @@ describe('#pair', () => {
     expect(hasActiveWallet).toBe(false)
   })
 
+  it('does not write the pairing code to logs', async () => {
+    const info = jest.spyOn(log, 'info').mockImplementation(() => {})
+
+    try {
+      await lattice.pair(pairingCode)
+      expect(JSON.stringify(info.mock.calls)).not.toContain(pairingCode)
+    } finally {
+      info.mockRestore()
+    }
+  })
+
   it('emits an error event on failure', async () => {
     const handler = new Promise((resolve, reject) => {
       lattice.once('paired', () => reject('should not be paired!'))
