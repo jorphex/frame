@@ -55,6 +55,12 @@ test('keeps only trusted request reference fields', () => {
 })
 
 test('allows partial navigation updates but bounds their data', () => {
+  const requestCrumb = {
+    view: 'requestView',
+    data: { step: 'confirm', accountId: address, requestId: handlerId }
+  }
+
+  expect(parse('event', 'nav:forward', ['panel', requestCrumb])).toEqual(['panel', requestCrumb])
   expect(parse('event', 'nav:update', ['panel', { data: { step: 'viewData' } }])).toEqual([
     'panel',
     { data: { step: 'viewData' } }
