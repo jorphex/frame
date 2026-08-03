@@ -7,7 +7,7 @@ import {
   type YearnVault,
   type YearnVaultVariant
 } from '../../resources/domain/yearn'
-import { YEARN_CATALOG, YEARN_CATALOG_VERSION, yearnVaultKey } from './catalog'
+import { YEARN_CATALOG, YEARN_CATALOG_VERSION, type YearnCatalogDefinition, yearnVaultKey } from './catalog'
 
 const KongAssetSchema = z
   .object({
@@ -124,18 +124,20 @@ const riskLabel = (riskLevel: number | null | undefined): YearnVault['riskLabel'
   return 'Unrated'
 }
 
-const variantFromKong = (id: YearnVaultVariant['id'], vault: KongVault): YearnVaultVariant => ({
+const sameAddress = (left: string, right: string) => left.toLowerCase() === right.toLowerCase()
+
+const variantFromKong = (
+  id: YearnVaultVariant['id'],
+  vault: KongVault,
+  decimals: number,
+  asset: YearnVaultVariant['asset']
+): YearnVaultVariant => ({
   id,
   address: vault.address,
   name: vault.name,
   symbol: vault.symbol,
-  asset: {
-    address: vault.asset.address,
-    name: vault.asset.name,
-    symbol: vault.asset.symbol,
-    decimals: vault.asset.decimals
-  },
-  decimals: vault.decimals,
+  asset,
+  decimals,
   tvlUsd: vault.tvl,
   apy: resolveYearnApy(vault)
 })
@@ -152,6 +154,27 @@ const isEligibleRoot = (vault: KongVault) =>
 const isEligibleCompanion = (vault: KongVault) =>
   isYearnEntry(vault) && vault.isHidden !== true && vault.isRetired !== true
 
+const rootMatchesPolicy = (definition: YearnCatalogDefinition, vault: KongVault) =>
+  sameAddress(vault.asset.address, definition.asset.address) &&
+  vault.asset.decimals === definition.asset.decimals &&
+  vault.decimals === definition.decimals
+
+const companionMatchesPolicy = (
+  definition: YearnCatalogDefinition,
+  companion: NonNullable<YearnCatalogDefinition['companions']>[number],
+  vault: KongVault
+) =>
+  sameAddress(vault.asset.address, definition.address) &&
+  vault.asset.decimals === definition.decimals &&
+  vault.decimals === companion.decimals
+
+const policyAsset = (definition: YearnCatalogDefinition, name?: string) => ({
+  address: definition.asset.address,
+  name: name || definition.asset.symbol,
+  symbol: definition.asset.symbol,
+  decimals: definition.asset.decimals
+})
+
 const unavailableVault = (
   definition: (typeof YEARN_CATALOG)[number],
   reason: string,
@@ -161,21 +184,21 @@ const unavailableVault = (
     vault: KongVault | undefined
   }> = []
 ): YearnVault => {
-  const asset = fallback?.asset || {
-    address: '0x0000000000000000000000000000000000000000',
-    name: 'Unavailable',
-    symbol: 'N/A',
-    decimals: 18
-  }
+  const asset = policyAsset(definition, fallback?.asset.name)
   const rootVariant = fallback
-    ? variantFromKong(definition.kind === 'yvUSD' ? 'unlocked' : 'direct', fallback)
+    ? variantFromKong(
+        definition.kind === 'yvUSD' ? 'unlocked' : 'direct',
+        fallback,
+        definition.decimals,
+        asset
+      )
     : {
         id: definition.kind === 'yvUSD' ? ('unlocked' as const) : ('direct' as const),
         address: definition.address,
         name: definition.name,
         symbol: 'N/A',
         asset,
-        decimals: 18,
+        decimals: definition.decimals,
         tvlUsd: 0,
         apy: { value: null, label: 'Unavailable' as const, source: 'unavailable' }
       }
@@ -190,7 +213,7 @@ const unavailableVault = (
     symbol: fallback?.symbol || 'N/A',
     description: definition.description,
     asset,
-    decimals: fallback?.decimals || 18,
+    decimals: definition.decimals,
     tvlUsd: fallback?.tvl || 0,
     apy: fallback ? resolveYearnApy(fallback) : rootVariant.apy,
     riskLevel: fallback?.riskLevel ?? null,
@@ -205,21 +228,24 @@ const unavailableVault = (
       rootVariant,
       ...companions.map(({ definition: companion, vault }) =>
         vault
-          ? variantFromKong(companion.id, vault)
+          ? variantFromKong(companion.id, vault, companion.decimals, {
+              address: definition.address,
+              name: fallback?.name || definition.name,
+              symbol: fallback?.symbol || definition.name,
+              decimals: definition.decimals
+            })
           : {
               id: companion.id,
               address: companion.address,
               name: `${definition.name} ${companion.id}`,
               symbol: 'N/A',
-              asset: fallback
-                ? {
-                    address: fallback.address,
-                    name: fallback.name,
-                    symbol: fallback.symbol,
-                    decimals: fallback.decimals
-                  }
-                : asset,
-              decimals: fallback?.decimals || 18,
+              asset: {
+                address: definition.address,
+                name: fallback?.name || definition.name,
+                symbol: fallback?.symbol || definition.name,
+                decimals: definition.decimals
+              },
+              decimals: companion.decimals,
               tvlUsd: 0,
               apy: { value: null, label: 'Unavailable' as const, source: 'unavailable' }
             }
@@ -279,17 +305,43 @@ export function normalizeKongCatalog(
       return unavailableVault(definition, message, root, companions)
     }
 
+    if (!rootMatchesPolicy(definition, root)) {
+      const message = `${definition.name} token metadata does not match Frame's curated policy`
+      errors.push({ chainId: definition.chainId, message })
+      return unavailableVault(definition, message, root, companions)
+    }
+
     const invalidCompanion = companions.find(({ vault }) => !vault || !isEligibleCompanion(vault))
     if (invalidCompanion) {
       const message = `${definition.name} product metadata is incomplete`
       errors.push({ chainId: definition.chainId, message })
       return unavailableVault(definition, message, root, companions)
     }
+    const mismatchedCompanion = companions.find(
+      ({ definition: companion, vault }) => vault && !companionMatchesPolicy(definition, companion, vault)
+    )
+    if (mismatchedCompanion) {
+      const message = `${definition.name} companion metadata does not match Frame's curated policy`
+      errors.push({ chainId: definition.chainId, message })
+      return unavailableVault(definition, message, root, companions)
+    }
 
     const rootVariantId = definition.kind === 'yvUSD' ? 'unlocked' : 'direct'
-    const variants: YearnVaultVariant[] = [variantFromKong(rootVariantId, root)]
+    const rootAsset = policyAsset(definition, root.asset.name)
+    const variants: YearnVaultVariant[] = [
+      variantFromKong(rootVariantId, root, definition.decimals, rootAsset)
+    ]
     companions.forEach(({ definition: companion, vault }) => {
-      if (vault) variants.push(variantFromKong(companion.id, vault))
+      if (vault) {
+        variants.push(
+          variantFromKong(companion.id, vault, companion.decimals, {
+            address: definition.address,
+            name: root.name,
+            symbol: root.symbol,
+            decimals: definition.decimals
+          })
+        )
+      }
     })
     const displayVariant = definition.kind === 'yBOLD' ? variants[1] || variants[0] : variants[0]
     if (!displayVariant) throw new Error(`No display variant for ${definition.id}`)
@@ -304,12 +356,12 @@ export function normalizeKongCatalog(
       symbol: displayVariant.symbol,
       description: definition.description,
       asset: {
-        address: root.asset.address,
+        address: definition.asset.address,
         name: root.asset.name,
-        symbol: root.asset.symbol,
-        decimals: root.asset.decimals
+        symbol: definition.asset.symbol,
+        decimals: definition.asset.decimals
       },
-      decimals: displayVariant.decimals,
+      decimals: definition.kind === 'yBOLD' ? displayVariant.decimals : definition.decimals,
       tvlUsd: displayVariant.tvlUsd,
       apy: displayVariant.apy,
       riskLevel: root.riskLevel ?? null,

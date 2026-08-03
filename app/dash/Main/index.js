@@ -255,13 +255,14 @@ class Settings extends React.Component {
               <div className='dashModuleIcon'>{svg.accounts(24)}</div>
               <div className='dashModuleTitle'>{'Accounts'}</div>
             </div>
-            <div
+            <button
+              type='button'
               className='dashModule'
               onClick={() => link.send('tray:action', 'navDash', { view: 'earn', data: {} })}
             >
               <div className='dashModuleIcon'>{svg.bars(24)}</div>
               <div className='dashModuleTitle'>{'Earn'}</div>
-            </div>
+            </button>
             <div
               className='dashModule'
               onClick={() => link.send('tray:action', 'navDash', { view: 'chains', data: {} })}

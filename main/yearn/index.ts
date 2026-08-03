@@ -71,7 +71,6 @@ const queueTransaction = (
   new Promise<void>((resolve, reject) => {
     let queued = false
     let pendingResult: YearnQueuedResult | undefined
-    const timer = setTimeout(() => reject(new Error('Transaction preparation timed out')), 30_000)
     const deliver = (result: YearnQueuedResult) => {
       if (queued) onResult(result)
       else pendingResult = result
@@ -97,7 +96,6 @@ const queueTransaction = (
         if (response?.error) {
           const message = response.error.message || 'Transaction request failed'
           if (!queued) {
-            clearTimeout(timer)
             reject(new Error(message))
           } else {
             deliver({ error: message })
@@ -113,7 +111,6 @@ const queueTransaction = (
       { type: 'ethereum', id: transaction.chainId },
       () => {
         queued = true
-        clearTimeout(timer)
         requireStoreAction('setDash')({ showing: false })
         resolve()
         if (pendingResult) onResult(pendingResult)

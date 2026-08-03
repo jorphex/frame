@@ -152,6 +152,120 @@ The transaction action is disabled unless Frame reports Ethereum Sepolia chain
 confirmation is checked. Confirm the returned hash on the matching explorer
 without placing the full hash in a public qualification report.
 
+## Yearn Earn Qualification
+
+This section applies only to a candidate containing [`YEARN_EARN.md`](YEARN_EARN.md).
+Yearn's curated products are deployed on production chains, so the final flow
+cannot be qualified with testnet assets. Use new disposable accounts, minimum
+practical deposits, independently verify every contract address, and never use a
+valuable account or position. Record transaction hashes privately.
+
+### Preparation
+
+1. Complete the package/profile and browser gates above with the exact candidate.
+   Back up the production profile, then use a separate mode-`0700` profile for
+   Earn testing.
+2. Prepare four disposable accounts: imported private key, imported/generated
+   seed, Safe 7, and Model One. Fund only the chain gas and underlying amount
+   needed for the assigned rows below. Verify each complete account address on
+   the signer or against an independent derivation before funding it.
+3. Enable Ethereum, Base, and Katana using independently verified RPC endpoints.
+   Confirm each reports the expected chain ID. Close other wallet/device apps.
+4. Compare every displayed vault, asset, companion, and zap address with
+   [`YEARN_EARN.md`](YEARN_EARN.md) and Yearn's current official interface or
+   source. Stop if an on-chain `asset()` relationship or current official route
+   differs from the candidate.
+
+### Read-Only And Failure Matrix
+
+1. With no account selected, confirm all three chain sections and eight curated
+   products render without a transaction control becoming active.
+2. Select a watch-only account holding one direct vault share and, when available,
+   one yvUSD/yBOLD product share. Confirm positions precede opportunities and all
+   transaction controls remain disabled.
+3. Disable and disconnect each chain in turn. Confirm only that chain reports the
+   failure and that Frame opens chain settings instead of silently switching it.
+4. Make Kong unavailable after a successful refresh. Confirm timestamped cached
+   data remains visible, deposits are disabled, existing exits remain available,
+   and missing APY is never rendered as `0%`.
+5. Return malformed Kong metadata, altered token/vault decimals, and mismatched
+   on-chain `asset()` or `decimals()` responses in a controlled test environment.
+   Confirm the vault fails closed and no request reaches the account queue.
+
+### Transaction Matrix
+
+Use minimum practical amounts and withdraw each test deposit after its required
+state transition. Before approving, compare chain, account, target, underlying,
+amount/share semantics, exact approval, receiver/owner, zero native value, and
+simulation result in Frame. Compare all information the hardware can display.
+
+| Account             | Required flow                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Private-key account | Base yvUSDC-H exact deposit, partial underlying withdrawal, then Max redeem                                                      |
+| Seed account        | One Katana direct vault exact deposit and Max redeem; repeat read-only discovery for the other two Katana assets                 |
+| Trezor Safe 7       | Ethereum flexible yvUSD deposit and Max redeem; verify clear-signing output and reconnect recovery                               |
+| Trezor Model One    | Ethereum yBOLD deposit through the pinned zap, existing-yBOLD Stake when a test position is available, and zero-loss staked exit |
+
+For one software-account deposit, first create a different nonzero allowance to
+the exact allowed spender. Confirm Earn queues reset-to-zero, exact approval, and
+deposit as three separately reviewed transactions. Reject each stage once and
+verify retry does not duplicate a submitted hash. After confirming an approval,
+quit Frame before the operation, restart, and test both Resume and the separate
+Revoke approval cleanup path.
+
+Separately terminate Frame after a request reaches review but before a hash is
+recorded. On restart, confirm the workflow reports an unknown outcome, cannot be
+resumed, and does not enqueue another transaction. Check the account and recent
+transactions independently before starting a replacement flow.
+Repeat this interruption for an approval-cleanup request. Confirm the first
+recovery action only rechecks allowance, a zero allowance queues nothing, and a
+nonzero allowance requires a separately clicked Revoke again action after the
+pending-request warning.
+
+Qualify locked yvUSD as a staged test because its timing cannot be compressed:
+
+1. Deposit minimum USDC through the pinned zap and confirm the completed position
+   is the locked variant.
+2. Start cooldown for an exact amount, restart Frame, and confirm persisted state
+   and contract-derived end/window timestamps.
+3. During cooldown, confirm Withdraw is disabled and Cancel is available. Cancel
+   one disposable cooldown and verify the shares return to the liquid locked
+   position, then start it again.
+4. During the real withdrawal window, perform a partial USDC exit. Confirm Frame
+   separately reviews locked-to-yvUSD and yvUSD-to-USDC calls and does not use the
+   deprecated zap-out route.
+5. Repeat with Max and confirm both calls use share-exact `redeem`, all intended
+   shares are burned, and no approval remains.
+6. If the window expires, confirm the UI reports expired and requires a new
+   cooldown rather than queueing an exit.
+
+Any yBOLD exit that fails at `maxLoss = 0` must stop with no automatic tolerance
+increase. Confirm no cog, persisted preference, or generic slippage setting can
+change Yearn loss tolerance.
+
+### Receipts, Privacy, And Completion
+
+1. For every flow, confirm each transaction appears in Frame's ordinary review,
+   simulation, signer, broadcast, and monitor UI and links to the matching chain
+   explorer after confirmation. Compare receipt-derived sent/received amounts
+   with independently decoded allowlisted Transfer logs; absent evidence must not
+   be replaced by a guessed amount.
+2. Confirm calldata-derived Yearn labels disappear in favor of generic contract
+   review after changing target, chain, native value, receiver, owner, spender,
+   token, method, or yBOLD loss tolerance in a controlled fixture. Confirm an
+   independently changed amount remains recognized but displays the decoded
+   amount, while changing a persisted workflow step amount prevents queueing.
+3. Hide Frame before one confirmation. Confirm the native notification contains
+   only Frame's generic shortened hash and no account, balance, asset amount, or
+   vault position.
+4. Restart after each completed product flow. Confirm positions refresh, terminal
+   workflows remain bounded, no request is duplicated, and no approval exceeds
+   the requested amount.
+5. Complete the log/cleanup review below for all four accounts. A wrong target or
+   amount, unexplained blind signing, silent loss-tolerance change, cross-chain
+   request, stale deposit, duplicate broadcast, unrecoverable workflow, or
+   unrevokable leftover approval is a release blocker.
+
 ## Log And Cleanup Review
 
 After every signer run:

@@ -76,31 +76,35 @@ const definitionForTarget = (chainId: number, address: string) =>
 const hydratedVault = (definition: (typeof YEARN_CATALOG)[number], vaults: YearnVault[] = []) =>
   vaults.find(({ id, chainId }) => id === definition.id && chainId === definition.chainId)
 
-const tokenMetadata = (vault: YearnVault | undefined, address: string) => {
-  if (!vault) return {}
-  if (sameAddress(vault.asset.address, address)) {
-    return { symbol: vault.asset.symbol, decimals: vault.asset.decimals }
+const tokenMetadata = (
+  definition: (typeof YEARN_CATALOG)[number],
+  vault: YearnVault | undefined,
+  address: string
+) => {
+  if (sameAddress(definition.asset.address, address)) {
+    return { symbol: definition.asset.symbol, decimals: definition.asset.decimals }
   }
-  const variant = vault.variants.find(({ address: candidate }) => sameAddress(candidate, address))
-  return variant ? { symbol: variant.symbol, decimals: variant.decimals } : {}
+  if (sameAddress(definition.address, address)) {
+    const variant = vault?.variants.find(({ address: candidate }) => sameAddress(candidate, address))
+    return { symbol: variant?.symbol || definition.name, decimals: definition.decimals }
+  }
+  const companion = definition.companions?.find(({ address: candidate }) => sameAddress(candidate, address))
+  if (!companion) return {}
+  const variant = vault?.variants.find(({ address: candidate }) => sameAddress(candidate, address))
+  return { symbol: variant?.symbol || `${definition.name} ${companion.id}`, decimals: companion.decimals }
 }
 
-const isExpectedApproval = (
-  definition: (typeof YEARN_CATALOG)[number],
-  vault: YearnVault,
-  token: string,
-  spender: string
-) => {
-  if (sameAddress(spender, definition.address)) return sameAddress(token, vault.asset.address)
+const isExpectedApproval = (definition: (typeof YEARN_CATALOG)[number], token: string, spender: string) => {
+  if (sameAddress(spender, definition.address)) return sameAddress(token, definition.asset.address)
 
   const companion = definition.companions?.find(({ address }) => sameAddress(address, spender))
   if (companion) return sameAddress(token, definition.address)
 
   if (!definition.periphery?.some((address) => sameAddress(address, spender))) return false
-  if (definition.kind === 'yvUSD') return sameAddress(token, vault.asset.address)
+  if (definition.kind === 'yvUSD') return sameAddress(token, definition.asset.address)
   if (definition.kind === 'yBOLD') {
-    const staked = vault.variants.find(({ id }) => id === 'staked')
-    return sameAddress(token, vault.asset.address) || sameAddress(token, staked?.address)
+    const staked = definition.companions?.find(({ id }) => id === 'staked')
+    return sameAddress(token, definition.asset.address) || sameAddress(token, staked?.address)
   }
   return false
 }
@@ -142,7 +146,7 @@ export function recognizeYearnAction(
     const definition = definitionForTarget(context.chainId, spender)
     if (!definition) return undefined
     const vault = hydratedVault(definition, context.vaults)
-    if (!vault || !isExpectedApproval(definition, vault, target, spender)) return undefined
+    if (!isExpectedApproval(definition, target, spender)) return undefined
     return action(
       'yearn:approve',
       definition,
@@ -152,7 +156,7 @@ export function recognizeYearnAction(
         amountType: 'assets',
         token: getAddress(target.toLowerCase()),
         spender: getAddress(spender.toLowerCase()),
-        ...tokenMetadata(vault, target)
+        ...tokenMetadata(definition, vault, target)
       },
       vault
     )
@@ -176,11 +180,9 @@ export function recognizeYearnAction(
           amountRaw: (standard.args[0] as bigint).toString(),
           amountType: 'assets',
           receiver: getAddress((standard.args[1] as string).toLowerCase()),
-          ...(companion?.id === 'staked'
-            ? tokenMetadata(vault, definition.address)
-            : vault
-              ? { symbol: vault.asset.symbol, decimals: vault.asset.decimals }
-              : {})
+          ...(companion
+            ? tokenMetadata(definition, vault, definition.address)
+            : tokenMetadata(definition, vault, definition.asset.address))
         },
         vault
       )
@@ -199,7 +201,15 @@ export function recognizeYearnAction(
           amountType: standard?.name === 'withdraw' ? 'assets' : 'shares',
           receiver: getAddress((standard?.args[1] as string).toLowerCase()),
           owner: getAddress((standard?.args[2] as string).toLowerCase()),
-          ...tokenMetadata(vault, standard?.name === 'withdraw' ? vault?.asset.address || '' : target)
+          ...tokenMetadata(
+            definition,
+            vault,
+            standard?.name === 'withdraw'
+              ? companion
+                ? definition.address
+                : definition.asset.address
+              : target
+          )
         },
         vault
       )
@@ -216,7 +226,7 @@ export function recognizeYearnAction(
           action: 'start-cooldown',
           amountRaw: (locked.args[0] as bigint).toString(),
           amountType: 'shares',
-          ...tokenMetadata(vault, target)
+          ...tokenMetadata(definition, vault, target)
         },
         vault
       )
@@ -237,7 +247,7 @@ export function recognizeYearnAction(
           amountRaw: (zap.args[0] as bigint).toString(),
           amountType: 'assets',
           receiver: getAddress((zap.args[1] as string).toLowerCase()),
-          ...(vault ? { symbol: vault.asset.symbol, decimals: vault.asset.decimals } : {})
+          ...tokenMetadata(definition, vault, definition.asset.address)
         },
         vault
       )
@@ -251,7 +261,11 @@ export function recognizeYearnAction(
           amountRaw: (zap.args[0] as bigint).toString(),
           amountType: 'shares',
           receiver: getAddress((zap.args[1] as string).toLowerCase()),
-          ...tokenMetadata(vault, vault?.variants.find(({ id }) => id === 'locked')?.address || '')
+          ...tokenMetadata(
+            definition,
+            vault,
+            definition.companions?.find(({ id }) => id === 'locked')?.address || ''
+          )
         },
         vault
       )
@@ -269,7 +283,7 @@ export function recognizeYearnAction(
           amountRaw: (zap.args[0] as bigint).toString(),
           amountType: 'assets',
           receiver: getAddress((zap.args[1] as string).toLowerCase()),
-          ...(vault ? { symbol: vault.asset.symbol, decimals: vault.asset.decimals } : {})
+          ...tokenMetadata(definition, vault, definition.asset.address)
         },
         vault
       )
@@ -288,9 +302,11 @@ export function recognizeYearnAction(
           amountType: 'shares',
           receiver: getAddress((zap.args[1] as string).toLowerCase()),
           maxLossBps: 0,
-          ...(vault
-            ? tokenMetadata(vault, vault.variants.find(({ id }) => id === 'staked')?.address || '')
-            : {})
+          ...tokenMetadata(
+            definition,
+            vault,
+            definition.companions?.find(({ id }) => id === 'staked')?.address || ''
+          )
         },
         vault
       )
@@ -300,24 +316,37 @@ export function recognizeYearnAction(
   return undefined
 }
 
-const expectedApprovalToken = (workflow: YearnWorkflow, vault: YearnVault) => {
-  const variant = vault.variants.find(({ id }) => id === workflow.variant)
-  if (!variant) throw new Error('Yearn workflow variant is unavailable')
-  if (workflow.action === 'deposit') return vault.asset.address
-  if (workflow.action === 'stake') return vault.address
+const definitionForWorkflow = (workflow: YearnWorkflow) => {
+  const definition = YEARN_CATALOG.find(
+    ({ id, chainId }) => id === workflow.vaultId && chainId === workflow.chainId
+  )
+  if (!definition) throw new Error('Yearn workflow is not in the curated catalog')
+  return definition
+}
+
+const expectedApprovalToken = (workflow: YearnWorkflow) => {
+  const definition = definitionForWorkflow(workflow)
+  if (workflow.action === 'deposit') return definition.asset.address
+  if (workflow.action === 'stake') return definition.address
   if (workflow.action === 'withdraw' && ['locked', 'staked'].includes(workflow.variant)) {
-    return variant.address
+    const companion = definition.companions?.find(({ id }) => id === workflow.variant)
+    if (!companion) throw new Error('Yearn workflow variant is unavailable')
+    return companion.address
   }
   throw new Error('Yearn workflow has an unexpected approval')
 }
 
-export function assertYearnWorkflowStep(workflow: YearnWorkflow, step: YearnWorkflowStep, vault: YearnVault) {
+export function assertYearnWorkflowStep(
+  workflow: YearnWorkflow,
+  step: YearnWorkflowStep,
+  vault?: YearnVault
+) {
   const recognized = recognizeYearnAction(step.data, {
     contractAddress: step.target,
     chainId: workflow.chainId,
     account: workflow.account,
     value: '0x0',
-    vaults: [vault]
+    ...(vault && { vaults: [vault] })
   })
   if (!recognized?.data || recognized.data.vaultId !== workflow.vaultId) {
     throw new Error('Persisted Yearn transaction no longer matches the curated vault')
@@ -338,9 +367,16 @@ export function assertYearnWorkflowStep(workflow: YearnWorkflow, step: YearnWork
   if (step.kind !== 'cancel-cooldown' && recognized.data.amountRaw !== expectedAmount) {
     throw new Error('Persisted Yearn amount changed')
   }
+  if (step.kind === 'revoke' && (step.amountRaw !== '0' || recognized.data.amountRaw !== '0')) {
+    throw new Error('Persisted Yearn revoke must set allowance to zero')
+  }
   if (['approve', 'revoke'].includes(step.kind)) {
-    const token = expectedApprovalToken(workflow, vault)
+    const token =
+      workflow.action === 'revoke' && workflow.parentWorkflowId
+        ? recognized.data.token
+        : expectedApprovalToken(workflow)
     if (
+      !token ||
       !sameAddress(step.target, token) ||
       !sameAddress(step.approvalToken, token) ||
       !sameAddress(step.approvalSpender, recognized.data.spender)

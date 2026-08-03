@@ -56,8 +56,16 @@ const SendOverview = ({ req, symbol, decimals, amount: ammt }) => {
 }
 
 export const YearnOverview = ({ action, vaultName, amountRaw, symbol, decimals }) => {
+  const unlimitedApproval =
+    action === 'approve' &&
+    amountRaw === '115792089237316195423570985008687907853269984665640564039457584007913129639935'
   const labels = {
-    approve: amountRaw === '0' ? 'Revoke Yearn approval' : 'Approve Yearn vault',
+    approve:
+      amountRaw === '0'
+        ? 'Revoke Yearn approval'
+        : unlimitedApproval
+          ? 'Unlimited Yearn approval'
+          : 'Approve Yearn vault',
     deposit: 'Deposit into Yearn',
     withdraw: 'Withdraw from Yearn',
     stake: 'Stake Yearn position',

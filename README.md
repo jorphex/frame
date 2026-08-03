@@ -62,6 +62,11 @@ qualified Safe 7 USB flow.
   consent for dangerous `eth_sign` requests.
 - **Multichain routing:** Each application can target an enabled chain without
   forcing every connected application onto one global network.
+- **Curated Yearn Earn (development):** The current `main` branch adds locally
+  allowlisted Ethereum, Base, and Katana Yearn products with positions, direct
+  and product-specific workflows, exact approvals, configured-RPC simulation,
+  and ordinary Frame signer review. This feature is not part of the `0.7.0`
+  release and has not completed live-funds qualification.
 - **Modern wallet methods:** Hardened EIP-1193 behavior, chain add/switch flows,
   paired-companion EIP-6963 discovery, and non-atomic EIP-5792 wallet calls.
 - **User-controlled infrastructure:** Custom Ethereum RPC and Kubo IPFS
@@ -188,11 +193,12 @@ community security fixes.
 
 ## Direction
 
-Near-term development is focused on WalletConnect compatibility and a curated,
-chain-aware Yearn Earn experience that preserves Frame's simulation and approval
-boundaries. Broader UI qualification, smart-account support, and a future mobile
-client built around shared wallet-core logic remain later work. Roadmap items
-are directional and are not support claims.
+The current development branch contains the first headlessly qualified Yearn
+Earn milestone; its exact scope and deferred live qualification are documented
+in [Yearn Earn](YEARN_EARN.md). Near-term development also includes WalletConnect
+compatibility. Broader UI qualification, smart-account support, and a future
+mobile client built around shared wallet-core logic remain later work. Roadmap
+items are directional and are not release support claims.
 
 ## Documentation
 
@@ -201,6 +207,7 @@ are directional and are not support claims.
 - [Supported Ethereum Standards](SUPPORTED_EIPS.md)
 - [RPC Compatibility](RPC_COMPATIBILITY.md)
 - [Signer and Platform Support](HARDWARE_SUPPORT.md)
+- [Yearn Earn](YEARN_EARN.md)
 - [Linux Release Qualification](QUALIFICATION.md)
 - [Release Procedure](RELEASE.md)
 

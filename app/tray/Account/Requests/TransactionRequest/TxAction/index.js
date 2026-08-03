@@ -31,9 +31,28 @@ class TxSending extends React.Component {
     const [actionClass, actionType] = action.id.split(':')
 
     if (actionClass === 'yearn') {
-      const { amountRaw, decimals, symbol, spender, vaultName, maxLossBps } = action.data || {}
+      const {
+        amountRaw,
+        amountType,
+        decimals,
+        owner,
+        receiver,
+        symbol,
+        spender,
+        token,
+        vaultName,
+        maxLossBps
+      } = action.data || {}
+      const unlimitedApproval =
+        actionType === 'approve' &&
+        amountRaw === '115792089237316195423570985008687907853269984665640564039457584007913129639935'
       const labels = {
-        approve: amountRaw === '0' ? 'Revoke Yearn Approval' : 'Exact Yearn Approval',
+        approve:
+          amountRaw === '0'
+            ? 'Revoke Yearn Approval'
+            : unlimitedApproval
+              ? 'Unlimited Yearn Approval'
+              : 'Exact Yearn Approval',
         deposit: 'Yearn Vault Deposit',
         withdraw: 'Yearn Vault Withdrawal',
         stake: 'Stake Yearn Position',
@@ -44,6 +63,14 @@ class TxSending extends React.Component {
         amountRaw !== undefined && decimals !== undefined
           ? `${formatDisplayDecimal(amountRaw, decimals)} ${symbol || ''}`.trim()
           : amountRaw
+      const amountLabel =
+        actionType === 'approve'
+          ? 'Allowance'
+          : amountType === 'shares'
+            ? 'Vault shares'
+            : actionType === 'withdraw'
+              ? 'Vault assets'
+              : 'Input assets'
 
       return (
         <ClusterBox
@@ -56,7 +83,7 @@ class TxSending extends React.Component {
               <ClusterRow>
                 <ClusterValue>
                   <div className='clusterFocus'>
-                    <div>{amountRaw === '0' ? 'Allowance' : 'Amount'}</div>
+                    <div>{amountLabel}</div>
                     <div className='clusterFocusHighlight'>{displayAmount}</div>
                   </div>
                 </ClusterValue>
@@ -64,13 +91,55 @@ class TxSending extends React.Component {
             ) : null}
             <ClusterRow>
               <ClusterValue>
-                <div className='clusterTag'>Allowlisted Yearn contract on {chainName}</div>
+                <div className='clusterTag'>
+                  {actionType === 'approve'
+                    ? 'Token approval for allowlisted Yearn spender'
+                    : 'Allowlisted Yearn contract'}{' '}
+                  on {chainName || 'unknown network'} (chain {chainId})
+                </div>
               </ClusterValue>
             </ClusterRow>
             {spender ? (
               <ClusterRow>
                 <ClusterValue>
-                  <div className='clusterTag'>Exact approval only: {spender}</div>
+                  <div className='clusterTag' style={unlimitedApproval ? { color: 'var(--bad)' } : {}}>
+                    {unlimitedApproval
+                      ? 'Unlimited approval'
+                      : amountRaw === '0'
+                        ? 'Revoke spender'
+                        : 'Exact approval'}
+                    : {spender}
+                  </div>
+                </ClusterValue>
+              </ClusterRow>
+            ) : null}
+            {token ? (
+              <ClusterRow>
+                <ClusterValue>
+                  <div className='clusterTag'>Token contract: {token}</div>
+                </ClusterValue>
+              </ClusterRow>
+            ) : null}
+            {receiver ? (
+              <ClusterRow>
+                <ClusterValue>
+                  <div className='clusterTag'>Receiver: {receiver}</div>
+                </ClusterValue>
+              </ClusterRow>
+            ) : null}
+            {owner ? (
+              <ClusterRow>
+                <ClusterValue>
+                  <div className='clusterTag'>Share owner: {owner}</div>
+                </ClusterValue>
+              </ClusterRow>
+            ) : null}
+            {['deposit', 'withdraw', 'stake'].includes(actionType) ? (
+              <ClusterRow>
+                <ClusterValue>
+                  <div className='clusterTag'>
+                    Expected balance changes appear below when RPC simulation supports them.
+                  </div>
                 </ClusterValue>
               </ClusterRow>
             ) : null}

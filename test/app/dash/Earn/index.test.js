@@ -1,11 +1,12 @@
 import Restore from 'react-restore'
 
 import { render, screen, waitFor } from '../../../componentSetup'
-import { Earn, formatUpdatedAt } from '../../../../app/dash/Earn'
+import { Earn, formatReceiptAmount, formatUpdatedAt, positionsMatchAccount } from '../../../../app/dash/Earn'
 import {
   getYearnCatalog,
   getYearnPositions,
   getYearnWorkflows,
+  revokeYearnWorkflow,
   startYearnWorkflow
 } from '../../../../app/dash/Earn/api'
 import link from '../../../../resources/link'
@@ -137,6 +138,7 @@ const lockedPosition = {
 }
 
 const makeWorkflow = () => ({
+  policyVersion: 1,
   id: '00000000-0000-4000-8000-000000000001',
   account: address,
   vaultId: 'ethereum-yvusd',
@@ -164,6 +166,18 @@ const makeWorkflow = () => ({
   currentStep: 0,
   createdAt: 1,
   updatedAt: 2
+})
+
+const makeReadyWorkflow = () => ({
+  ...makeWorkflow(),
+  status: 'ready',
+  steps: [
+    {
+      ...makeWorkflow().steps[0],
+      status: 'ready',
+      txHash: undefined
+    }
+  ]
 })
 
 const makePositions = (readOnly = false) => ({
@@ -197,6 +211,7 @@ beforeEach(() => {
   getYearnPositions.mockResolvedValue(makePositions())
   getYearnWorkflows.mockResolvedValue({ workflows: [] })
   startYearnWorkflow.mockReset()
+  revokeYearnWorkflow.mockReset()
   link.send.mockClear()
 })
 
@@ -204,6 +219,19 @@ it('formats Yearn data freshness without exposing an invalid timestamp', () => {
   expect(formatUpdatedAt(1_000_000, 1_030_000)).toBe('just now')
   expect(formatUpdatedAt(1_000_000, 1_300_000)).toBe('5m ago')
   expect(formatUpdatedAt(null, 1_300_000)).toBe('Unavailable')
+})
+
+it('formats receipt base units without floating-point conversion', () => {
+  expect(formatReceiptAmount('1200000', 6)).toBe('1.2')
+  expect(formatReceiptAmount('1234567890123456789', 18)).toBe('~1.234567')
+  expect(formatReceiptAmount('42', 0)).toBe('42')
+})
+
+it('fails closed while positions belong to the previously selected account', () => {
+  const positions = makePositions()
+  expect(positionsMatchAccount(positions, address.toUpperCase())).toBe(true)
+  expect(positionsMatchAccount(positions, '0x00000000000000000000000000000000000000aa')).toBe(false)
+  expect(positionsMatchAccount(positions, '')).toBe(false)
 })
 
 it('shows positions before chain-separated opportunities', async () => {
@@ -231,6 +259,19 @@ it('filters by chain without mixing vaults', async () => {
   expect(screen.queryByRole('heading', { name: 'Katana' })).toBeNull()
 })
 
+it('supports arrow-key navigation across chain tabs', async () => {
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+  const all = screen.getByRole('tab', { name: 'All' })
+  all.focus()
+
+  await user.keyboard('{ArrowRight}')
+
+  expect(screen.getByRole('tab', { name: 'Ethereum' }).getAttribute('aria-selected')).toBe('true')
+  expect(screen.queryByRole('heading', { name: 'Base' })).toBeNull()
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Ethereum' }))
+})
+
 it('opens product details and keeps watch-only transactions disabled', async () => {
   getYearnPositions.mockResolvedValue(makePositions(true))
   const { user } = render(<ConnectedEarn />)
@@ -244,6 +285,118 @@ it('opens product details and keeps watch-only transactions disabled', async () 
   expect(screen.getByText(/Watch-only accounts/)).toBeTruthy()
   expect(screen.getByText(/Performance fee/)).toBeTruthy()
   expect(screen.getByRole('button', { name: 'View vault contract (external)' })).toBeTruthy()
+})
+
+it('moves focus through vault details and restores the invoking controls', async () => {
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+  const vaultButton = screen.getByRole('button', { name: 'View yvUSD on Ethereum' })
+
+  await user.click(vaultButton)
+  expect(document.activeElement).toBe(document.querySelector('.earnDetails'))
+
+  const depositButton = screen.getByRole('button', { name: 'Deposit' })
+  await user.click(depositButton)
+  expect(document.activeElement).toBe(document.querySelector('.earnActionForm'))
+  await user.click(screen.getByRole('button', { name: 'Close Earn action' }))
+  expect(document.activeElement).toBe(depositButton)
+
+  await user.click(screen.getByRole('button', { name: '<- All vaults' }))
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
+})
+
+it('uses selected locked yvUSD metrics and labels root risk explicitly', async () => {
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+  await user.click(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
+  await user.click(screen.getByRole('button', { name: /^Locked/ }))
+
+  expect(screen.getByText('7%')).toBeTruthy()
+  expect(screen.getByText('$500,000.0')).toBeTruthy()
+  expect(screen.getByText('Underlying vault risk')).toBeTruthy()
+})
+
+it('clears an open action when the selected account changes', () => {
+  const component = new Earn({})
+  const nextAddress = '0x0000000000000000000000000000000000000002'
+  component.accountKey = address
+  component.state = { ...component.state, form: { action: 'deposit' } }
+  component.store = jest.fn((path) => {
+    if (path === 'selected.current') return nextAddress
+    return {}
+  })
+  component.storeKey = component.currentStoreKey()
+  component.setState = jest.fn()
+  component.loadPositions = jest.fn()
+
+  component.componentDidUpdate()
+
+  expect(component.setState).toHaveBeenCalledWith({ form: null, error: '' })
+})
+
+it('keeps persisted workflow mutations disabled for a watch-only account', async () => {
+  getYearnPositions.mockResolvedValue(makePositions(true))
+  const approvalWorkflow = {
+    ...makeReadyWorkflow(),
+    id: '00000000-0000-4000-8000-000000000004',
+    status: 'canceled',
+    error: 'Approval transaction confirmed, but the token allowance remains nonzero',
+    currentStep: 1,
+    steps: [
+      {
+        ...makeReadyWorkflow().steps[0],
+        kind: 'approve',
+        status: 'confirmed',
+        approvalToken: address,
+        approvalSpender: address
+      },
+      { ...makeReadyWorkflow().steps[0], id: '00000000-0000-4000-8000-000000000003', status: 'error' }
+    ]
+  }
+  getYearnWorkflows.mockResolvedValue({ workflows: [makeReadyWorkflow(), approvalWorkflow] })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+  await user.click(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
+
+  expect(screen.getByRole('button', { name: 'Resume' }).disabled).toBe(true)
+  expect(screen.getByRole('button', { name: 'Revoke approval' }).disabled).toBe(true)
+})
+
+it('requires a separate recheck before offering to retry an unknown approval cleanup', async () => {
+  const cleanup = {
+    ...makeWorkflow(),
+    action: 'revoke',
+    status: 'canceled',
+    cleanupRecovery: 'unknown-outcome',
+    error: 'Request outcome is unknown after restart; verify the account on-chain before starting again',
+    steps: [
+      {
+        ...makeWorkflow().steps[0],
+        kind: 'revoke',
+        status: 'error',
+        approvalToken: address,
+        approvalSpender: address
+      }
+    ]
+  }
+  const rechecked = {
+    ...cleanup,
+    cleanupRecovery: 'allowance-nonzero',
+    error: 'Allowance remains nonzero; verify no prior request is pending before choosing Revoke again'
+  }
+  revokeYearnWorkflow
+    .mockResolvedValueOnce(rechecked)
+    .mockResolvedValueOnce({ ...rechecked, status: 'active', cleanupRecovery: undefined, error: undefined })
+  getYearnWorkflows.mockResolvedValue({ workflows: [cleanup] })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+  await user.click(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
+
+  await user.click(screen.getByRole('button', { name: 'Recheck approval' }))
+  expect(revokeYearnWorkflow).toHaveBeenCalledWith(cleanup.id)
+
+  await user.click(await screen.findByRole('button', { name: 'Revoke again' }))
+  expect(revokeYearnWorkflow).toHaveBeenCalledTimes(2)
 })
 
 it('opens chain settings explicitly instead of activating a chain', async () => {
@@ -324,12 +477,87 @@ it('builds a locked yvUSD cooldown intent from the on-chain position state', asy
   })
 })
 
+it('shows cooldown-held locked shares in the withdrawal form', async () => {
+  const coolingPosition = {
+    ...lockedPosition,
+    variants: lockedPosition.variants.map((variant) =>
+      variant.id === 'locked'
+        ? {
+            ...variant,
+            sharesRaw: '0',
+            shares: '0.0',
+            assetsRaw: '0',
+            assets: '0.0',
+            cooldown: {
+              ...variant.cooldown,
+              status: 'withdrawal-window',
+              sharesRaw: '2000000',
+              shares: '2.0'
+            }
+          }
+        : variant
+    )
+  }
+  getYearnPositions.mockResolvedValue({
+    ...makePositions(),
+    chains: makePositions().chains.map((chain) =>
+      chain.chainId === 1 ? { ...chain, positions: [coolingPosition] } : chain
+    )
+  })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+  await user.click(screen.getByRole('button', { name: 'Manage yvUSD position' }))
+  await user.click(screen.getByRole('button', { name: /^Locked/ }))
+  await user.click(screen.getByRole('button', { name: 'Withdraw' }))
+
+  expect(screen.getByText('Cooldown: 2 styvUSD')).toBeTruthy()
+  expect(screen.queryByText('Position: 0 yvUSD')).toBeNull()
+})
+
+it('disables cooldown actions when the on-chain cooldown read failed', async () => {
+  const unreadableCooldown = {
+    ...lockedPosition,
+    variants: lockedPosition.variants.map((variant) =>
+      variant.id === 'locked' ? { ...variant, cooldown: null } : variant
+    )
+  }
+  getYearnPositions.mockResolvedValue({
+    ...makePositions(),
+    chains: makePositions().chains.map((chain) =>
+      chain.chainId === 1 ? { ...chain, positions: [unreadableCooldown] } : chain
+    )
+  })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+  await user.click(screen.getByRole('button', { name: 'Manage yvUSD position' }))
+
+  expect(screen.getByRole('button', { name: 'Start locked cooldown' }).disabled).toBe(true)
+  expect(screen.getByRole('button', { name: 'Cancel cooldown' }).disabled).toBe(true)
+})
+
 it('links confirmed workflow steps to the matching chain explorer', async () => {
-  const workflow = makeWorkflow()
+  const workflow = {
+    ...makeWorkflow(),
+    steps: [
+      {
+        ...makeWorkflow().steps[0],
+        receiptTransfers: [
+          {
+            token: address,
+            direction: 'in',
+            amountRaw: '1200000',
+            symbol: 'yvUSD',
+            decimals: 6
+          }
+        ]
+      }
+    ]
+  }
   getYearnWorkflows.mockResolvedValue({ workflows: [workflow] })
   const { user } = render(<ConnectedEarn />)
   await screen.findByRole('heading', { name: 'Ethereum' })
   await user.click(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
+  expect(screen.getByTitle(address).textContent).toMatch(/Received.*1\.2.*yvUSD/)
   await user.click(screen.getByRole('button', { name: 'View transaction' }))
 
   expect(link.send).toHaveBeenCalledWith(

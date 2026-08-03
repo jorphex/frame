@@ -952,7 +952,13 @@ export class Provider extends EventEmitter {
             classification
           }
 
-          accounts.addRequest(req, res)
+          try {
+            accounts.addRequestForAccount((currentAccount as FrameAccount).id, req, res)
+          } catch (error) {
+            return resError((error as Error).message, payload, (response) =>
+              this.respondToRequest(handlerId, response)
+            )
+          }
 
           txMetadata.approvals.forEach((approval) => {
             currentAccount?.addRequiredApproval(req, approval.type, approval.data)

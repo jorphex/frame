@@ -200,6 +200,28 @@ counts, require exact address/key widths, retain order and duplicates, and are
 shown in full during review. Signer adapters must preserve those exact bytes;
 unsupported hardware transaction types fail instead of being silently converted.
 
+The development-branch Earn module has two separate Yearn trust boundaries. A
+versioned local `(chainId, vaultAddress)` catalog is the only promotion boundary;
+Kong metadata cannot add a vault or transaction target. Frame locally pins asset
+addresses and decimal scales; Kong supplies display names, estimated APY, TVL,
+fees, risk metadata, and eligibility signals. A fresh eligible response is
+required for a new deposit. Cached or failed metadata can preserve visibility
+and exits but cannot enable a new deposit. The configured RPC supplies balances,
+allowances, ERC-4626 quotes, product relationships, token decimals, cooldown
+state, simulation, and receipts. A malicious or stale RPC can misreport those
+values, and simulation cannot prove later execution.
+
+Earn transactions are restricted to the allowlisted vault, companion, and
+first-party periphery contracts documented in [`YEARN_EARN.md`](YEARN_EARN.md).
+The main process rebuilds calldata, verifies on-chain asset relationships and
+decimal scales, and
+re-recognizes each persisted step before queueing it through Frame's ordinary
+transaction path. Renderer-provided targets, token metadata, calldata, and action
+labels are not trusted. Approvals are exact and a mismatched existing allowance
+is reset before replacement. Product contracts and strategies can still contain
+bugs, governance risk, economic loss, or malicious upgrades; Frame does not audit
+or guarantee their safety or yield.
+
 This fork does not initialize or ship a hosted crash-telemetry client. Uncaught
 main-process errors are written to the local Electron log and may display a local
 dialog, but Frame does not transmit crash events, instance identifiers, network

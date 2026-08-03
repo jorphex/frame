@@ -12,6 +12,7 @@ jest.mock('../../../main/provider', () => ({
   __esModule: true,
   default: { sendAsync: jest.fn() }
 }))
+jest.mock('../../../main/store')
 jest.mock('../../../main/provider/proxy', () => ({}))
 jest.mock('../../../main/contracts/deployments/ens', () => ({ __esModule: true, default: [] }))
 jest.mock('../../../main/nebula', () =>

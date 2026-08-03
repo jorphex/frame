@@ -78,6 +78,7 @@ it('builds a direct exact-approval deposit to the allowlisted vault', () => {
     createId
   })
 
+  expect(result.policyVersion).toBe(1)
   expect(result.steps.map(({ kind }) => kind)).toEqual(['approve', 'deposit'])
   expect(result.steps[0].target).toBe(getAddress(subject.asset.address))
   expect(YearnWorkflowInterfaces.erc20.decodeFunctionData('approve', result.steps[0].data)).toEqual([
@@ -314,6 +315,7 @@ it('builds a zero-allowance cleanup workflow tied to its parent', () => {
   const revoke = buildYearnRevokeWorkflow(parent, parent.steps[0], 10, createId)
 
   expect(revoke.parentWorkflowId).toBe(parent.id)
+  expect(revoke.policyVersion).toBe(1)
   expect(revoke.action).toBe('revoke')
   expect(YearnWorkflowInterfaces.erc20.decodeFunctionData('approve', revoke.steps[0].data)[1]).toBe(0n)
 })

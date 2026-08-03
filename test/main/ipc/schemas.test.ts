@@ -127,6 +127,7 @@ test('validates Yearn workflow commands and returned persistent state', () => {
     max: false
   }
   const workflow = {
+    policyVersion: 1,
     id: workflowId,
     account: address,
     vaultId: request.vaultId,
@@ -170,6 +171,35 @@ test('validates Yearn workflow commands and returned persistent state', () => {
     parseRendererInvokeResult('yearn:startWorkflow', {
       success: true,
       workflow: { ...workflow, maxLossBps: 1 }
+    }).success
+  ).toBe(false)
+  expect(
+    parseRendererInvokeResult('yearn:startWorkflow', {
+      success: true,
+      workflow: { ...workflow, cleanupRecovery: 'unknown-outcome' }
+    }).success
+  ).toBe(false)
+  expect(
+    parseRendererInvokeResult('yearn:startWorkflow', {
+      success: true,
+      workflow: {
+        ...workflow,
+        action: 'revoke',
+        amountRaw: '0',
+        displayAmount: '0',
+        status: 'canceled',
+        cleanupRecovery: 'unknown-outcome',
+        steps: [
+          {
+            ...workflow.steps[0],
+            kind: 'revoke',
+            amountRaw: '1',
+            status: 'error',
+            approvalToken: address,
+            approvalSpender: address
+          }
+        ]
+      }
     }).success
   ).toBe(false)
   expect(

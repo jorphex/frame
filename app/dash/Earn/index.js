@@ -41,6 +41,17 @@ export const formatAmount = (value) => {
   return numeric.toLocaleString(undefined, { maximumFractionDigits: numeric < 1 ? 6 : 4 })
 }
 
+export const formatReceiptAmount = (raw, decimals) => {
+  if (!/^\d+$/.test(raw) || !Number.isInteger(decimals) || decimals < 0) return raw
+  if (decimals === 0) return raw
+  const padded = raw.padStart(decimals + 1, '0')
+  const whole = padded.slice(0, -decimals)
+  const fraction = padded.slice(-decimals).replace(/0+$/, '')
+  if (!fraction) return whole
+  const visible = fraction.slice(0, 6)
+  return `${fraction.length > visible.length ? '~' : ''}${whole}.${visible}`
+}
+
 export const formatUpdatedAt = (value, now = Date.now()) => {
   if (!Number.isSafeInteger(value) || value <= 0) return 'Unavailable'
   const elapsed = Math.max(0, now - value)
@@ -57,6 +68,23 @@ const formatInception = (value) =>
   Number.isSafeInteger(value) && value > 0
     ? new Date(value * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
     : 'Unavailable'
+
+const formatTimestamp = (value) =>
+  Number.isSafeInteger(value) && value > 0
+    ? new Date(value * 1000).toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      })
+    : 'Unavailable'
+
+export const positionsMatchAccount = (positions, selected) =>
+  Boolean(
+    selected &&
+    positions?.account?.address &&
+    selected.toLowerCase() === positions.account.address.toLowerCase()
+  )
 
 const chainName = (chainId) => CHAINS.find(({ id }) => id === chainId)?.name || `Chain ${chainId}`
 
@@ -97,7 +125,7 @@ const VaultCard = ({ vault, position, onSelect }) => {
     <button
       type='button'
       className={`earnVault ${unavailable ? 'earnVaultUnavailable' : ''}`}
-      onClick={() => onSelect(vault.id)}
+      onClick={(event) => onSelect(vault.id, event.currentTarget)}
       aria-label={`View ${vault.name} on ${vault.chainName}`}
     >
       <div className='earnVaultTop'>
@@ -135,7 +163,7 @@ const PositionCard = ({ vault, position, onSelect }) => {
     <button
       type='button'
       className='earnPosition'
-      onClick={() => onSelect(vault.id)}
+      onClick={(event) => onSelect(vault.id, event.currentTarget)}
       aria-label={`Manage ${vault.name} position`}
     >
       <div>
@@ -145,16 +173,17 @@ const PositionCard = ({ vault, position, onSelect }) => {
       <div className='earnPositionAmounts'>
         {owned.map((variant) => (
           <div key={variant.address}>
-            {(variant.cooldown?.sharesRaw || '0') !== '0' ? (
-              <>
-                {formatAmount(variant.cooldown.shares)} {variant.symbol} ({variant.cooldown.status})
-              </>
-            ) : (
-              <>
+            {variant.sharesRaw !== '0' ? (
+              <div>
                 {variant.assets !== null ? formatAmount(variant.assets) : formatAmount(variant.shares)}{' '}
                 {variant.assets !== null ? variant.assetSymbol : variant.symbol}
-              </>
-            )}
+              </div>
+            ) : null}
+            {(variant.cooldown?.sharesRaw || '0') !== '0' ? (
+              <div>
+                {formatAmount(variant.cooldown.shares)} {variant.symbol} ({variant.cooldown.status})
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
@@ -178,7 +207,7 @@ const durationDays = (seconds, fallback) => {
   return Number.isInteger(days) ? `${days}-day` : `${days.toFixed(1)}-day`
 }
 
-const WorkflowCard = ({ workflow, onResume, onCancel, onRevoke, busy }) => {
+const WorkflowCard = ({ workflow, onResume, onCancel, onRevoke, busy, canTransact }) => {
   const lastConfirmedApproval = [...workflow.steps]
     .reverse()
     .find(({ kind, status }) => ['approve', 'revoke'].includes(kind) && status === 'confirmed')
@@ -186,11 +215,21 @@ const WorkflowCard = ({ workflow, onResume, onCancel, onRevoke, busy }) => {
   const current = workflow.steps[workflow.currentStep]
   const canResume =
     ['ready', 'error'].includes(workflow.status) && current && !(current.status === 'error' && current.txHash)
+  const cleanupInProgress =
+    workflow.status === 'canceled' && workflow.error === 'Approval cleanup in progress'
+  const canRevoke =
+    outstandingApproval && !cleanupInProgress && ['ready', 'error', 'canceled'].includes(workflow.status)
+  const canRecoverCleanup =
+    workflow.action === 'revoke' && workflow.status === 'canceled' && workflow.cleanupRecovery
+  const canClose =
+    workflow.action !== 'revoke' && !outstandingApproval && ['ready', 'error'].includes(workflow.status)
   return (
     <div className='earnWorkflow'>
       <div className='earnWorkflowHead'>
         <strong>{actionTitle(workflow.action)}</strong>
-        <span>{workflow.status.replaceAll('-', ' ')}</span>
+        <span role='status' aria-live='polite'>
+          {workflow.status.replaceAll('-', ' ')}
+        </span>
       </div>
       <div className='earnWorkflowAmount'>
         {workflow.displayAmount} {workflow.symbol}
@@ -213,24 +252,47 @@ const WorkflowCard = ({ workflow, onResume, onCancel, onRevoke, busy }) => {
                   View transaction
                 </button>
               ) : null}
+              {step.receiptTransfers?.length ? (
+                <div className='earnReceiptTransfers' role='status' aria-live='polite'>
+                  {step.receiptTransfers.map((transfer) => (
+                    <span key={`${transfer.token}:${transfer.direction}`} title={transfer.token}>
+                      {transfer.direction === 'in' ? 'Received' : 'Sent'}{' '}
+                      {formatReceiptAmount(transfer.amountRaw, transfer.decimals)} {transfer.symbol}
+                    </span>
+                  ))}
+                  {step.receiptTransfersTruncated ? <em>Additional transfer evidence omitted</em> : null}
+                </div>
+              ) : step.receiptTransfersTruncated ? (
+                <div className='earnReceiptTransfers' role='status' aria-live='polite'>
+                  Transfer evidence exceeded the display bound
+                </div>
+              ) : null}
             </div>
           </li>
         ))}
       </ol>
-      {workflow.error ? <div className='earnWorkflowError'>{workflow.error}</div> : null}
+      {workflow.error ? (
+        <div className='earnWorkflowError' role='alert'>
+          {workflow.error}
+        </div>
+      ) : null}
       <div className='earnWorkflowActions'>
         {canResume ? (
-          <button type='button' disabled={busy} onClick={() => onResume(workflow.id)}>
+          <button type='button' disabled={busy || !canTransact} onClick={() => onResume(workflow.id)}>
             {workflow.status === 'error' ? 'Retry' : 'Resume'}
           </button>
         ) : null}
-        {outstandingApproval && !['complete', 'canceled'].includes(workflow.status) ? (
-          <button type='button' disabled={busy} onClick={() => onRevoke(workflow.id)}>
+        {canRevoke ? (
+          <button type='button' disabled={busy || !canTransact} onClick={() => onRevoke(workflow.id)}>
             Revoke approval
           </button>
         ) : null}
-        {!outstandingApproval &&
-        !['complete', 'canceled', 'waiting-confirmation'].includes(workflow.status) ? (
+        {canRecoverCleanup ? (
+          <button type='button' disabled={busy || !canTransact} onClick={() => onRevoke(workflow.id)}>
+            {workflow.cleanupRecovery === 'unknown-outcome' ? 'Recheck approval' : 'Revoke again'}
+          </button>
+        ) : null}
+        {canClose ? (
           <button type='button' disabled={busy} onClick={() => onCancel(workflow.id)}>
             Close
           </button>
@@ -240,7 +302,7 @@ const WorkflowCard = ({ workflow, onResume, onCancel, onRevoke, busy }) => {
   )
 }
 
-const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose }) => {
+const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose, formRef }) => {
   const variant = vault.variants.find(({ id }) => id === form.variant)
   const owned = position?.variants.find(({ id }) => id === form.variant)
   const isCancel = form.action === 'cancel-cooldown'
@@ -251,7 +313,12 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose }) => {
       ? vault.asset.symbol
       : variant?.symbol || vault.symbol
   return (
-    <div className='earnActionForm' aria-label={`${actionTitle(form.action)} ${vault.name}`}>
+    <div
+      className='earnActionForm'
+      aria-label={`${actionTitle(form.action)} ${vault.name}`}
+      ref={formRef}
+      tabIndex='-1'
+    >
       <div className='earnActionHead'>
         <div>
           <span>{vault.chainName}</span>
@@ -281,6 +348,8 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose }) => {
               type='text'
               inputMode='decimal'
               autoComplete='off'
+              aria-describedby={form.error ? 'earn-action-error' : undefined}
+              aria-invalid={Boolean(form.error)}
               value={form.amount}
               disabled={form.max || form.busy}
               onChange={(event) => onChange({ amount: event.target.value, max: false, error: '' })}
@@ -289,6 +358,7 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose }) => {
             <button
               type='button'
               className={form.max ? 'active' : ''}
+              aria-pressed={form.max}
               disabled={form.busy}
               onClick={() => onChange({ max: !form.max, error: '' })}
             >
@@ -299,11 +369,24 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose }) => {
       ) : null}
       {owned ? (
         <div className='earnAvailable'>
-          Position: {formatAmount(owned.assets ?? owned.shares)}{' '}
-          {owned.assets !== null ? owned.assetSymbol : owned.symbol}
+          {owned.sharesRaw !== '0' ? (
+            <span>
+              Position: {formatAmount(owned.assets ?? owned.shares)}{' '}
+              {owned.assets !== null ? owned.assetSymbol : owned.symbol}
+            </span>
+          ) : null}
+          {(owned.cooldown?.sharesRaw || '0') !== '0' ? (
+            <span>
+              Cooldown: {formatAmount(owned.cooldown.shares)} {owned.symbol}
+            </span>
+          ) : null}
         </div>
       ) : null}
-      {form.error ? <div className='earnNotice earnNoticeWarn'>{form.error}</div> : null}
+      {form.error ? (
+        <div id='earn-action-error' className='earnNotice earnNoticeWarn' role='alert'>
+          {form.error}
+        </div>
+      ) : null}
       <div className='earnActionSafety'>
         Exact approvals only. Every step opens Frame&apos;s normal simulation and signer review. Vault loss
         tolerance is 0%.
@@ -338,7 +421,9 @@ const VaultDetails = ({
   onCloseForm,
   onResume,
   onCancel,
-  onRevoke
+  onRevoke,
+  detailsRef,
+  formRef
 }) => {
   const signingAccount = account && !account.readOnly && ['ready', 'partial'].includes(chain?.status)
   const canDeposit = signingAccount && vault.status === 'available' && catalogStatus === 'fresh'
@@ -351,9 +436,13 @@ const VaultDetails = ({
   const direct = position?.variants.find(({ id }) => id === 'direct')
   const cooldown = locked?.cooldown
   const canStartCooldown =
-    canExit && locked?.sharesRaw !== '0' && ['none', 'expired'].includes(cooldown?.status || 'none')
+    canExit &&
+    Boolean(cooldown) &&
+    locked?.sharesRaw !== '0' &&
+    ['none', 'expired'].includes(cooldown?.status)
   const canWithdrawLocked = canExit && cooldown?.status === 'withdrawal-window'
   const selectedOwned = position?.variants.find(({ id }) => id === selectedVariant)
+  const displayVariant = vault.variants.find(({ id }) => id === selectedVariant) || vault.variants[0]
   const canWithdrawSelected =
     selectedVariant === 'locked'
       ? canWithdrawLocked
@@ -361,7 +450,7 @@ const VaultDetails = ({
   const canCancelCooldown =
     canExit && ['cooling-down', 'withdrawal-window', 'expired'].includes(cooldown?.status)
   return (
-    <div className='earnDetails cardShow'>
+    <div className='earnDetails cardShow' ref={detailsRef} tabIndex='-1'>
       <button type='button' className='earnTextButton' onClick={onBack}>
         {'<- All vaults'}
       </button>
@@ -373,10 +462,13 @@ const VaultDetails = ({
         <p>{vault.description}</p>
       </div>
       <div className='earnDetailsMetrics'>
-        <Metric label={vault.apy.label} value={formatPercent(vault.apy.value)} />
-        <Metric label='TVL' value={formatUsd(vault.tvlUsd)} />
         <Metric
-          label='Risk'
+          label={displayVariant?.apy.label || vault.apy.label}
+          value={formatPercent(displayVariant?.apy.value)}
+        />
+        <Metric label='TVL' value={formatUsd(displayVariant?.tvlUsd)} />
+        <Metric
+          label={selectedVariant === 'locked' ? 'Underlying vault risk' : 'Risk'}
           value={vault.riskLabel}
           detail={vault.riskLevel ? `Yearn level ${vault.riskLevel}` : ''}
         />
@@ -395,6 +487,7 @@ const VaultDetails = ({
               <button
                 type='button'
                 className={`earnVariant ${selectedVariant === variant.id ? 'earnVariantSelected' : ''}`}
+                aria-pressed={selectedVariant === variant.id}
                 key={variant.id}
                 onClick={() => onFormChange({ variant: variant.id, error: '' })}
               >
@@ -426,15 +519,26 @@ const VaultDetails = ({
           {position.variants
             .filter(({ sharesRaw, cooldown }) => sharesRaw !== '0' || (cooldown?.sharesRaw || '0') !== '0')
             .map((variant) => (
-              <div className='earnOwnedLine' key={variant.address}>
-                <span>{variant.id}</span>
-                <strong>
-                  {formatAmount(variant.cooldown?.shares ?? variant.shares)} {variant.symbol}
-                </strong>
-                {variant.cooldown && variant.cooldown.status !== 'none' ? (
-                  <em>{variant.cooldown.status.replace('-', ' ')}</em>
+              <React.Fragment key={variant.address}>
+                {variant.sharesRaw !== '0' ? (
+                  <div className='earnOwnedLine'>
+                    <span>{variant.id}</span>
+                    <strong>
+                      {formatAmount(variant.assets ?? variant.shares)}{' '}
+                      {variant.assets !== null ? variant.assetSymbol : variant.symbol}
+                    </strong>
+                  </div>
                 ) : null}
-              </div>
+                {(variant.cooldown?.sharesRaw || '0') !== '0' ? (
+                  <div className='earnOwnedLine'>
+                    <span>{variant.id} cooldown</span>
+                    <strong>
+                      {formatAmount(variant.cooldown.shares)} {variant.symbol}
+                    </strong>
+                    <em>{variant.cooldown.status.replace('-', ' ')}</em>
+                  </div>
+                ) : null}
+              </React.Fragment>
             ))}
         </div>
       ) : null}
@@ -443,6 +547,13 @@ const VaultDetails = ({
           Locked yvUSD: {cooldown.status.replace('-', ' ')}.{' '}
           {durationDays(cooldown.cooldownDuration, '14-day')} cooldown,{' '}
           {durationDays(cooldown.withdrawalWindow, '5-day')} withdrawal window.
+          {cooldown.status !== 'none' ? (
+            <>
+              {' '}
+              Cooldown ends {formatTimestamp(cooldown.cooldownEnd)}; window ends{' '}
+              {formatTimestamp(cooldown.windowEnd)}.
+            </>
+          ) : null}
         </div>
       ) : null}
       {!signingAccount ? (
@@ -490,7 +601,7 @@ const VaultDetails = ({
       ) : null}
       {vault.kind === 'yBOLD' && direct?.sharesRaw !== '0' ? (
         <div className='earnSecondaryActions'>
-          <button type='button' disabled={!canExit} onClick={() => onOpenAction('stake', 'direct')}>
+          <button type='button' disabled={!canDeposit} onClick={() => onOpenAction('stake', 'direct')}>
             Stake existing yBOLD
           </button>
         </div>
@@ -503,6 +614,7 @@ const VaultDetails = ({
           onChange={onFormChange}
           onSubmit={onSubmit}
           onClose={onCloseForm}
+          formRef={formRef}
         />
       ) : null}
       {workflows.length ? (
@@ -513,6 +625,7 @@ const VaultDetails = ({
               key={workflow.id}
               workflow={workflow}
               busy={workflowBusy}
+              canTransact={Boolean(signingAccount)}
               onResume={onResume}
               onCancel={onCancel}
               onRevoke={onRevoke}
@@ -561,11 +674,17 @@ export class Earn extends React.Component {
   componentDidMount() {
     this.mounted = true
     this.storeKey = this.currentStoreKey()
+    this.accountKey = this.store('selected.current') || ''
     this.load(false)
     this.workflowTimer = setInterval(() => this.loadWorkflows(), 15_000)
   }
 
   componentDidUpdate() {
+    const nextAccountKey = this.store('selected.current') || ''
+    if (nextAccountKey !== this.accountKey) {
+      this.accountKey = nextAccountKey
+      if (this.state.form) this.setState({ form: null, error: '' })
+    }
     const nextKey = this.currentStoreKey()
     if (nextKey !== this.storeKey) {
       this.storeKey = nextKey
@@ -576,6 +695,17 @@ export class Earn extends React.Component {
   componentWillUnmount() {
     this.mounted = false
     clearInterval(this.workflowTimer)
+  }
+
+  selectTab(event, index) {
+    const keys = { ArrowLeft: -1, ArrowRight: 1 }
+    let next = index
+    if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = CHAINS.length - 1
+    else if (keys[event.key]) next = (index + keys[event.key] + CHAINS.length) % CHAINS.length
+    else return
+    event.preventDefault()
+    this.setState({ filter: CHAINS[next].id }, () => this[`earnTab${next}`]?.focus())
   }
 
   currentStoreKey() {
@@ -641,19 +771,37 @@ export class Earn extends React.Component {
     }
   }
 
-  selectVault(selected) {
+  selectVault(selected, trigger) {
     const vault = this.state.catalog?.vaults.find(({ id }) => id === selected)
     const selectedVariant =
       vault?.kind === 'yvUSD' ? 'unlocked' : vault?.kind === 'yBOLD' ? 'staked' : 'direct'
-    this.setState({ selected, selectedVariant, form: null, error: '' })
+    this.vaultTriggerLabel = trigger?.getAttribute('aria-label')
+    this.setState({ selected, selectedVariant, form: null, error: '' }, () => this.earnDetails?.focus())
   }
 
   openAction(action, variant) {
     const vault = this.state.catalog?.vaults.find(({ id }) => id === this.state.selected)
     const safeVariant = vault?.kind === 'yBOLD' && action === 'deposit' ? 'staked' : variant
-    this.setState({
-      selectedVariant: safeVariant,
-      form: { action, variant: safeVariant, amount: '', max: false, busy: false, error: '' }
+    this.actionTrigger = document.activeElement
+    this.setState(
+      {
+        selectedVariant: safeVariant,
+        form: { action, variant: safeVariant, amount: '', max: false, busy: false, error: '' }
+      },
+      () => this.earnActionForm?.focus()
+    )
+  }
+
+  closeAction() {
+    this.setState({ form: null }, () => this.actionTrigger?.focus())
+  }
+
+  closeDetails() {
+    this.setState({ selected: '', selectedVariant: '', form: null }, () => {
+      const trigger = [...document.querySelectorAll('button')].find(
+        (button) => button.getAttribute('aria-label') === this.vaultTriggerLabel
+      )
+      trigger?.focus()
     })
   }
 
@@ -706,14 +854,19 @@ export class Earn extends React.Component {
     }
   }
 
+  currentPositions() {
+    const selected = this.store('selected.current')
+    return positionsMatchAccount(this.state.positions, selected) ? this.state.positions : null
+  }
+
   positionFor(vaultId) {
-    return this.state.positions?.chains
-      .flatMap(({ positions }) => positions)
+    return this.currentPositions()
+      ?.chains.flatMap(({ positions }) => positions)
       .find((position) => position.vaultId === vaultId)
   }
 
   renderChain(chainId, vaults) {
-    const positionChain = this.state.positions?.chains.find((chain) => chain.chainId === chainId)
+    const positionChain = this.currentPositions()?.chains.find((chain) => chain.chainId === chainId)
     const positions = vaults
       .map((vault) => ({ vault, position: this.positionFor(vault.id) }))
       .filter(({ position }) => position?.hasPosition)
@@ -734,7 +887,7 @@ export class Earn extends React.Component {
                 key={vault.id}
                 vault={vault}
                 position={position}
-                onSelect={(selected) => this.selectVault(selected)}
+                onSelect={(selected, trigger) => this.selectVault(selected, trigger)}
               />
             ))}
           </div>
@@ -746,7 +899,7 @@ export class Earn extends React.Component {
               key={vault.id}
               vault={vault}
               position={this.positionFor(vault.id)}
-              onSelect={(selected) => this.selectVault(selected)}
+              onSelect={(selected, trigger) => this.selectVault(selected, trigger)}
             />
           ))}
         </div>
@@ -755,8 +908,14 @@ export class Earn extends React.Component {
   }
 
   render() {
-    const { catalog, positions, workflows, filter, selected } = this.state
-    if (this.state.loading) return <div className='earnState cardShow'>Loading curated Yearn vaults...</div>
+    const { catalog, workflows, filter, selected } = this.state
+    const currentPositions = this.currentPositions()
+    if (this.state.loading)
+      return (
+        <div className='earnState cardShow' role='status'>
+          Loading curated Yearn vaults...
+        </div>
+      )
     if (!catalog) {
       return (
         <div className='earnState cardShow'>
@@ -775,21 +934,27 @@ export class Earn extends React.Component {
           position={this.positionFor(selectedVault.id)}
           catalogStatus={catalog.status}
           catalogFetchedAt={catalog.fetchedAt}
-          account={positions?.account}
-          chain={positions?.chains.find(({ chainId }) => chainId === selectedVault.chainId)}
+          account={currentPositions?.account}
+          chain={currentPositions?.chains.find(({ chainId }) => chainId === selectedVault.chainId)}
           workflows={workflows.filter(
             ({ vaultId, account }) =>
               vaultId === selectedVault.id &&
-              account.toLowerCase() === positions?.account?.address.toLowerCase()
+              account.toLowerCase() === currentPositions?.account?.address.toLowerCase()
           )}
           form={this.state.form}
           workflowBusy={this.state.workflowBusy}
           selectedVariant={this.state.selectedVariant}
-          onBack={() => this.setState({ selected: '', selectedVariant: '', form: null })}
+          detailsRef={(element) => {
+            this.earnDetails = element
+          }}
+          formRef={(element) => {
+            this.earnActionForm = element
+          }}
+          onBack={() => this.closeDetails()}
           onOpenAction={(action, variant) => this.openAction(action, variant)}
           onFormChange={(changes) => this.changeForm(changes)}
           onSubmit={() => this.submitForm()}
-          onCloseForm={() => this.setState({ form: null })}
+          onCloseForm={() => this.closeAction()}
           onResume={(id) => this.runWorkflow(resumeYearnWorkflow, id)}
           onCancel={(id) => this.runWorkflow(cancelYearnWorkflow, id)}
           onRevoke={(id) => this.runWorkflow(revokeYearnWorkflow, id)}
@@ -818,37 +983,50 @@ export class Earn extends React.Component {
             disabled; existing positions remain manageable.
           </div>
         ) : null}
-        {positions?.account ? (
+        {currentPositions?.account ? (
           <div className='earnAccount'>
             <span>Account</span>
             <strong>
-              {positions.account.name ||
-                `${positions.account.address.slice(0, 6)}...${positions.account.address.slice(-4)}`}
+              {currentPositions.account.name ||
+                `${currentPositions.account.address.slice(0, 6)}...${currentPositions.account.address.slice(-4)}`}
             </strong>
-            {positions.account.readOnly ? <em>Read only</em> : null}
+            {currentPositions.account.readOnly ? <em>Read only</em> : null}
           </div>
         ) : null}
         <div className='earnTabs' role='tablist' aria-label='Filter Earn by chain'>
-          {CHAINS.map((chain) => (
+          {CHAINS.map((chain, index) => (
             <button
               type='button'
               role='tab'
+              id={`earn-tab-${chain.id}`}
+              aria-controls='earn-chain-panels'
               aria-selected={filter === chain.id}
+              tabIndex={filter === chain.id ? 0 : -1}
               className={filter === chain.id ? 'earnTabActive' : ''}
               key={chain.id}
+              ref={(element) => {
+                this[`earnTab${index}`] = element
+              }}
               onClick={() => this.setState({ filter: chain.id })}
+              onKeyDown={(event) => this.selectTab(event, index)}
             >
               {chain.name}
             </button>
           ))}
         </div>
-        {this.state.error ? <div className='earnNotice earnNoticeWarn'>{this.state.error}</div> : null}
-        {visibleChains.map(({ id }) =>
-          this.renderChain(
-            id,
-            catalog.vaults.filter(({ chainId }) => chainId === id)
-          )
-        )}
+        {this.state.error ? (
+          <div className='earnNotice earnNoticeWarn' role='alert'>
+            {this.state.error}
+          </div>
+        ) : null}
+        <div id='earn-chain-panels' role='tabpanel' aria-labelledby={`earn-tab-${filter}`}>
+          {visibleChains.map(({ id }) =>
+            this.renderChain(
+              id,
+              catalog.vaults.filter(({ chainId }) => chainId === id)
+            )
+          )}
+        </div>
         <footer className='earnFooter'>
           Curated locally. Vault data from Yearn · Updated {formatUpdatedAt(catalog.fetchedAt)}.
         </footer>

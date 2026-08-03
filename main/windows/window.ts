@@ -127,6 +127,7 @@ export function createViewInstance(
 
 const externalWhitelist = [
   'https://frame.sh',
+  'https://yearn.fi',
   'https://github.com/jorphex/frame-extension/releases',
   'https://github.com/floating/frame/issues/new',
   'https://github.com/floating/frame/blob/master/LICENSE',

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const YEARN_CHAIN_IDS = [1, 8453, 747474] as const
+export const YEARN_WORKFLOW_POLICY_VERSION = 1
 export type YearnChainId = (typeof YEARN_CHAIN_IDS)[number]
 
 export const YearnChainIdSchema = z.union([z.literal(1), z.literal(8453), z.literal(747474)])
@@ -66,7 +67,7 @@ export const YearnVaultSchema = z
 
 export const YearnCatalogCacheSchema = z
   .object({
-    version: z.literal(1),
+    version: z.literal(2),
     fetchedAt: z.number().int().nonnegative(),
     vaults: z.array(YearnVaultSchema).max(16)
   })
@@ -174,6 +175,15 @@ export const YearnWorkflowStepKindSchema = z.enum([
   'cancel-cooldown',
   'revoke'
 ])
+export const YearnReceiptTransferSchema = z
+  .object({
+    token: YearnAddressSchema,
+    direction: z.enum(['in', 'out']),
+    amountRaw: BaseUnitAmountSchema,
+    symbol: z.string().min(1).max(32),
+    decimals: z.number().int().min(0).max(255)
+  })
+  .strict()
 export const YearnWorkflowStepSchema = z
   .object({
     id: z.string().uuid(),
@@ -189,12 +199,15 @@ export const YearnWorkflowStepSchema = z
       .optional(),
     error: z.string().min(1).max(240).optional(),
     approvalToken: YearnAddressSchema.optional(),
-    approvalSpender: YearnAddressSchema.optional()
+    approvalSpender: YearnAddressSchema.optional(),
+    receiptTransfers: z.array(YearnReceiptTransferSchema).max(8).optional(),
+    receiptTransfersTruncated: z.boolean().optional()
   })
   .strict()
 
 export const YearnWorkflowSchema = z
   .object({
+    policyVersion: z.literal(YEARN_WORKFLOW_POLICY_VERSION),
     id: z.string().uuid(),
     parentWorkflowId: z.string().uuid().optional(),
     account: YearnAddressSchema,
@@ -207,6 +220,7 @@ export const YearnWorkflowSchema = z
     symbol: z.string().min(1).max(32),
     max: z.boolean(),
     maxLossBps: z.literal(0),
+    cleanupRecovery: z.enum(['unknown-outcome', 'allowance-nonzero']).optional(),
     status: z.enum(['ready', 'active', 'waiting-confirmation', 'complete', 'error', 'canceled']),
     steps: z.array(YearnWorkflowStepSchema).min(1).max(4),
     currentStep: z.number().int().min(0).max(3),
@@ -215,6 +229,24 @@ export const YearnWorkflowSchema = z
     error: z.string().min(1).max(240).optional()
   })
   .strict()
+  .superRefine((workflow, context) => {
+    if (!workflow.cleanupRecovery) return
+    const step = workflow.steps[workflow.currentStep]
+    if (
+      workflow.action !== 'revoke' ||
+      workflow.status !== 'canceled' ||
+      workflow.amountRaw !== '0' ||
+      !step ||
+      step.kind !== 'revoke' ||
+      step.amountRaw !== '0'
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cleanupRecovery'],
+        message: 'Cleanup recovery must describe a canceled zero-allowance revoke'
+      })
+    }
+  })
 
 export const YearnWorkflowsSchema = z.record(z.string().uuid(), YearnWorkflowSchema)
 export const YearnWorkflowRequestSchema = z
@@ -251,6 +283,7 @@ export type YearnPositionChain = z.infer<typeof YearnPositionChainSchema>
 export type YearnPositionsResult = z.infer<typeof YearnPositionsResultSchema>
 export type YearnWorkflowAction = z.infer<typeof YearnWorkflowActionSchema>
 export type YearnWorkflowStepKind = z.infer<typeof YearnWorkflowStepKindSchema>
+export type YearnReceiptTransfer = z.infer<typeof YearnReceiptTransferSchema>
 export type YearnWorkflowStep = z.infer<typeof YearnWorkflowStepSchema>
 export type YearnWorkflow = z.infer<typeof YearnWorkflowSchema>
 export type YearnWorkflows = z.infer<typeof YearnWorkflowsSchema>

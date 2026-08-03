@@ -86,11 +86,13 @@ export function hasOutstandingApproval(workflow: YearnWorkflow) {
 }
 
 export function cancelYearnWorkflow(workflow: YearnWorkflow, now = Date.now()) {
+  const current = workflow.steps[workflow.currentStep]
   if (
     workflow.status === 'waiting-confirmation' ||
-    workflow.steps.some(({ status }) => status === 'submitted')
+    workflow.steps.some(({ status }) => status === 'submitted') ||
+    current?.status === 'awaiting-review'
   ) {
-    throw new Error('A submitted Yearn transaction cannot be canceled')
+    throw new Error('A Yearn request awaiting review or confirmation cannot be canceled')
   }
   if (hasOutstandingApproval(workflow)) {
     throw new Error('Revoke the remaining token approval before closing this workflow')

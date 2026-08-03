@@ -86,7 +86,11 @@ beforeEach(() => {
   accounts.addRequestForAccount = jest.fn((accountId, req, res) => {
     if (accountId !== req.account) throw new Error('wrong request account')
     req.res = res
+    if (req.type === 'transaction') {
+      store.set('main.accounts', req.account, 'requests', { [req.handlerId]: req })
+    }
     accountRequests.push(req)
+    if (req.type === 'transaction' && res) res()
     return true
   })
   accounts.claimWalletCallsRequestWithResponse = jest.fn((accountId, handlerId) => {
@@ -2322,11 +2326,48 @@ describe('#send', () => {
           try {
             expect(validateUUID(handlerId)).toBe(true)
             expect(accountRequests[0].handlerId).toBe(handlerId)
+            expect(accounts.addRequestForAccount).toHaveBeenCalledWith(
+              address,
+              expect.objectContaining({ handlerId, account: address }),
+              expect.any(Function)
+            )
+            expect(accounts.addRequest).not.toHaveBeenCalled()
             done()
           } catch (error) {
             done(error)
           }
         }
+      )
+    })
+
+    it('fails admission without reporting a queued request or leaking its handler', (done) => {
+      const onQueued = jest.fn()
+      accounts.addRequestForAccount.mockImplementationOnce(() => {
+        throw new Error('Could not locate request account')
+      })
+      const payload = {
+        jsonrpc: '2.0',
+        id: 9,
+        method: 'eth_sendTransaction',
+        params: [tx],
+        _origin: '8073729a-5e59-53b7-9e69-5d9bcff94087'
+      }
+
+      provider.sendTransaction(
+        payload,
+        (response) => {
+          try {
+            expect(response.error.message).toBe('Could not locate request account')
+            expect(onQueued).not.toHaveBeenCalled()
+            expect(accountRequests).toHaveLength(0)
+            expect(provider.handlers).toEqual({})
+            done()
+          } catch (error) {
+            done(error)
+          }
+        },
+        { type: 'ethereum', id: 1 },
+        onQueued
       )
     })
 

@@ -174,6 +174,18 @@ describe('openExternal', () => {
     shell.openExternal.mockClear()
   })
 
+  it('allows Yearn vault pages without allowing lookalike hosts', () => {
+    shell.openExternal.mockClear()
+
+    openExternal('https://yearn.fi/vaults/1/0x696d02Db93291651ED510704c9b286841d506987')
+    openExternal('https://yearn.fi.evil.example/vaults/1/0x696d02Db93291651ED510704c9b286841d506987')
+
+    expect(shell.openExternal).toHaveBeenCalledTimes(1)
+    expect(shell.openExternal).toHaveBeenCalledWith(
+      'https://yearn.fi/vaults/1/0x696d02Db93291651ED510704c9b286841d506987'
+    )
+  })
+
   it('opens only the fork companion release path', () => {
     openExternal('https://github.com/jorphex/frame-extension/releases/tag/v0.12.1')
     openExternal('https://github.com/jorphex/frame-extension/security')

@@ -24,15 +24,18 @@ export const getYearnWorkflows = async () => {
   return result
 }
 
-const mutateWorkflow = async (method, request) => {
-  const result = await link.invoke(method, request)
+const workflowResult = (result) => {
   if (!result || typeof result.success !== 'boolean')
     throw new Error('Yearn workflow response was unavailable')
   if (!result.success) throw new Error(result.error)
   return result.workflow
 }
 
-export const startYearnWorkflow = (request) => mutateWorkflow('yearn:startWorkflow', request)
-export const resumeYearnWorkflow = (id) => mutateWorkflow('yearn:resumeWorkflow', { id })
-export const cancelYearnWorkflow = (id) => mutateWorkflow('yearn:cancelWorkflow', { id })
-export const revokeYearnWorkflow = (id) => mutateWorkflow('yearn:revokeWorkflow', { id })
+export const startYearnWorkflow = async (request) =>
+  workflowResult(await link.invoke('yearn:startWorkflow', request))
+export const resumeYearnWorkflow = async (id) =>
+  workflowResult(await link.invoke('yearn:resumeWorkflow', { id }))
+export const cancelYearnWorkflow = async (id) =>
+  workflowResult(await link.invoke('yearn:cancelWorkflow', { id }))
+export const revokeYearnWorkflow = async (id) =>
+  workflowResult(await link.invoke('yearn:revokeWorkflow', { id }))

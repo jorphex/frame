@@ -84,6 +84,29 @@ describe('Yearn Kong catalog normalization', () => {
     })
   })
 
+  it('fails closed when Kong token or vault decimals differ from curated policy', () => {
+    const baseDefinition = YEARN_CATALOG.find(({ id }) => id === 'base-yvusdc-h')!
+    const payload = makeKongVaultList().map((vault) =>
+      vault.address.toLowerCase() === baseDefinition.address.toLowerCase()
+        ? { ...vault, asset: { ...vault.asset, decimals: 18 } }
+        : vault
+    )
+
+    const { cache, errors } = normalizeKongCatalog(payload, 1234)
+    expect(cache.vaults.find(({ id }) => id === baseDefinition.id)).toMatchObject({
+      status: 'unavailable',
+      asset: {
+        address: baseDefinition.asset.address,
+        symbol: baseDefinition.asset.symbol,
+        decimals: baseDefinition.asset.decimals
+      }
+    })
+    expect(errors).toContainEqual({
+      chainId: 8453,
+      message: "USDC Horizon yVault token metadata does not match Frame's curated policy"
+    })
+  })
+
   it('rejects malformed and unbounded top-level responses', () => {
     expect(() => normalizeKongCatalog({}, 1)).toThrow('invalid shape')
     expect(() => normalizeKongCatalog(new Array(20_001), 1)).toThrow('invalid shape')

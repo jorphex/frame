@@ -2,6 +2,7 @@ import { Interface, getAddress } from 'ethers'
 import { v4 as uuid } from 'uuid'
 
 import {
+  YEARN_WORKFLOW_POLICY_VERSION,
   YearnWorkflowSchema,
   type YearnVault,
   type YearnWorkflow,
@@ -302,6 +303,7 @@ export function buildYearnWorkflow(input: BuildYearnWorkflowInput): YearnWorkflo
   const now = input.now ?? Date.now()
 
   return YearnWorkflowSchema.parse({
+    policyVersion: YEARN_WORKFLOW_POLICY_VERSION,
     id: createId(),
     account: checksummed(input.account),
     vaultId: input.vault.id,
@@ -332,6 +334,7 @@ export function buildYearnRevokeWorkflow(
   }
   const id = createId()
   return YearnWorkflowSchema.parse({
+    policyVersion: YEARN_WORKFLOW_POLICY_VERSION,
     id,
     parentWorkflowId: parent.id,
     account: parent.account,

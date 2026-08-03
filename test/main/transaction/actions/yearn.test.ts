@@ -75,7 +75,7 @@ it('falls back when receiver, chain, target, or native value does not match', ()
   expect(recognizeYearnAction(data, { ...context, account: other, value: '0x1' })).toBeUndefined()
 })
 
-it('recognizes exact approvals only when the spender is a curated Yearn route', () => {
+it('recognizes approvals only when token and spender match static curated policy', () => {
   const token = directAsset.address
   const data = YearnRecognitionInterfaces.approve.encodeFunctionData('approve', [direct.address, 42n])
   expect(
@@ -114,7 +114,10 @@ it('recognizes exact approvals only when the spender is a curated Yearn route', 
   ).toBeUndefined()
   expect(
     recognizeYearnAction(data, { contractAddress: token, chainId: direct.chainId, account })
-  ).toBeUndefined()
+  ).toMatchObject({
+    id: 'yearn:approve',
+    data: { symbol: 'USDC', decimals: 6, token, spender: direct.address }
+  })
 })
 
 it('recognizes locked yvUSD cooldown actions on the pinned companion', () => {
@@ -127,6 +130,53 @@ it('recognizes locked yvUSD cooldown actions on the pinned companion', () => {
     data: { amountRaw: '9', amountType: 'shares' }
   })
   expect(recognizeYearnAction(cancel, context)).toMatchObject({ id: 'yearn:cancel-cooldown' })
+})
+
+it('labels the first locked yvUSD exit in yvUSD rather than underlying USDC', () => {
+  const rootVariant = {
+    id: 'unlocked' as const,
+    address: yvUsd.address,
+    name: 'yvUSD',
+    symbol: 'yvUSD',
+    asset: directAsset,
+    decimals: 6,
+    tvlUsd: 1,
+    apy: { value: 0.05, label: 'Est. APY' as const, source: 'fixture' }
+  }
+  const lockedVariant = {
+    ...rootVariant,
+    id: 'locked' as const,
+    address: YEARN_YVUSD_LOCKED_ADDRESS,
+    name: 'Locked yvUSD',
+    symbol: 'styvUSD',
+    asset: { address: yvUsd.address, name: 'yvUSD', symbol: 'yvUSD', decimals: 6 }
+  }
+  const hydrated: YearnVault = {
+    ...hydratedDirect,
+    ...yvUsd,
+    name: 'yvUSD',
+    kind: 'yvUSD',
+    chainId: 1,
+    chainName: 'Ethereum',
+    variants: [rootVariant, lockedVariant]
+  }
+  const calldata = YearnRecognitionInterfaces.erc4626.encodeFunctionData('withdraw', [
+    1_100_000n,
+    account,
+    account
+  ])
+
+  expect(
+    recognizeYearnAction(calldata, {
+      contractAddress: YEARN_YVUSD_LOCKED_ADDRESS,
+      chainId: 1,
+      account,
+      vaults: [hydrated]
+    })
+  ).toMatchObject({
+    id: 'yearn:withdraw',
+    data: { amountRaw: '1100000', amountType: 'assets', symbol: 'yvUSD', decimals: 6 }
+  })
 })
 
 it('recognizes yBOLD exits only with the selected receiver and zero maxLoss', () => {
@@ -166,4 +216,28 @@ it('rejects any persisted target, amount, receiver, or approval-scope mutation',
       hydratedDirect
     )
   ).toThrow('amount changed')
+})
+
+it('rejects a persisted revoke step that grants a nonzero allowance', () => {
+  const workflow = buildYearnWorkflow({
+    vault: hydratedDirect,
+    account,
+    action: 'deposit',
+    variant: 'direct',
+    amountRaw: 1_000_000n,
+    displayAmount: '1',
+    max: false,
+    allowance: 2_000_000n
+  })
+  const step = workflow.steps[0]
+  if (!step?.approvalSpender) throw new Error('Expected an allowance-reset step')
+  const nonzero = {
+    ...step,
+    amountRaw: '1',
+    data: YearnRecognitionInterfaces.approve.encodeFunctionData('approve', [step.approvalSpender, 1n])
+  }
+
+  expect(() => assertYearnWorkflowStep(workflow, nonzero, hydratedDirect)).toThrow(
+    'revoke must set allowance to zero'
+  )
 })

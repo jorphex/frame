@@ -143,6 +143,21 @@ describe('simulation review', () => {
     expect(screen.getByText(/USDC/)).toBeTruthy()
   })
 
+  it('does not describe an unlimited Yearn approval as exact', () => {
+    render(
+      <YearnOverview
+        action='approve'
+        vaultName='USDC Horizon yVault'
+        amountRaw='115792089237316195423570985008687907853269984665640564039457584007913129639935'
+        symbol='USDC'
+        decimals={6}
+      />
+    )
+
+    expect(screen.getByText('Unlimited Yearn approval')).toBeTruthy()
+    expect(screen.queryByText('Approve Yearn vault')).toBeNull()
+  })
+
   it('handles watch-only compatibility failures as missing signers', () => {
     expect(isNoSignerError('No signer')).toBe(true)
     expect(isNoSignerError('Watch-only accounts cannot sign')).toBe(true)
