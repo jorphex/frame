@@ -2,9 +2,10 @@
 
 This procedure is the minimum manual gate for a paired Frame desktop and Frame
 Companion release candidate. It supplements automated tests; it is not a
-security audit. Use disposable accounts and Sepolia only. Never paste a seed,
-private key, PIN, passphrase, pairing response, full account address, or
-transaction signature into a report or issue.
+security audit. Use disposable accounts and an approved testnet only: Ethereum
+Sepolia (`0xaa36a7`) or Base Sepolia (`0x14a34`). Never paste a seed, private
+key, PIN, passphrase, pairing response, full account address, or transaction
+signature into a report or issue.
 
 ## Candidate Record
 
@@ -51,7 +52,8 @@ and checksums.
 2. Close every Frame process. Trezor Suite is not required; close it and any
    other hardware-wallet application so only Frame owns the USB transport.
 3. Use newly generated disposable software accounts and hardware-wallet test
-   accounts with no valuable assets. Fund only enough Sepolia ETH for the test.
+   accounts with no valuable assets. Fund only enough approved-testnet ETH for
+   the test.
 4. Do not run the AppImage and installed deb simultaneously. A second process
    invalidates single-instance, local-port, and signer results.
 5. Keep the desktop and browser logs available for diagnosis, but inspect them
@@ -106,8 +108,8 @@ For **both Chrome and Firefox**:
    approve it in Frame. A page session must not create a separate pairing prompt.
 2. Reject one account connection, then approve one. Confirm only the selected
    disposable account is returned.
-3. Change the selected account and Sepolia chain in Frame. Confirm the page logs
-   the corresponding `accountsChanged` and `chainChanged` events once.
+3. Change the selected account and approved testnet in Frame. Confirm the page
+   logs the corresponding `accountsChanged` and `chainChanged` events once.
 4. Open the page in two tabs. Submit a request in one tab and confirm the other
    tab receives neither its approval result nor its events.
 5. Close/reopen the tab and restart the browser. Confirm the known companion
@@ -124,7 +126,7 @@ row through Chrome and the seed row through Firefox so both complete browser
 paths include signing. In the local qualification page, reject each signing
 request once before approving it.
 
-| Signer                                    | Add/discover and verify address | Personal message | EIP-712 v4 | Sepolia zero-value self-transfer | Reject/cancel | Lock or reconnect |
+| Signer                                    | Add/discover and verify address | Personal message | EIP-712 v4 | Testnet zero-value self-transfer | Reject/cancel | Lock or reconnect |
 | ----------------------------------------- | ------------------------------- | ---------------- | ---------- | -------------------------------- | ------------- | ----------------- |
 | Trezor Safe 7 over USB                    |                                 |                  |            |                                  |               |                   |
 | Trezor Model One over USB                 |                                 |                  |            |                                  |               |                   |
@@ -143,10 +145,10 @@ and removal using only disposable secrets. Confirm no plaintext seed, private
 key, password, message, typed data, transaction payload, or pairing response is
 present in production logs.
 
-The transaction action is disabled unless Frame reports Sepolia chain
-`0xaa36a7` and the disposable-account confirmation is checked. Confirm the
-returned hash on a Sepolia explorer without placing the full hash in a public
-qualification report.
+The transaction action is disabled unless Frame reports Ethereum Sepolia chain
+`0xaa36a7` or Base Sepolia chain `0x14a34` and the disposable-account
+confirmation is checked. Confirm the returned hash on the matching explorer
+without placing the full hash in a public qualification report.
 
 ## Log And Cleanup Review
 
