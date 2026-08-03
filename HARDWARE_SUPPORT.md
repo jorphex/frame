@@ -17,19 +17,24 @@ upgrade automated or implemented evidence to physical qualification.
 
 ## Current Matrix
 
-| Signer or platform                 | Transport/package             | Evidence in this fork                                                                                        | Release status                                |
-| ---------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
-| Trezor Safe 7                      | USB through Trezor Connect    | Physical pairing, address access, transaction signing, and broadcast on Linux x64; automated bridge coverage | Workable, use at your own risk                |
-| Trezor Model One                   | USB through Trezor Connect    | Physical address, message, hash-only EIP-712, rejection, and reconnect on firmware 1.13.1                    | Qualified with limitations on Linux x64       |
-| Other Trezor models                | USB through Trezor Connect    | Shared implementation and automated bridge coverage                                                          | Implemented, not physically requalified       |
-| Trezor Safe 7 Bluetooth            | Bluetooth                     | No Frame transport                                                                                           | Unsupported                                   |
-| Ledger                             | USB HID                       | Automated adapter/device coverage                                                                            | Implemented, not physically requalified       |
-| GridPlus Lattice1                  | Vendor SDK/network            | Automated adapter/device coverage                                                                            | Implemented, not physically requalified       |
-| Software seed/private key/keystore | Local encrypted signer worker | Automated signer coverage                                                                                    | Implemented; legacy storage limitations apply |
-| Linux x64 AppImage and deb         | Electron package              | Local package build and native-module inspection; physical Safe 7 use                                        | Current release target                        |
-| macOS x64/arm64                    | Electron package              | Inherited build configuration only                                                                           | Unverified and unsigned by this fork          |
-| Windows x64                        | Electron package              | Inherited build configuration only                                                                           | Unverified and unsigned by this fork          |
-| Linux arm64, snap, tarball         | Electron package              | Legacy configuration only                                                                                    | Not produced by current CI                    |
+| Signer or platform                 | Transport/package             | Evidence in this fork                                                                                                        | Release status                              |
+| ---------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Trezor Safe 7                      | USB through Trezor Connect    | Physical address, message, EIP-712, transaction, broadcast, rejection, and reconnect on Linux x64; automated bridge coverage | Workable, use at your own risk              |
+| Trezor Model One                   | USB through Trezor Connect    | Physical address, message, hash-only EIP-712, rejection, and reconnect on firmware 1.13.1                                    | Qualified with limitations on Linux x64     |
+| Other Trezor models                | USB through Trezor Connect    | Shared implementation and automated bridge coverage                                                                          | Implemented, not physically requalified     |
+| Trezor Safe 7 Bluetooth            | Bluetooth                     | No Frame transport                                                                                                           | Unsupported                                 |
+| Ledger                             | USB HID                       | Automated adapter/device coverage                                                                                            | Implemented, not physically requalified     |
+| GridPlus Lattice1                  | Vendor SDK/network            | Automated adapter/device coverage                                                                                            | Implemented, not physically requalified     |
+| Software seed/private key/keystore | Local encrypted signer worker | Live packaged import, unlock, signing, restart, and removal runs plus automated signer coverage                              | Qualified on Linux x64; legacy limits apply |
+| Linux x64 AppImage and deb         | Electron package              | Automated package verification plus live fresh/migrated AppImage and deb-upgrade runs                                        | Current release target                      |
+| macOS x64/arm64                    | Electron package              | Inherited build configuration only                                                                                           | Unverified and unsigned by this fork        |
+| Windows x64                        | Electron package              | Inherited build configuration only                                                                                           | Unverified and unsigned by this fork        |
+| Linux arm64, snap, tarball         | Electron package              | Legacy configuration only                                                                                                    | Not produced by current CI                  |
+
+The exact `0.7.0` Safe 7 qualification reused an existing device trust record.
+Fresh pairing-code entry was exercised during earlier fork testing and remains
+covered at the event/response bridge by automated tests, but it was not repeated
+on the final release candidate.
 
 Trezor Suite is not required for the verified Safe 7 USB flow. Running another
 application that owns the device transport may cause contention. Bluetooth

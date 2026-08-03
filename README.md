@@ -23,22 +23,22 @@ Frame runs as a desktop wallet and exposes one consistent approval and signing i
 
 ## Current Release
 
-Frame `0.7.0` is available as a Linux x64 AppImage and deb package from the
+Frame `0.7.0` is published as a Linux x64 AppImage and deb pre-release in the
 [desktop releases](https://github.com/jorphex/frame/releases). Browser dapps
-require the separately packaged Frame Companion `0.13.0` from the
+require the separately packaged Frame Companion `0.13.0` pre-release from the
 [companion releases](https://github.com/jorphex/frame-extension/releases).
 
-| Component or platform                  | Current status                                                              |
-| -------------------------------------- | --------------------------------------------------------------------------- |
-| Linux x64 AppImage and deb             | Current qualified release target                                            |
-| Trezor Safe 7 over USB                 | Physically tested for pairing, address verification, signing, and broadcast |
-| Trezor Model One over USB              | Physically tested with documented typed-data and testnet limitations        |
-| Ledger and GridPlus Lattice1           | Implemented with automated coverage; not physically requalified for `0.7.0` |
-| Seed phrase, private key, and keystore | Implemented with encrypted local signer workers                             |
-| Watch-only addresses                   | Supported for monitoring; signing is blocked                                |
-| Chrome and Firefox companion           | Packaged and tested against the `0.7.0` desktop protocol                    |
-| macOS, Windows, and Linux arm64        | Not produced or qualified by this fork                                      |
-| Trezor Safe 7 Bluetooth                | Unsupported                                                                 |
+| Component or platform                  | Current status                                                                |
+| -------------------------------------- | ----------------------------------------------------------------------------- |
+| Linux x64 AppImage and deb             | Current qualified release target                                              |
+| Trezor Safe 7 over USB                 | Physically tested for address verification, signing, broadcast, and reconnect |
+| Trezor Model One over USB              | Physically tested with documented typed-data and testnet limitations          |
+| Ledger and GridPlus Lattice1           | Implemented with automated coverage; not physically requalified for `0.7.0`   |
+| Seed phrase, private key, and keystore | Implemented with encrypted local signer workers                               |
+| Watch-only addresses                   | Supported for monitoring; signing is blocked                                  |
+| Chrome and Firefox companion           | Packaged and tested against the `0.7.0` desktop protocol                      |
+| macOS, Windows, and Linux arm64        | Not produced or qualified by this fork                                        |
+| Trezor Safe 7 Bluetooth                | Unsupported                                                                   |
 
 See [Signer and Platform Support](HARDWARE_SUPPORT.md) for the evidence behind
 each claim and all known limitations. Trezor Suite is not required for the
@@ -63,7 +63,7 @@ qualified Safe 7 USB flow.
 - **Multichain routing:** Each application can target an enabled chain without
   forcing every connected application onto one global network.
 - **Modern wallet methods:** Hardened EIP-1193 behavior, chain add/switch flows,
-  browser EIP-6963 discovery, and non-atomic EIP-5792 wallet calls.
+  paired-companion EIP-6963 discovery, and non-atomic EIP-5792 wallet calls.
 - **User-controlled infrastructure:** Custom Ethereum RPC and Kubo IPFS
   endpoints remain supported.
 - **Release evidence:** Locked dependencies, automated tests, CodeQL, package

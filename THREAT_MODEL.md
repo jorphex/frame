@@ -83,11 +83,12 @@ can read the user's files or process memory.
 
 ### Persisted State And Software Signers
 
-Application state is stored in Electron's per-user data directory with mode
-`0600`. Software signer files are stored below its `signers` directory with mode
-`0600`. New seed and private-key material is password-encrypted in a versioned
-envelope using scrypt-derived AES-256-GCM with authenticated metadata. Material
-is decrypted only in a child process while the signer is unlocked.
+Application state is stored in a mode-`0600` config file under Electron's
+per-user data directory. Software signer files are stored below its `signers`
+directory with mode `0600`. New seed and private-key material is
+password-encrypted in a versioned envelope using scrypt-derived AES-256-GCM with
+authenticated metadata. Material is decrypted only in a child process while the
+signer is unlocked.
 
 Legacy AES-256-CBC signer payloads remain decryptable. After a successful unlock,
 the worker validates that the decrypted seed or keys derive the signer's stored
@@ -140,10 +141,12 @@ The current preload bridge accepts only bounded serialized envelopes from its ow
 window, an expected packaged/development origin, and the expected protocol source
 label. One-way and invoke messages are limited to explicitly registered IPC
 channels, request identifiers and argument counts are bounded, and malformed or
-oversized messages are ignored without reaching Electron IPC. Main RPC methods
-remain a broad tray/dashboard capability and their individual payloads are not
-yet described by a typed per-method schema. A privileged renderer compromise
-must therefore still be treated as a privileged wallet-process compromise.
+oversized messages are ignored without reaching Electron IPC. Every renderer RPC
+method has typed request and response schemas, and inventory tests require exact
+agreement between static renderer callsites, main-process handlers, and those
+schemas. Tray and dashboard renderers still receive the full registered bridge
+surface, so their compromise must be treated as a privileged wallet-process
+compromise.
 
 The main process assigns each shared-preload window a renderer role. Tray and
 dashboard windows retain the full bridge surface; onboarding, notification, and
@@ -153,7 +156,8 @@ closed. Remote dapp content runs in separate WebContentsViews and does not recei
 this bridge. Main IPC registrations independently resolve `event.sender` through
 a main-owned role map and apply the same capability policy; unregistered remote
 views and role-incompatible requests are rejected. Individual handler payloads
-still require typed schemas and semantic validation.
+are schema-validated before dispatch, but authorization and handler-specific
+semantic checks remain part of the privileged main-process boundary.
 
 Some renderer policies allow broad network or image sources. Embedded dapp views
 load separately partitioned content and depend on session checks and request
