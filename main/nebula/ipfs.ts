@@ -11,11 +11,14 @@ type ClientFactory = () => Promise<KuboClient>
 const CID_V0_PATTERN = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/
 
 async function canonicalizePath(path: string) {
-  const [root, ...segments] = path.split('/')
-  if (!root || !CID_V0_PATTERN.test(root)) return path
+  const segments = path.split('/')
+  const cidIndex = segments[0] === '' && segments[1] === 'ipfs' ? 2 : 0
+  const cid = segments[cidIndex]
+  if (!cid || !CID_V0_PATTERN.test(cid)) return path
 
   const { CID } = await loadCidModule()
-  return [CID.parse(root).toV1().toString(), ...segments].join('/')
+  segments[cidIndex] = CID.parse(cid).toV1().toString()
+  return segments.join('/')
 }
 
 export function getKuboOptions(env: NodeJS.ProcessEnv = process.env) {

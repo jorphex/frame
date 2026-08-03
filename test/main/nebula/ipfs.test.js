@@ -43,13 +43,13 @@ test('canonicalizes legacy CIDv0 paths before requesting content', async () => {
   }
   const ipfs = createIpfs(async () => client)
 
-  await ipfs.getJson(`${legacyCid}/metadata.json`)
+  await ipfs.getJson(`/ipfs/${legacyCid}/metadata.json`)
   const archive = ipfs.get(legacyCid, { archive: true })
   await archive.next()
 
   expect(mockParseCid).toHaveBeenNthCalledWith(1, legacyCid)
   expect(mockParseCid).toHaveBeenNthCalledWith(2, legacyCid)
-  expect(client.cat).toHaveBeenCalledWith(`${canonicalCid}/metadata.json`)
+  expect(client.cat).toHaveBeenCalledWith(`/ipfs/${canonicalCid}/metadata.json`)
   expect(client.get).toHaveBeenCalledWith(canonicalCid, { archive: true })
 })
 
