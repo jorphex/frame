@@ -207,8 +207,9 @@ are directional and are not support claims.
 ## Origin And License
 
 This repository is a community-maintained continuation of the GPL-licensed
-Frame wallet originally developed by Frame Labs. It is not an official Frame
-Labs release and is not supported by the original maintainers.
+[Frame wallet](https://github.com/floating/frame) originally developed by Frame
+Labs. It is not an official Frame Labs release and is not supported by the
+original maintainers.
 
 Frame is distributed under the [GNU General Public License v3.0](LICENSE).
 Modified versions and binaries must continue to satisfy the GPL's source,
