@@ -5,7 +5,7 @@ it('has migration version 46', () => {
   expect(migration.version).toBe(46)
 })
 
-it('normalizes legacy null gas fees without changing unrelated metadata', () => {
+it('preserves legacy null gas fees and unrelated metadata', () => {
   const state = createState(45)
   const preservedMetadata = { customField: { preserved: true } }
   state.main.networksMeta.ethereum[1] = preservedMetadata
@@ -17,7 +17,7 @@ it('normalizes legacy null gas fees without changing unrelated metadata', () => 
   const migrated = migration.migrate(state)
 
   expect(migrated.main.networksMeta.ethereum[1]).toBe(preservedMetadata)
-  expect(migrated.main.networksMeta.ethereum[42161].gas.price.fees).toEqual({})
+  expect(migrated.main.networksMeta.ethereum[42161].gas.price.fees).toBeNull()
   expect(migrated.main.networksMeta.ethereum[42161].customField).toBe('preserved')
 })
 

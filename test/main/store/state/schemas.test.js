@@ -3,6 +3,7 @@ import { MainSchema } from '../../../../main/store/state/types/main'
 import { AccountMetadataSchema, AccountSchema } from '../../../../main/store/state/types/account'
 import { OriginSchema } from '../../../../main/store/state/types/origin'
 import { ConnectionSchema } from '../../../../main/store/state/types/connection'
+import { GasSchema } from '../../../../main/store/state/types/gas'
 
 describe('persisted state schema compatibility', () => {
   it('accepts notification records from before every notification key existed', () => {
@@ -91,5 +92,14 @@ describe('persisted state schema compatibility', () => {
         custom: 'https://rpc.example.test'
       }).status
     ).toBe(status)
+  })
+
+  it('persists unavailable EIP-1559 fee data as null', () => {
+    expect(
+      GasSchema.parse({
+        samples: [],
+        price: { selected: 'fast', levels: { fast: '0x1' }, fees: null }
+      }).price.fees
+    ).toBeNull()
   })
 })

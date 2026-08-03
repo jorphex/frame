@@ -199,7 +199,6 @@ it('migrates the version 41 boundary and reloads it without another migration', 
   const fixture = loadFixture('v41-current-state.json')
   const { migrated, reloaded } = await migrateTemporaryProfile(fixture)
   const expected = clone(fixture.state.main)
-  expected.networksMeta.ethereum[42161].gas.price.fees = {}
 
   expect(migrated.main).toMatchObject({
     ...expected,

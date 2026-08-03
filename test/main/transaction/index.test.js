@@ -358,6 +358,16 @@ describe('#populate', () => {
       expect(tx.type).toBe('0x2')
     })
 
+    it('falls back to legacy fees when EIP-1559 fee data is unavailable', () => {
+      gas.price.fees = null
+      gas.price.levels = { fast: addHexPrefix((7e9).toString(16)) }
+
+      const tx = populate(rawTx, chainConfig, gas)
+
+      expect(tx.type).toBe('0x1')
+      expect(tx.gasPrice).toBe(gas.price.levels.fast)
+    })
+
     it('calculates maxFeePerGas when the dapp did not specify a value', () => {
       gas.price.fees.maxBaseFeePerGas = addHexPrefix((7e9).toString(16))
       gas.price.fees.maxPriorityFeePerGas = addHexPrefix((3e9).toString(16))
