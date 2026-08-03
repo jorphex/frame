@@ -25,6 +25,25 @@ Verify both `SHA256SUMS` files from their artifact directories. Confirm the
 companion compatibility JSON names the candidate desktop branch and a commit
 that is an ancestor of the desktop candidate.
 
+## Automated Gates
+
+Record exact workflow URLs or equivalent local command evidence for the listed
+candidate commits. Do not reuse a result from an earlier source checkpoint.
+
+| Gate                                   | Result |
+| -------------------------------------- | ------ |
+| Desktop quality and package workflow   |        |
+| Desktop CodeQL workflow                |        |
+| Companion quality and package workflow |        |
+| Companion CodeQL workflow              |        |
+| Desktop release verifier               |        |
+| Companion release verifier             |        |
+
+The desktop verifier must cover the AppImage, deb, source-bound SBOM, embedded
+source identity, native hardware modules, and checksums. The Companion verifier
+must cover both browser archives, compatibility metadata, source-bound SBOM,
+and checksums.
+
 ## Safety Setup
 
 1. Back up the current Frame profile while Frame is closed. Keep the backup
@@ -128,6 +147,20 @@ The transaction action is disabled unless Frame reports Sepolia chain
 `0xaa36a7` and the disposable-account confirmation is checked. Confirm the
 returned hash on a Sepolia explorer without placing the full hash in a public
 qualification report.
+
+## Log And Cleanup Review
+
+After every signer run:
+
+1. Relock the signer, disconnect the device when applicable, and quit Frame.
+2. Confirm no request remains pending after restart.
+3. Search the isolated profile and captured logs for the exact disposable key,
+   phrase, passwords, signing messages, typed-data statement, pairing code, and
+   custom RPC credentials without printing those values.
+4. Remove disposable accounts and software signers through Frame, confirm signer
+   files are gone, and delete isolated test profiles.
+5. Treat retained public address metadata as non-secret operational data; it is
+   not evidence that secret scanning passed.
 
 ## Pass Criteria
 
