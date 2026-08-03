@@ -34,7 +34,28 @@
           }
         }
       },
-      "networksMeta": { "ethereum": {} },
+      "networksMeta": {
+        "ethereum": {
+          "42161": {
+            "gas": {
+              "price": {
+                "selected": "standard",
+                "levels": {},
+                "fees": null
+              },
+              "samples": []
+            },
+            "nativeCurrency": {
+              "name": "Ether",
+              "symbol": "ETH",
+              "decimals": 18,
+              "icon": "",
+              "usd": { "price": 0, "change24hr": 0 }
+            },
+            "primaryColor": "accent1"
+          }
+        }
+      },
       "mute": { "migrateToPylon": true },
       "accounts": {
         "0x000000000000000000000000000000000000dead": {
