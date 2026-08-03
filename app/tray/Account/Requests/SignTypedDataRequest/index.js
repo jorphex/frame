@@ -1,10 +1,13 @@
 import React from 'react'
 import Restore from 'react-restore'
 
-import { SimpleTypedData as TypedSignatureOverview } from '../../../../../resources/Components/SimpleTypedData'
+import {
+  getTypedDataDeviceWarning,
+  SimpleTypedData as TypedSignatureOverview
+} from '../../../../../resources/Components/SimpleTypedData'
 import { getSignatureRequestClass } from '../../../../../resources/domain/request'
 
-class TransactionRequest extends React.Component {
+export class SignTypedDataRequest extends React.Component {
   constructor(...args) {
     super(...args)
     this.state = { allowInput: false, dataView: false }
@@ -17,19 +20,20 @@ class TransactionRequest extends React.Component {
   }
 
   render() {
-    const { req } = this.props
+    const { req, signer } = this.props
     const originName = this.store('main.origins', req.origin, 'name')
     const requestChainId = req.context?.requestChainId
     const chainName =
       requestChainId !== undefined ? this.store('main.networks.ethereum', requestChainId, 'name') : undefined
     const requestClass = getSignatureRequestClass(req)
+    const deviceWarning = getTypedDataDeviceWarning(signer)
 
     return (
       <div key={req.id || req.handlerId} className={requestClass}>
-        <TypedSignatureOverview {...{ chainName, originName, req }} />
+        <TypedSignatureOverview {...{ chainName, deviceWarning, originName, req }} />
       </div>
     )
   }
 }
 
-export default Restore.connect(TransactionRequest)
+export default Restore.connect(SignTypedDataRequest)

@@ -1,5 +1,5 @@
 import { screen, render } from '../../../componentSetup'
-import { SimpleTypedData } from '../../../../resources/Components/SimpleTypedData'
+import { getTypedDataDeviceWarning, SimpleTypedData } from '../../../../resources/Components/SimpleTypedData'
 
 const typedData = {
   types: {
@@ -181,4 +181,27 @@ it('uses the same complete view for specialized permit requests', () => {
 
   expect(screen.getByText('Typed Data Review')).toBeTruthy()
   expect(screen.getByText('Type Definitions')).toBeTruthy()
+})
+
+it('warns when the selected device displays only typed-data hashes', () => {
+  const deviceWarning = getTypedDataDeviceWarning({
+    model: 'Trezor One',
+    signingCapabilities: { typedDataHashOnly: true }
+  })
+
+  render(<SimpleTypedData deviceWarning={deviceWarning} req={request()} />)
+
+  expect(screen.getByLabelText('Device signing warning')).toBeTruthy()
+  expect(screen.getByRole('alert').textContent).toBe(
+    'Trezor One will display only the EIP-712 domain and message hashes. Verify every structured field in Frame before approving on-device.'
+  )
+})
+
+it('does not warn when hash-only device review is not known', () => {
+  expect(
+    getTypedDataDeviceWarning({
+      model: 'Trezor Safe 7',
+      signingCapabilities: { typedDataHashOnly: false }
+    })
+  ).toBeUndefined()
 })

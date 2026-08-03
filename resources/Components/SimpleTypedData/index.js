@@ -83,6 +83,20 @@ export const TypedDataWarnings = ({ context }) => {
   ) : null
 }
 
+export const getTypedDataDeviceWarning = (signer) =>
+  signer?.signingCapabilities?.typedDataHashOnly
+    ? `${signer.model || 'This signer'} will display only the EIP-712 domain and message hashes. Verify every structured field in Frame before approving on-device.`
+    : undefined
+
+export const TypedDataDeviceWarning = ({ warning }) =>
+  warning ? (
+    <div className='typedDataWarnings' aria-label='Device signing warning'>
+      <div className='typedDataWarning' role='alert'>
+        {warning}
+      </div>
+    </div>
+  ) : null
+
 const Permit2Authority = ({ authority }) => {
   if (!authority) return null
 
@@ -186,7 +200,7 @@ const LegacyTypedData = ({ typedData }) => (
   </Section>
 )
 
-export const SimpleTypedData = ({ chainName, originName, req }) => {
+export const SimpleTypedData = ({ chainName, deviceWarning, originName, req }) => {
   const { context, origin, typedMessage, type } = req
 
   return type === 'signTypedData' || type === 'signErc20Permit' ? (
@@ -195,6 +209,7 @@ export const SimpleTypedData = ({ chainName, originName, req }) => {
         <div className='txViewDataHeader'>Typed Data Review</div>
         <div className='signTypedDataInner'>
           <SigningContext {...{ chainName, context, origin, originName, typedMessage }} />
+          <TypedDataDeviceWarning warning={deviceWarning} />
           {Array.isArray(typedMessage.data) ? (
             <LegacyTypedData typedData={typedMessage.data} />
           ) : (

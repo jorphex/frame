@@ -71,6 +71,25 @@ it('labels the raw permit view with the resolved request chain', () => {
   expect(screen.getByText('Type Definitions')).toBeTruthy()
 })
 
+it.each([undefined, 'viewRaw'])('warns about hash-only device review in the %s permit view', (step) => {
+  render(
+    <SignPermitRequest
+      chainData={chainData}
+      originName='example.test'
+      req={req}
+      signer={{
+        model: 'Trezor One',
+        signingCapabilities: { typedDataHashOnly: true }
+      }}
+      step={step}
+    />
+  )
+
+  expect(screen.getByLabelText('Device signing warning').textContent).toMatch(
+    /Trezor One will display only the EIP-712 domain and message hashes/
+  )
+})
+
 it('sends only a normalized amount request from the permit editor', async () => {
   const editableRequest = {
     ...req,

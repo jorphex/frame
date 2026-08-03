@@ -258,6 +258,7 @@ class _AccountBody extends React.Component {
     const { step } = data
 
     const activeAccount = this.store('main.accounts', this.props.id)
+    const activeSigner = activeAccount.signer ? this.store('main.signers', activeAccount.signer) : undefined
     const originName = this.store('main.origins', req.origin, 'name')
     const chainData = this.getChainData(req)
 
@@ -272,6 +273,7 @@ class _AccountBody extends React.Component {
         chainId={chainData.chainId}
         originName={originName}
         chainData={chainData}
+        signer={activeSigner}
       />
     )
   }

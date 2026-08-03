@@ -13,6 +13,7 @@ it('describes complete software signing paths', () => {
     nativeEip1559: true,
     eip1559LegacyFallback: false,
     typedDataVersions: [SignTypedDataVersion.V1, SignTypedDataVersion.V3, SignTypedDataVersion.V4],
+    typedDataHashOnly: false,
     personalMessage: true,
     deviceAddressDisplay: false
   })
@@ -53,6 +54,13 @@ it('distinguishes hardware transports, envelopes, and typed-data versions', () =
   })
 })
 
+it('marks only Trezor One as hash-only for EIP-712 device review', () => {
+  expect(getSignerCapabilities({ type: 'trezor', model: 'Trezor One' }).typedDataHashOnly).toBe(true)
+  expect(getSignerCapabilities({ type: 'trezor', model: 'Trezor Safe 7' }).typedDataHashOnly).toBe(false)
+  expect(getSignerCapabilities({ type: 'trezor', model: 'Trezor T' }).typedDataHashOnly).toBe(false)
+  expect(getSignerCapabilities({ type: 'ledger' }).typedDataHashOnly).toBe(false)
+})
+
 it('returns deeply immutable detached profiles and fails closed for unknown types', () => {
   const capabilities = getSignerCapabilities({ type: 'address' })
 
@@ -62,6 +70,7 @@ it('returns deeply immutable detached profiles and fails closed for unknown type
     transactionEnvelopes: [],
     nativeEip1559: false,
     typedDataVersions: [],
+    typedDataHashOnly: false,
     personalMessage: false,
     deviceAddressDisplay: false
   })

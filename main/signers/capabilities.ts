@@ -12,6 +12,7 @@ export interface SignerCapabilities {
   nativeEip1559: boolean
   eip1559LegacyFallback: boolean
   typedDataVersions: readonly SignTypedDataVersion[]
+  typedDataHashOnly: boolean
   personalMessage: boolean
   deviceAddressDisplay: boolean
 }
@@ -65,6 +66,7 @@ export function getSignerCapabilities(signer: CapabilityInput): SignerCapabiliti
         transactionEnvelopes: ['legacy', 'eip2930', 'eip1559'],
         eip1559LegacyFallback: false,
         typedDataVersions: [SignTypedDataVersion.V1, SignTypedDataVersion.V3, SignTypedDataVersion.V4],
+        typedDataHashOnly: false,
         personalMessage: true,
         deviceAddressDisplay: false
       },
@@ -81,6 +83,7 @@ export function getSignerCapabilities(signer: CapabilityInput): SignerCapabiliti
         eip1559LegacyFallback: true,
         typedDataVersions:
           type === 'ledger' ? [SignTypedDataVersion.V4] : [SignTypedDataVersion.V3, SignTypedDataVersion.V4],
+        typedDataHashOnly: false,
         personalMessage: true,
         deviceAddressDisplay: true
       },
@@ -96,6 +99,7 @@ export function getSignerCapabilities(signer: CapabilityInput): SignerCapabiliti
         transactionEnvelopes: ['legacy', 'eip1559'],
         eip1559LegacyFallback: true,
         typedDataVersions: [SignTypedDataVersion.V4],
+        typedDataHashOnly: model.toLowerCase() === 'trezor one',
         personalMessage: true,
         deviceAddressDisplay: true
       },
@@ -110,6 +114,7 @@ export function getSignerCapabilities(signer: CapabilityInput): SignerCapabiliti
       transactionEnvelopes: [],
       eip1559LegacyFallback: false,
       typedDataVersions: [],
+      typedDataHashOnly: false,
       personalMessage: false,
       deviceAddressDisplay: false
     },

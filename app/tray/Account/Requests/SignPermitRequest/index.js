@@ -13,12 +13,14 @@ import RequestItem from '../../../../../resources/Components/RequestItem'
 import EditTokenSpend from '../../../../../resources/Components/EditTokenSpend'
 import {
   SimpleTypedData as TypedSignatureOverview,
+  getTypedDataDeviceWarning,
+  TypedDataDeviceWarning,
   TypedDataWarnings
 } from '../../../../../resources/Components/SimpleTypedData'
 import { getSignatureRequestClass } from '../../../../../resources/domain/request'
 import useCopiedMessage from '../../../../../resources/Hooks/useCopiedMessage'
 
-const PermitOverview = ({ req, chainData, originName }) => {
+const PermitOverview = ({ req, chainData, deviceWarning, originName }) => {
   const { chainColor, chainName, icon } = chainData
   const {
     permit: { spender, value, deadline },
@@ -85,6 +87,7 @@ const PermitOverview = ({ req, chainData, originName }) => {
             </RequestItem>
           </ClusterBox>
           <TypedDataWarnings context={req.context} />
+          <TypedDataDeviceWarning warning={deviceWarning} />
           <ClusterBox title={'Token Permit'} animationSlot={2}>
             <Cluster>
               {tokenData && (
@@ -195,8 +198,9 @@ const EditPermit = ({ req }) => {
   )
 }
 
-const PermitRequest = ({ req, originName, step, chainData }) => {
+const PermitRequest = ({ req, originName, signer, step, chainData }) => {
   const requestClass = getSignatureRequestClass(req)
+  const deviceWarning = getTypedDataDeviceWarning(signer)
 
   const renderStep = () => {
     switch (step) {
@@ -204,10 +208,22 @@ const PermitRequest = ({ req, originName, step, chainData }) => {
         return <EditPermit req={req} />
       case 'viewRaw':
         return (
-          <TypedSignatureOverview chainName={chainData.requestChainName} originName={originName} req={req} />
+          <TypedSignatureOverview
+            chainName={chainData.requestChainName}
+            deviceWarning={deviceWarning}
+            originName={originName}
+            req={req}
+          />
         )
       default:
-        return <PermitOverview originName={originName} req={req} chainData={chainData} />
+        return (
+          <PermitOverview
+            originName={originName}
+            req={req}
+            chainData={chainData}
+            deviceWarning={deviceWarning}
+          />
+        )
     }
   }
 
