@@ -70,7 +70,9 @@ and checksums.
    ```
 
 2. Confirm startup, tray/dashboard placement, settings persistence after a
-   restart, and clean shutdown. Confirm no unexpected update prompt appears.
+   restart, and clean shutdown. On X11, enable Glide, dismiss Frame, and confirm
+   touching the right edge reveals it without focusing or leaving an edge window
+   behind. Confirm no unexpected update prompt appears.
 3. Confirm launching a second candidate exits without corrupting state or
    taking over ports `1248` or `8421`.
 4. With Frame closed, copy a backed-up prior-fork profile to a separate temporary

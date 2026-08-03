@@ -10,6 +10,11 @@ type Screen = {
   getDisplayNearestPoint(point: Point): Display
 }
 
+type Lifecycle = {
+  start(): void
+  stop(): void
+}
+
 const sampleInterval = 50
 const edgeTolerance = 2
 const verticalMargin = 5
@@ -32,20 +37,24 @@ export class GlideDetector {
   constructor(
     private readonly screen: Screen,
     private readonly enabled: () => boolean,
-    private readonly reveal: () => boolean
+    private readonly reveal: () => boolean,
+    private readonly lifecycle?: Lifecycle
   ) {}
 
   start() {
     if (this.running || !this.enabled()) return
 
     this.running = true
+    this.lifecycle?.start()
     this.poll()
   }
 
   stop() {
+    const wasRunning = this.running
     this.running = false
     clearTimeout(this.timeout)
     this.timeout = undefined
+    if (wasRunning) this.lifecycle?.stop()
   }
 
   private poll() {
@@ -70,7 +79,7 @@ export class GlideDetector {
         isAtRightEdge(initialPoint, initialDisplay) && isAtRightEdge(currentPoint, currentDisplay)
 
       if (dwellingAtEdge && this.reveal()) {
-        this.running = false
+        this.stop()
         return
       }
 

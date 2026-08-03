@@ -55,12 +55,15 @@ describe('GlideDetector', () => {
       { x: 3839, y: 812 }
     ])
     const reveal = jest.fn(() => true)
-    const detector = new GlideDetector(screen, () => true, reveal)
+    const lifecycle = { start: jest.fn(), stop: jest.fn() }
+    const detector = new GlideDetector(screen, () => true, reveal, lifecycle)
 
     detector.start()
     jest.advanceTimersByTime(50)
 
     expect(reveal).toHaveBeenCalledTimes(1)
+    expect(lifecycle.start).toHaveBeenCalledTimes(1)
+    expect(lifecycle.stop).toHaveBeenCalledTimes(1)
     expect(jest.getTimerCount()).toBe(0)
   })
 
@@ -85,15 +88,19 @@ describe('GlideDetector', () => {
   it('does not create duplicate polling loops', () => {
     const screen = createScreen({ x: 100, y: 100 })
     const reveal = jest.fn(() => false)
-    const detector = new GlideDetector(screen, () => true, reveal)
+    const lifecycle = { start: jest.fn(), stop: jest.fn() }
+    const detector = new GlideDetector(screen, () => true, reveal, lifecycle)
 
     detector.start()
     detector.start()
 
+    expect(lifecycle.start).toHaveBeenCalledTimes(1)
     expect(jest.getTimerCount()).toBe(1)
     jest.advanceTimersByTime(50)
     expect(jest.getTimerCount()).toBe(1)
     detector.stop()
+    detector.stop()
+    expect(lifecycle.stop).toHaveBeenCalledTimes(1)
   })
 
   it('stops polling when Glide is disabled', () => {

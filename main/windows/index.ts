@@ -17,6 +17,7 @@ import FrameManager from './frames'
 import { installCloseToTray } from './closeToTray'
 import { createWindow } from './window'
 import { GlideDetector } from './glide'
+import { GlideSentinel } from './glideSentinel'
 import { SystemTray, SystemTrayEventHandlers } from './systemTray'
 import { registerShortcut } from '../keyboardShortcuts'
 import { Shortcut } from '../store/state/types/shortcuts'
@@ -50,6 +51,7 @@ let dash: Dash
 let onboard: Onboard
 let notify: Notify
 let glideDetector: GlideDetector | undefined
+let glideSentinel: GlideSentinel | undefined
 let glide = false
 
 const app = {
@@ -185,9 +187,13 @@ function initTrayWindow() {
   })
 
   setTimeout(() => {
-    screen.on('display-added', () => tray.hide())
-    screen.on('display-removed', () => tray.hide())
-    screen.on('display-metrics-changed', () => tray.hide())
+    const handleDisplayChange = () => {
+      glideSentinel?.refresh()
+      tray.hide()
+    }
+    screen.on('display-added', handleDisplayChange)
+    screen.on('display-removed', handleDisplayChange)
+    screen.on('display-metrics-changed', handleDisplayChange)
   }, 30 * 1000)
 }
 
@@ -684,6 +690,7 @@ const init = () => {
 
   tray = new Tray()
   dash = new Dash()
+  glideSentinel = new GlideSentinel(screen)
   glideDetector = new GlideDetector(
     screen,
     () => store('main.reveal'),
@@ -694,7 +701,8 @@ const init = () => {
 
       glide = false
       return false
-    }
+    },
+    glideSentinel
   )
 
   if (!store('main.mute.onboardingWindow')) {

@@ -11,6 +11,10 @@ are not configured for this fork.
 Dependency locking makes installation deterministic, but byte-for-byte
 reproducible artifacts have not yet been demonstrated.
 
+Glide edge reveal is supported on X11 sessions. Native Wayland is not qualified
+for Glide because Electron does not support cursor-point polling there; use the
+tray menu or summon shortcut instead.
+
 ## Prepare
 
 1. Choose a clean, reviewed commit on the default branch. Never release from a
