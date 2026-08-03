@@ -14,6 +14,7 @@ import { hexToInt } from '../../resources/utils'
 import store from '../store'
 import { requireStoreAction } from '../store/action'
 import FrameManager from './frames'
+import { installCloseToTray } from './closeToTray'
 import { createWindow } from './window'
 import { SystemTray, SystemTrayEventHandlers } from './systemTray'
 import { registerShortcut } from '../keyboardShortcuts'
@@ -153,6 +154,8 @@ function initTrayWindow() {
     trayOpts.type = 'panel'
   }
   const trayWindow = initWindow('tray', trayOpts)
+
+  installCloseToTray(electronApp, trayWindow, () => app.hide())
 
   trayWindow.on('closed', () => {
     if (windows.tray === trayWindow) delete windows.tray
