@@ -29,6 +29,7 @@ import walletCallEvidenceRuntime from './provider/walletCallEvidenceRuntime'
 import { handleRenderer, onRenderer } from './ipc/renderer'
 import { isPathInsideRoot } from './security/fileAccess'
 import { assertSandboxEnabled } from './security/sandbox'
+import yearn from './yearn'
 
 const isDev = process.env.NODE_ENV === 'development'
 assertSandboxEnabled(app.commandLine)
@@ -229,6 +230,8 @@ handleRenderer('tray:getTokenDetails', async (e, contractAddress, chainId) => {
     return {}
   }
 })
+
+handleRenderer('yearn:getCatalog', async (e, options) => yearn.getCatalog(options))
 
 onRenderer('tray:addToken', (e, token, req) => {
   if (token) {

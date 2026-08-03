@@ -42,7 +42,11 @@ export const requestEventChannels = new Set([
   'tray:updateRestart'
 ])
 
-export const requestInvokeChannels = new Set(['tray:addChain', 'tray:getTokenDetails'])
+export const requestInvokeChannels = new Set([
+  'tray:addChain',
+  'tray:getTokenDetails',
+  'yearn:getCatalog'
+])
 export const responseEventChannels = new Set(['action', 'flex'])
 const methods = new Set(['event', 'invoke', 'rpc'])
 

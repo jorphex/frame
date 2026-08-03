@@ -22,6 +22,7 @@ export type { Gas, GasFees } from './types/gas'
 export type { Rate } from './types/rate'
 export type { ColorwayPalette } from './types/colors'
 export type { WalletCallBatch, WalletCallBatches, WalletCallReceipt } from './types/walletCallBatch'
+export type { YearnState } from './types/yearn'
 
 const StateSchema = z
   .object({
@@ -102,7 +103,7 @@ const main = (path: string, def: unknown) => {
 }
 
 const mainState = {
-  _version: main('_version', 46),
+  _version: main('_version', 47),
   instanceId: main('instanceId', generateUuid()),
   colorway: main('colorway', 'dark'),
   colorwayPrimary: {
@@ -173,6 +174,7 @@ const mainState = {
     dontRemind: main('updater.dontRemind', [])
   },
   walletCallBatches: main('walletCallBatches', {}),
+  yearn: main('yearn', { catalogCache: null }),
   networks: main('networks', {
     ethereum: {
       1: {
@@ -337,6 +339,41 @@ const mainState = {
             type: '',
             network: '',
             custom: ''
+          },
+          secondary: {
+            on: false,
+            current: 'custom',
+            status: 'loading',
+            connected: false,
+            type: '',
+            network: '',
+            custom: ''
+          }
+        },
+        on: false
+      },
+      747474: {
+        id: 747474,
+        type: 'ethereum',
+        layer: 'rollup',
+        isTestnet: false,
+        name: 'Katana',
+        explorer: 'https://katanascan.com',
+        gas: {
+          price: {
+            selected: 'standard',
+            levels: { slow: '', standard: '', fast: '', asap: '', custom: '' }
+          }
+        },
+        connection: {
+          primary: {
+            on: true,
+            current: 'custom',
+            status: 'loading',
+            connected: false,
+            type: '',
+            network: '',
+            custom: 'https://rpc.katana.network/'
           },
           secondary: {
             on: false,
@@ -603,6 +640,28 @@ const mainState = {
         },
         icon: 'https://frame.nyc3.cdn.digitaloceanspaces.com/baseiconcolor.png',
         primaryColor: 'accent8' // Base
+      },
+      747474: {
+        blockHeight: 0,
+        gas: {
+          fees: {},
+          price: {
+            selected: 'standard',
+            levels: { slow: '', standard: '', fast: '', asap: '', custom: '' }
+          }
+        },
+        nativeCurrency: {
+          symbol: 'ETH',
+          usd: {
+            price: 0,
+            change24hr: 0
+          },
+          icon: '',
+          name: 'Ether',
+          decimals: 18
+        },
+        icon: '',
+        primaryColor: 'accent3' // Katana
       },
       42161: {
         blockHeight: 0,

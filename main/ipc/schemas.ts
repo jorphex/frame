@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { BridgeMethod } from '../../resources/bridge/roles'
 import { ShortcutSchema as StoredShortcutSchema } from '../store/state/types/shortcuts'
+import { YearnCatalogResultSchema } from '../../resources/domain/yearn'
 
 const MAX_TEXT = 4096
 const MAX_URL = 8192
@@ -265,11 +266,13 @@ const eventSchemas: Record<string, z.ZodType> = {
 }
 
 const invokeSchemas = {
+  'yearn:getCatalog': z.tuple([z.object({ force: z.boolean() }).strict()]),
   'tray:addChain': z.tuple([AddChainSchema, AddChainRequestReferenceSchema.nullish()]),
   'tray:getTokenDetails': z.tuple([AddressSchema, ChainNumberSchema])
 } satisfies Record<string, z.ZodType>
 
 const invokeResultSchemas = {
+  'yearn:getCatalog': YearnCatalogResultSchema,
   'tray:addChain': z.union([
     z.object({ success: z.literal(true) }).strict(),
     z.object({ success: z.literal(false), error: z.string().min(1).max(1024).optional() }).strict()

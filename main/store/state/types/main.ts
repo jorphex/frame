@@ -10,6 +10,7 @@ import { OriginSchema } from './origin'
 import { PermissionSchema } from './permission'
 import { ShortcutSchema } from './shortcuts'
 import { WalletCallBatchesSchema } from './walletCallBatch'
+import { YearnStateSchema } from './yearn'
 
 const ShortcutsSchema = z.object({
   summon: ShortcutSchema
@@ -71,6 +72,7 @@ export const MainSchema = z.object({
   shortcuts: ShortcutsSchema,
   updater: UpdaterPreferencesSchema,
   walletCallBatches: WalletCallBatchesSchema,
+  yearn: YearnStateSchema,
   ...PreferencesSchema
 })
 

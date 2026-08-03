@@ -39,6 +39,67 @@ test('does not coerce chain or token identifiers', () => {
   expect(parseRendererIpcArgs('event', 'tray:removeToken', [{ address, chainId: '1' }]).success).toBe(false)
 })
 
+test('requires explicit Yearn catalog options and validates returned metadata', () => {
+  expect(parse('invoke', 'yearn:getCatalog', [{ force: false }])).toEqual([{ force: false }])
+  expect(parseRendererIpcArgs('invoke', 'yearn:getCatalog', [{}]).success).toBe(false)
+  expect(
+    parseRendererIpcArgs('invoke', 'yearn:getCatalog', [{ force: false, endpoint: 'https://evil.test' }])
+      .success
+  ).toBe(false)
+
+  const unavailableVault = {
+    id: 'ethereum-yvusd',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address,
+    kind: 'yvUSD',
+    name: 'yvUSD',
+    symbol: 'N/A',
+    description: 'Unavailable during this test.',
+    asset: { address, name: 'Unavailable', symbol: 'N/A', decimals: 18 },
+    decimals: 18,
+    tvlUsd: 0,
+    apy: { value: null, label: 'Unavailable', source: 'unavailable' },
+    riskLevel: null,
+    riskLabel: 'Unrated',
+    performanceFeeBps: 0,
+    managementFeeBps: 0,
+    inceptionTime: null,
+    yearnUrl: `https://yearn.fi/vaults/1/${address}`,
+    status: 'unavailable',
+    statusReason: 'Kong is unavailable',
+    variants: [
+      {
+        id: 'unlocked',
+        address,
+        name: 'yvUSD',
+        symbol: 'N/A',
+        asset: { address, name: 'Unavailable', symbol: 'N/A', decimals: 18 },
+        decimals: 18,
+        tvlUsd: 0,
+        apy: { value: null, label: 'Unavailable', source: 'unavailable' }
+      }
+    ]
+  }
+
+  expect(
+    parseRendererInvokeResult('yearn:getCatalog', {
+      status: 'unavailable',
+      fetchedAt: null,
+      vaults: [unavailableVault],
+      errors: [{ chainId: 1, message: 'Kong is unavailable' }]
+    }).success
+  ).toBe(true)
+  expect(
+    parseRendererInvokeResult('yearn:getCatalog', {
+      status: 'unavailable',
+      fetchedAt: null,
+      vaults: [{ ...unavailableVault, chainId: 10 }],
+      errors: []
+    }).success
+  ).toBe(false)
+})
+
 test('keeps only trusted request reference fields', () => {
   expect(
     parse('event', 'tray:rejectRequest', [

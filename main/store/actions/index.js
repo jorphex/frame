@@ -121,6 +121,9 @@ module.exports = {
   setWalletCallBatches: (u, batches) => {
     u('main.walletCallBatches', () => batches)
   },
+  setYearnCatalogCache: (u, catalogCache) => {
+    u('main.yearn.catalogCache', () => catalogCache)
+  },
   setAccount: (u, account) => {
     u('selected.current', () => account.id)
     u('selected.minimized', () => false)
