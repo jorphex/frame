@@ -440,7 +440,8 @@ class FrameAccount {
         const actions = await reveal.recog(calldata, {
           contractAddress: to,
           chainId: parseInt(chainId, 16),
-          account: this.address
+          account: this.address,
+          ...(req.data.value !== undefined && { value: req.data.value })
         })
 
         const knownTxRequest = this.requests[req.handlerId] as TransactionRequest

@@ -852,7 +852,12 @@ export class Provider extends EventEmitter {
     }
   }
 
-  sendTransaction(payload: RPC.SendTransaction.Request, res: RPCRequestCallback, targetChain: Chain) {
+  sendTransaction(
+    payload: RPC.SendTransaction.Request,
+    res: RPCRequestCallback,
+    targetChain: Chain,
+    onQueued?: (handlerId: string) => void
+  ) {
     try {
       const txParams = payload.params[0]
       if (!txParams) {
@@ -952,6 +957,7 @@ export class Provider extends EventEmitter {
           txMetadata.approvals.forEach((approval) => {
             currentAccount?.addRequiredApproval(req, approval.type, approval.data)
           })
+          onQueued?.(handlerId)
         }
       })
     } catch (e) {

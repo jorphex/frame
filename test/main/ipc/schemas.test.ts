@@ -116,6 +116,72 @@ test('bounds Yearn position requests and results', () => {
   ).toBe(true)
 })
 
+test('validates Yearn workflow commands and returned persistent state', () => {
+  const workflowId = '00000000-0000-4000-8000-000000000001'
+  const stepId = '00000000-0000-4000-8000-000000000002'
+  const request = {
+    vaultId: 'base-yvusdc-h',
+    action: 'deposit',
+    variant: 'direct',
+    amount: '12.5',
+    max: false
+  }
+  const workflow = {
+    id: workflowId,
+    account: address,
+    vaultId: request.vaultId,
+    chainId: 8453,
+    action: request.action,
+    variant: request.variant,
+    amountRaw: '12500000',
+    displayAmount: request.amount,
+    symbol: 'USDC',
+    max: false,
+    maxLossBps: 0,
+    status: 'active',
+    steps: [
+      {
+        id: stepId,
+        kind: 'deposit',
+        label: 'Deposit into Yearn',
+        target: address,
+        data: '0x12345678',
+        amountRaw: '12500000',
+        status: 'awaiting-review'
+      }
+    ],
+    currentStep: 0,
+    createdAt: 1,
+    updatedAt: 2
+  }
+
+  expect(parse('invoke', 'yearn:startWorkflow', [request])).toEqual([request])
+  expect(
+    parseRendererIpcArgs('invoke', 'yearn:startWorkflow', [{ ...request, target: address }]).success
+  ).toBe(false)
+  expect(
+    parseRendererIpcArgs('invoke', 'yearn:startWorkflow', [{ ...request, amount: '1e18' }]).success
+  ).toBe(false)
+  expect(parse('invoke', 'yearn:resumeWorkflow', [{ id: workflowId }])).toEqual([{ id: workflowId }])
+  expect(parseRendererIpcArgs('invoke', 'yearn:resumeWorkflow', [{ id: 'not-a-uuid' }]).success).toBe(false)
+
+  expect(parseRendererInvokeResult('yearn:startWorkflow', { success: true, workflow }).success).toBe(true)
+  expect(
+    parseRendererInvokeResult('yearn:startWorkflow', {
+      success: true,
+      workflow: { ...workflow, maxLossBps: 1 }
+    }).success
+  ).toBe(false)
+  expect(
+    parseRendererInvokeResult('yearn:getWorkflows', {
+      workflows: Array.from({ length: 65 }, (_, index) => ({
+        ...workflow,
+        id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
+      }))
+    }).success
+  ).toBe(false)
+})
+
 test('keeps only trusted request reference fields', () => {
   expect(
     parse('event', 'tray:rejectRequest', [

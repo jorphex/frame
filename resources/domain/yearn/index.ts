@@ -103,7 +103,20 @@ export const YearnPositionVariantSchema = z
     assetSymbol: z.string().min(1).max(32),
     assetDecimals: z.number().int().min(0).max(255),
     assetsRaw: BaseUnitAmountSchema.nullable(),
-    assets: z.string().min(1).max(96).nullable()
+    assets: z.string().min(1).max(96).nullable(),
+    cooldown: z
+      .object({
+        status: z.enum(['none', 'cooling-down', 'withdrawal-window', 'expired']),
+        sharesRaw: BaseUnitAmountSchema,
+        shares: z.string().min(1).max(96),
+        cooldownEnd: z.number().int().nonnegative(),
+        windowEnd: z.number().int().nonnegative(),
+        cooldownDuration: z.number().int().nonnegative(),
+        withdrawalWindow: z.number().int().nonnegative()
+      })
+      .strict()
+      .nullable()
+      .optional()
   })
   .strict()
 
@@ -168,6 +181,7 @@ export const YearnWorkflowStepSchema = z
     label: z.string().min(1).max(96),
     target: YearnAddressSchema,
     data: z.string().regex(/^0x[0-9a-fA-F]{8}(?:[0-9a-fA-F]{2}){0,16380}$/),
+    amountRaw: BaseUnitAmountSchema,
     status: z.enum(['pending', 'ready', 'awaiting-review', 'submitted', 'confirmed', 'error']),
     txHash: z
       .string()
@@ -182,6 +196,7 @@ export const YearnWorkflowStepSchema = z
 export const YearnWorkflowSchema = z
   .object({
     id: z.string().uuid(),
+    parentWorkflowId: z.string().uuid().optional(),
     account: YearnAddressSchema,
     vaultId: z.string().min(1).max(128),
     chainId: YearnChainIdSchema,
@@ -215,6 +230,11 @@ export const YearnWorkflowRequestSchema = z
   })
   .strict()
 export const YearnWorkflowResultSchema = z.object({ workflow: YearnWorkflowSchema }).strict()
+export const YearnWorkflowIdRequestSchema = z.object({ id: z.string().uuid() }).strict()
+export const YearnWorkflowMutationResultSchema = z.discriminatedUnion('success', [
+  z.object({ success: z.literal(true), workflow: YearnWorkflowSchema }).strict(),
+  z.object({ success: z.literal(false), error: z.string().min(1).max(240) }).strict()
+])
 export const YearnWorkflowListResultSchema = z
   .object({ workflows: z.array(YearnWorkflowSchema).max(64) })
   .strict()
@@ -235,3 +255,5 @@ export type YearnWorkflowStep = z.infer<typeof YearnWorkflowStepSchema>
 export type YearnWorkflow = z.infer<typeof YearnWorkflowSchema>
 export type YearnWorkflows = z.infer<typeof YearnWorkflowsSchema>
 export type YearnWorkflowRequest = z.infer<typeof YearnWorkflowRequestSchema>
+export type YearnWorkflowIdRequest = z.infer<typeof YearnWorkflowIdRequestSchema>
+export type YearnWorkflowMutationResult = z.infer<typeof YearnWorkflowMutationResultSchema>

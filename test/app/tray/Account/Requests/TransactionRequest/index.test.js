@@ -13,7 +13,8 @@ import {
   getNativeBalanceChangesPresentation,
   getProxyImplementationChangesPresentation,
   getSimulationEffectsPresentation,
-  getSimulationPresentation
+  getSimulationPresentation,
+  YearnOverview
 } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew/overview'
 import {
   SimulationAllowance,
@@ -126,6 +127,22 @@ describe('confirm', () => {
 })
 
 describe('simulation review', () => {
+  it('renders a trusted Yearn action summary with its decoded amount', () => {
+    render(
+      <YearnOverview
+        action='withdraw'
+        vaultName='USDC Horizon yVault'
+        amountRaw='12500000'
+        symbol='USDC'
+        decimals={6}
+      />
+    )
+
+    expect(screen.getByText('Withdraw from Yearn')).toBeTruthy()
+    expect(screen.getByText(/12.5/)).toBeTruthy()
+    expect(screen.getByText(/USDC/)).toBeTruthy()
+  })
+
   it('handles watch-only compatibility failures as missing signers', () => {
     expect(isNoSignerError('No signer')).toBe(true)
     expect(isNoSignerError('Watch-only accounts cannot sign')).toBe(true)

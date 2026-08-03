@@ -233,6 +233,22 @@ handleRenderer('tray:getTokenDetails', async (e, contractAddress, chainId) => {
 
 handleRenderer('yearn:getCatalog', async (e, options) => yearn.getCatalog(options))
 handleRenderer('yearn:getPositions', async () => yearn.getPositions())
+handleRenderer('yearn:getWorkflows', async () => yearn.list())
+
+const yearnMutation = async (operation: () => Promise<unknown> | unknown) => {
+  try {
+    return { success: true as const, workflow: await operation() }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Yearn workflow failed'
+    log.warn('Yearn workflow operation failed', { reason: message.slice(0, 240) })
+    return { success: false as const, error: message.trim().slice(0, 240) || 'Yearn workflow failed' }
+  }
+}
+
+handleRenderer('yearn:startWorkflow', async (e, request) => yearnMutation(() => yearn.start(request)))
+handleRenderer('yearn:resumeWorkflow', async (e, request) => yearnMutation(() => yearn.resume(request)))
+handleRenderer('yearn:cancelWorkflow', async (e, request) => yearnMutation(() => yearn.cancel(request)))
+handleRenderer('yearn:revokeWorkflow', async (e, request) => yearnMutation(() => yearn.revoke(request)))
 
 onRenderer('tray:addToken', (e, token, req) => {
   if (token) {

@@ -19,7 +19,10 @@ import type {
 } from '../transaction/actions/erc20'
 import { updateErc20ApprovalAmount } from '../transaction/actions/erc20'
 import type { Action, DecodableContract, EntityType } from '../transaction/actions'
+import { recognizeYearnAction } from '../transaction/actions/yearn'
 import type { TransactionRequest } from '../accounts'
+import { YearnCatalogCacheSchema } from '../../resources/domain/yearn'
+import store from '../store'
 
 // TODO: fix generic typing here
 const knownContracts: DecodableContract<unknown>[] = [...ensContracts]
@@ -36,6 +39,7 @@ type RecognitionContext = {
   contractAddress: string
   chainId: number
   account?: string
+  value?: string
 }
 
 async function resolveEntityType(address: string, chainId: number): Promise<EntityType> {
@@ -190,9 +194,14 @@ const surface = {
     return undefined
   },
   recog: async (calldata: string, context: RecognitionContext) => {
+    const cache = YearnCatalogCacheSchema.safeParse(store('main.yearn.catalogCache'))
+    const yearnAction = recognizeYearnAction(calldata, {
+      ...context,
+      ...(cache.success && { vaults: cache.data.vaults })
+    })
     // Recognize actions from standard tx types
     const actions = ([] as Action<unknown>[]).concat(
-      (await recogErc20(context.contractAddress, context.chainId, calldata)) || [],
+      yearnAction || (await recogErc20(context.contractAddress, context.chainId, calldata)) || [],
       identifyKnownContractActions(calldata, context) || []
     )
 

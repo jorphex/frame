@@ -7,6 +7,11 @@ import { makeKongVaultList } from './fixtures'
 const account = '0x0000000000000000000000000000000000000001'
 const erc20 = new Interface(['function balanceOf(address account) view returns (uint256)'])
 const erc4626 = new Interface(['function convertToAssets(uint256 shares) view returns (uint256)'])
+const yvUsdLocked = new Interface([
+  'function cooldownDuration() view returns (uint256)',
+  'function withdrawalWindow() view returns (uint256)',
+  'function getCooldownStatus(address user) view returns (uint256 cooldownEnd,uint256 windowEnd,uint256 shares)'
+])
 
 const catalog = () => {
   const normalized = normalizeKongCatalog(makeKongVaultList(), 1234)
@@ -20,6 +25,15 @@ const reader = (balances: Record<string, bigint> = {}) =>
   jest.fn(async (_chainId: number, address: string, data: string) => {
     if (data.startsWith(erc20.getFunction('balanceOf').selector)) {
       return encodeUint(erc20, 'balanceOf', balances[address.toLowerCase()] || 0n)
+    }
+    if (data.startsWith(yvUsdLocked.getFunction('cooldownDuration').selector)) {
+      return encodeUint(yvUsdLocked, 'cooldownDuration', 14n * 24n * 60n * 60n)
+    }
+    if (data.startsWith(yvUsdLocked.getFunction('withdrawalWindow').selector)) {
+      return encodeUint(yvUsdLocked, 'withdrawalWindow', 5n * 24n * 60n * 60n)
+    }
+    if (data.startsWith(yvUsdLocked.getFunction('getCooldownStatus').selector)) {
+      return yvUsdLocked.encodeFunctionResult('getCooldownStatus', [0n, 0n, 0n])
     }
     const [shares] = erc4626.decodeFunctionData('convertToAssets', data)
     return encodeUint(erc4626, 'convertToAssets', shares * 2n)
@@ -116,6 +130,15 @@ describe('Yearn account positions', () => {
       if (data.startsWith(erc20.getFunction('balanceOf').selector)) {
         return encodeUint(erc20, 'balanceOf', 0n)
       }
+      if (data.startsWith(yvUsdLocked.getFunction('cooldownDuration').selector)) {
+        return encodeUint(yvUsdLocked, 'cooldownDuration', 100n)
+      }
+      if (data.startsWith(yvUsdLocked.getFunction('withdrawalWindow').selector)) {
+        return encodeUint(yvUsdLocked, 'withdrawalWindow', 50n)
+      }
+      if (data.startsWith(yvUsdLocked.getFunction('getCooldownStatus').selector)) {
+        return yvUsdLocked.encodeFunctionResult('getCooldownStatus', [0n, 0n, 0n])
+      }
       return encodeUint(erc4626, 'convertToAssets', 0n)
     })
     const getPositions = createYearnPositionsService({
@@ -128,5 +151,43 @@ describe('Yearn account positions', () => {
     const result = await getPositions()
     expect(result.chains.map(({ status }) => status)).toEqual(['ready', 'partial', 'ready'])
     expect(result.chains[1]?.positions[0]?.error).toBe('Base RPC failed')
+  })
+
+  it('reports locked yvUSD cooldown timing and treats escrowed shares as a position', async () => {
+    const readContract = reader()
+    readContract.mockImplementation(async (_chainId, _address, data) => {
+      if (data.startsWith(erc20.getFunction('balanceOf').selector)) {
+        return encodeUint(erc20, 'balanceOf', 0n)
+      }
+      if (data.startsWith(yvUsdLocked.getFunction('cooldownDuration').selector)) {
+        return encodeUint(yvUsdLocked, 'cooldownDuration', 120n)
+      }
+      if (data.startsWith(yvUsdLocked.getFunction('withdrawalWindow').selector)) {
+        return encodeUint(yvUsdLocked, 'withdrawalWindow', 60n)
+      }
+      if (data.startsWith(yvUsdLocked.getFunction('getCooldownStatus').selector)) {
+        return yvUsdLocked.encodeFunctionResult('getCooldownStatus', [1_100n, 1_160n, 2_000_000n])
+      }
+      return encodeUint(erc4626, 'convertToAssets', 0n)
+    })
+    const getPositions = createYearnPositionsService({
+      getCatalog: async () => catalog(),
+      getCurrentAccount: () => ({ address: account, lastSignerType: 'ring' }),
+      getNetworkStatus: (chainId) =>
+        chainId === 1 ? { on: true, connected: true } : { on: false, connected: false },
+      readContract,
+      now: () => 1_050_000
+    })
+
+    const position = (await getPositions()).chains[0]?.positions[0]
+    expect(position?.hasPosition).toBe(true)
+    expect(position?.variants.find(({ id }) => id === 'locked')?.cooldown).toMatchObject({
+      status: 'cooling-down',
+      sharesRaw: '2000000',
+      cooldownEnd: 1100,
+      windowEnd: 1160,
+      cooldownDuration: 120,
+      withdrawalWindow: 60
+    })
   })
 })

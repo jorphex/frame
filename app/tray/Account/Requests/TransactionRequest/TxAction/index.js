@@ -30,6 +30,62 @@ class TxSending extends React.Component {
     const { action } = this.props
     const [actionClass, actionType] = action.id.split(':')
 
+    if (actionClass === 'yearn') {
+      const { amountRaw, decimals, symbol, spender, vaultName, maxLossBps } = action.data || {}
+      const labels = {
+        approve: amountRaw === '0' ? 'Revoke Yearn Approval' : 'Exact Yearn Approval',
+        deposit: 'Yearn Vault Deposit',
+        withdraw: 'Yearn Vault Withdrawal',
+        stake: 'Stake Yearn Position',
+        'start-cooldown': 'Start Yearn Cooldown',
+        'cancel-cooldown': 'Cancel Yearn Cooldown'
+      }
+      const displayAmount =
+        amountRaw !== undefined && decimals !== undefined
+          ? `${formatDisplayDecimal(amountRaw, decimals)} ${symbol || ''}`.trim()
+          : amountRaw
+
+      return (
+        <ClusterBox
+          title={labels[actionType] || 'Yearn Vault Action'}
+          subtitle={vaultName}
+          animationSlot={this.props.i}
+        >
+          <Cluster>
+            {displayAmount ? (
+              <ClusterRow>
+                <ClusterValue>
+                  <div className='clusterFocus'>
+                    <div>{amountRaw === '0' ? 'Allowance' : 'Amount'}</div>
+                    <div className='clusterFocusHighlight'>{displayAmount}</div>
+                  </div>
+                </ClusterValue>
+              </ClusterRow>
+            ) : null}
+            <ClusterRow>
+              <ClusterValue>
+                <div className='clusterTag'>Allowlisted Yearn contract on {chainName}</div>
+              </ClusterValue>
+            </ClusterRow>
+            {spender ? (
+              <ClusterRow>
+                <ClusterValue>
+                  <div className='clusterTag'>Exact approval only: {spender}</div>
+                </ClusterValue>
+              </ClusterRow>
+            ) : null}
+            {maxLossBps === 0 ? (
+              <ClusterRow>
+                <ClusterValue>
+                  <div className='clusterTag'>Vault loss tolerance: 0%</div>
+                </ClusterValue>
+              </ClusterRow>
+            ) : null}
+          </Cluster>
+        </ClusterBox>
+      )
+    }
+
     if (actionClass === 'erc20') {
       if (actionType === 'transfer') {
         const {

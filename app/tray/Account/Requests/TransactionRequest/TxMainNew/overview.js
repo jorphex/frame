@@ -55,6 +55,33 @@ const SendOverview = ({ req, symbol, decimals, amount: ammt }) => {
   )
 }
 
+export const YearnOverview = ({ action, vaultName, amountRaw, symbol, decimals }) => {
+  const labels = {
+    approve: amountRaw === '0' ? 'Revoke Yearn approval' : 'Approve Yearn vault',
+    deposit: 'Deposit into Yearn',
+    withdraw: 'Withdraw from Yearn',
+    stake: 'Stake Yearn position',
+    'start-cooldown': 'Start Yearn cooldown',
+    'cancel-cooldown': 'Cancel Yearn cooldown'
+  }
+  return (
+    <div>
+      <span>{labels[action] || 'Yearn vault action'}</span>
+      {amountRaw !== undefined && decimals !== undefined ? (
+        <DisplayValue
+          type='ether'
+          value={amountRaw}
+          valueDataParams={{ decimals }}
+          currencySymbol={symbol || ''}
+          currencySymbolPosition='last'
+        />
+      ) : (
+        <span>{vaultName}</span>
+      )}
+    </div>
+  )
+}
+
 const DeployContractOverview = () => <div>Deploying Contract</div>
 const DataOverview = () => <div>Sending data</div>
 
@@ -66,6 +93,7 @@ const ContractCallOverview = ({ req }) => {
 const actionOverviews = {
   'erc20:transfer': SendOverview,
   'erc20:approve': ApproveOverview,
+  yearn: YearnOverview,
   ens: EnsOverview
 }
 
@@ -73,7 +101,7 @@ const renderActionOverview = (action, index) => {
   const { id = '', data } = action
   const key = id + index
   const [_actionClass, actionType] = id.split(':')
-  const ActionOverview = actionOverviews[id] || SimpleContractCallOverview
+  const ActionOverview = actionOverviews[id] || actionOverviews[_actionClass] || SimpleContractCallOverview
 
   return <ActionOverview key={key} type={actionType} {...{ ...data }} />
 }

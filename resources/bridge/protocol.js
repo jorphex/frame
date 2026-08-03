@@ -46,7 +46,12 @@ export const requestInvokeChannels = new Set([
   'tray:addChain',
   'tray:getTokenDetails',
   'yearn:getCatalog',
-  'yearn:getPositions'
+  'yearn:getPositions',
+  'yearn:getWorkflows',
+  'yearn:startWorkflow',
+  'yearn:resumeWorkflow',
+  'yearn:cancelWorkflow',
+  'yearn:revokeWorkflow'
 ])
 export const responseEventChannels = new Set(['action', 'flex'])
 const methods = new Set(['event', 'invoke', 'rpc'])

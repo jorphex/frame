@@ -269,6 +269,14 @@
   gap 5px
   margin 8px 0
 
+.earnVaultFacts
+  display flex
+  flex-wrap wrap
+  gap 5px 12px
+  padding 4px 10px 8px
+  color var(--outerspace06)
+  font-size 8px
+
 .earnMetric
   min-height 70px
   padding 12px 10px
@@ -308,9 +316,14 @@
   gap 6px
 
 .earnVariant
+  border 0
   padding 12px
+  color var(--outerspace)
   border-radius 15px
   background var(--ghostB)
+  font-family 'MainFont'
+  text-align left
+  cursor pointer
 
   strong, span
     display block
@@ -329,6 +342,10 @@
     font-size 9px
     line-height 14px
 
+.earnVariantSelected
+  box-shadow inset 0 0 0 2px var(--outerspace04)
+  background var(--ghostC)
+
 .earnProductNote
   margin-top 10px
   padding 14px 16px
@@ -343,6 +360,13 @@
   padding 7px 0
   border-top 1px solid var(--ghostC)
   font-size 10px
+
+  em
+    margin-left 8px
+    color var(--outerspace06)
+    font-size 8px
+    font-style normal
+    text-transform uppercase
 
 .earnDetailsNotice
   margin-top 12px
@@ -369,6 +393,231 @@
   button:disabled
     opacity .35
     cursor default
+
+.earnSecondaryActions, .earnWorkflowActions
+  display flex
+  gap 6px
+  margin-top 7px
+
+  button
+    flex 1
+    min-height 36px
+    border 0
+    border-radius 14px
+    color var(--outerspace)
+    background var(--ghostB)
+    font-family 'MainFont'
+    font-size 9px
+    cursor pointer
+
+  button:disabled
+    opacity .35
+    cursor default
+
+.earnActionForm
+  margin-top 12px
+  padding 17px
+  border-radius 22px
+  background var(--ghostA)
+  box-shadow 0 3px 7px var(--ghostY)
+
+  > p
+    margin 10px 0 15px
+    color var(--outerspace07)
+    font-size 10px
+    line-height 16px
+
+.earnActionHead, .earnWorkflowHead
+  display flex
+  align-items center
+  justify-content space-between
+
+.earnActionHead
+  span
+    color var(--outerspace06)
+    font-size 8px
+    letter-spacing 1px
+    text-transform uppercase
+
+  h2
+    margin 3px 0 0
+    font-size 18px
+    font-weight 400
+
+  button
+    width 28px
+    height 28px
+    border 0
+    border-radius 50%
+    color var(--outerspace)
+    background var(--ghostC)
+    cursor pointer
+
+.earnAmountField
+  display block
+
+  > label
+    display block
+    margin 0 0 6px
+    color var(--outerspace06)
+    font-size 9px
+    letter-spacing .7px
+    text-transform uppercase
+
+  > div
+    display flex
+    overflow hidden
+    border-radius 16px
+    background var(--ghostB)
+
+  input
+    width 100%
+    min-width 0
+    height 46px
+    border 0
+    padding 0 14px
+    color var(--outerspace)
+    outline 0
+    background transparent
+    font-family 'FiraCode'
+    font-size 15px
+
+  button
+    width 58px
+    border 0
+    color var(--outerspace07)
+    background transparent
+    font-family 'MainFont'
+    font-size 10px
+    cursor pointer
+
+  button.active
+    color var(--outerspace)
+    background var(--ghostC)
+
+.earnAvailable
+  margin 7px 3px 0
+  color var(--outerspace06)
+  font-size 9px
+
+.earnActionSafety
+  margin 14px 0 10px
+  padding 11px 12px
+  border-left 3px solid var(--moon)
+  border-radius 12px
+  background var(--ghostB)
+  font-size 9px
+  line-height 14px
+
+.earnPrimaryAction
+  width 100%
+  height 46px
+  border 0
+  border-bottom 2px solid var(--ghostZ)
+  border-radius 16px
+  color var(--outerspace)
+  background var(--ghostC)
+  font-family 'MainFont'
+  font-size 11px
+  font-weight 500
+  cursor pointer
+
+.earnPrimaryAction:disabled
+  opacity .4
+  cursor default
+
+.earnWorkflows
+  margin-top 15px
+
+  > h2
+    margin 0 10px 8px
+    color var(--outerspace06)
+    font-size 10px
+    letter-spacing 1px
+    text-transform uppercase
+
+.earnWorkflow
+  margin-bottom 7px
+  padding 15px
+  border-radius 19px
+  background var(--ghostA)
+
+  ol
+    margin 12px 0 0
+    padding 0
+    list-style none
+
+  li
+    display flex
+    align-items center
+    gap 9px
+    padding 7px 0
+    border-top 1px solid var(--ghostC)
+
+    > span
+      display flex
+      width 20px
+      height 20px
+      align-items center
+      justify-content center
+      border-radius 50%
+      background var(--ghostB)
+      font-family 'FiraCode'
+      font-size 8px
+
+    div
+      display flex
+      flex 1
+      flex-wrap wrap
+      justify-content space-between
+      gap 8px
+
+    strong, em
+      font-size 9px
+
+    em
+      color var(--outerspace06)
+      font-style normal
+      text-transform uppercase
+
+    .earnReceiptLink
+      flex-basis 100%
+      margin 0
+      padding 0
+      border 0
+      color var(--outerspace07)
+      background transparent
+      font-family 'MainFont'
+      font-size 8px
+      text-align left
+      text-decoration underline
+      cursor pointer
+
+  li.confirmed > span
+    background var(--good)
+
+  li.error > span
+    background var(--bad)
+
+.earnWorkflowHead
+  strong
+    font-size 12px
+
+  span
+    color var(--outerspace06)
+    font-size 8px
+    text-transform uppercase
+
+.earnWorkflowAmount
+  margin-top 5px
+  font-family 'FiraCode'
+  font-size 10px
+
+.earnWorkflowError
+  margin-top 8px
+  color var(--bad)
+  font-size 9px
+  line-height 14px
 
 .earnYearnLink
   display block

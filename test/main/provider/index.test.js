@@ -2305,6 +2305,31 @@ describe('#send', () => {
       }, '0x89')
     })
 
+    it('reports the admitted handler id to trusted internal callers', (done) => {
+      const payload = {
+        jsonrpc: '2.0',
+        id: 8,
+        method: 'eth_sendTransaction',
+        params: [tx],
+        _origin: '8073729a-5e59-53b7-9e69-5d9bcff94087'
+      }
+
+      provider.sendTransaction(
+        payload,
+        () => {},
+        { type: 'ethereum', id: 1 },
+        (handlerId) => {
+          try {
+            expect(validateUUID(handlerId)).toBe(true)
+            expect(accountRequests[0].handlerId).toBe(handlerId)
+            done()
+          } catch (error) {
+            done(error)
+          }
+        }
+      )
+    })
+
     it('maintains transaction chain id if no target chain provided with the request', (done) => {
       tx.chainId = '0x89'
 

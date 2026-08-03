@@ -1,9 +1,10 @@
 import type { ActionType as Erc20Actions } from './erc20'
 import type { ActionType as EnsActions } from './ens'
+import type { ActionType as YearnActions } from './yearn'
 import type { AccountRequest } from '../../accounts'
 
 export type EntityType = 'unknown' | 'contract' | 'external'
-export type ActionType = Erc20Actions | EnsActions
+export type ActionType = Erc20Actions | EnsActions | YearnActions
 
 export type Action<T> = {
   id: ActionType
