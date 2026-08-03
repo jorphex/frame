@@ -19,7 +19,7 @@ tray menu or summon shortcut instead.
 
 1. Choose a clean, reviewed commit on the default branch. Never release from a
    dirty worktree. For a preview release, dispatch the workflow from the exact
-   reviewed `modernization-preview` commit.
+   reviewed `main` commit.
 2. Set a unique SemVer-compatible version in `package.json` and regenerate
    `package-lock.json` using the pinned Node/npm toolchain. Do not reuse a tag from
    a published release.
@@ -74,10 +74,7 @@ records the workflow's exact source SHA as the draft target. GitHub creates a
 missing tag from that target when the draft is published.
 
 Pull-request workflows have read-only repository access and cannot publish.
-CodeQL runs on pushes to `modernization-preview`; GitHub will not use this
-revision for scheduled runs until the workflow file is also present on the
-repository default branch. Until then, run CodeQL manually against the reviewed
-preview commit before release.
+CodeQL runs on pushes to `main` and through its weekly scheduled scan.
 
 ## Review The Draft
 

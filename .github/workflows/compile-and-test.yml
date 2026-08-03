@@ -3,8 +3,7 @@ name: Quality and package checks
 on:
   push:
     branches:
-      - safe7-workable
-      - modernization-preview
+      - main
   pull_request:
   workflow_dispatch:
 
