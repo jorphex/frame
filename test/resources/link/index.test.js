@@ -1,0 +1,47 @@
+describe('renderer link bridge', () => {
+  let link
+  let messageListener
+  let rendererWindow
+
+  beforeEach(() => {
+    rendererWindow = {
+      addEventListener: jest.fn((name, listener) => {
+        if (name === 'message') messageListener = listener
+      }),
+      location: { protocol: 'file:', origin: 'null' },
+      postMessage: jest.fn()
+    }
+    globalThis.window = rendererWindow
+
+    jest.resetModules()
+    jest.isolateModules(() => {
+      link = jest.requireActual('../../../resources/link').default
+    })
+  })
+
+  afterEach(() => {
+    delete globalThis.window
+  })
+
+  test('completes a packaged file-origin RPC round trip', () => {
+    const callback = jest.fn()
+    link.rpc('getState', callback)
+
+    const [requestValue, targetOrigin] = rendererWindow.postMessage.mock.calls[0]
+    const request = JSON.parse(requestValue)
+    expect(request).toMatchObject({ source: 'tray:link', method: 'rpc', args: ['getState'] })
+    expect(targetOrigin).toBe('*')
+
+    const response = JSON.stringify({
+      source: 'bridge:link',
+      method: 'rpc',
+      id: request.id,
+      args: [null, { ready: true }]
+    })
+    messageListener({ data: response, source: rendererWindow, origin: 'https://example.com' })
+    expect(callback).not.toHaveBeenCalled()
+
+    messageListener({ data: response, source: rendererWindow, origin: 'null' })
+    expect(callback).toHaveBeenCalledWith(null, { ready: true })
+  })
+})

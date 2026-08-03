@@ -51,7 +51,7 @@ describe('preload renderer bridge', () => {
   })
 
   const dispatch = (data, overrides = {}) =>
-    listeners.message({ data, source: rendererWindow, origin: 'file://', ...overrides })
+    listeners.message({ data, source: rendererWindow, origin: 'null', ...overrides })
 
   test('ignores malformed, cross-window, and wrong-origin messages without throwing', () => {
     expect(() => dispatch('{')).not.toThrow()
@@ -63,6 +63,17 @@ describe('preload renderer bridge', () => {
         origin: 'https://example.com'
       })
     ).not.toThrow()
+
+    expect(mockIpcRenderer.send).not.toHaveBeenCalled()
+  })
+
+  test('fails closed if a production renderer loads from a non-file origin', () => {
+    rendererWindow.location = { protocol: 'https:', origin: 'https://example.com' }
+    loadBridge()
+
+    dispatch(JSON.stringify({ source: LINK_SOURCE, method: 'event', args: ['tray:ready'] }), {
+      origin: 'https://example.com'
+    })
 
     expect(mockIpcRenderer.send).not.toHaveBeenCalled()
   })

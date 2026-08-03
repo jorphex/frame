@@ -196,12 +196,10 @@ describe('renderer bridge protocol', () => {
 
   test('requires the current window and an allowed origin', () => {
     const currentWindow = {}
-    const origins = ['file://', 'http://localhost:1234']
+    const origins = ['null', 'http://localhost:1234']
 
-    expect(isTrustedBridgeEvent({ source: currentWindow, origin: 'file://' }, currentWindow, origins)).toBe(
-      true
-    )
-    expect(isTrustedBridgeEvent({ source: {}, origin: 'file://' }, currentWindow, origins)).toBe(false)
+    expect(isTrustedBridgeEvent({ source: currentWindow, origin: 'null' }, currentWindow, origins)).toBe(true)
+    expect(isTrustedBridgeEvent({ source: {}, origin: 'null' }, currentWindow, origins)).toBe(false)
     expect(
       isTrustedBridgeEvent({ source: currentWindow, origin: 'https://example.com' }, currentWindow, origins)
     ).toBe(false)

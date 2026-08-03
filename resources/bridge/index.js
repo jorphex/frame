@@ -10,9 +10,12 @@ import {
   isTrustedBridgeEvent
 } from './protocol'
 
-const safeOrigins = ['file://'].concat(
-  process.env.NODE_ENV === 'development' ? ['http://localhost:1234'] : []
-)
+const safeOrigins =
+  window.location.protocol === 'file:'
+    ? ['null']
+    : process.env.NODE_ENV === 'development'
+      ? ['http://localhost:1234']
+      : []
 const targetOrigin = getRendererTargetOrigin(window.location)
 const rendererRole = getRendererRole(process.argv)
 const postToRenderer = (message) => window.postMessage(encodeBridgeMessage(message), targetOrigin)
