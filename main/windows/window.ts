@@ -110,7 +110,7 @@ export function createViewInstance(
       scrollBounce: true,
       navigateOnDragDrop: false,
       disableBlinkFeatures: 'Auxclick',
-      preload: path.resolve('./main/windows/viewPreload.js'),
+      preload: path.resolve(__dirname, 'viewPreload.js'),
       partition: `persist:${ens}`
     }
   })

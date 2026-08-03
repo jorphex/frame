@@ -76,6 +76,7 @@ await Promise.all(nativeModules.map((modulePath) => access(modulePath)))
 const packagedExecutable = path.join(dist, 'linux-unpacked', 'frame')
 const packagedModuleProbe = `
 const { createRequire } = require('node:module')
+const fs = require('node:fs')
 const path = require('node:path')
 const modules = ['node-hid', 'usb', '@trezor/transport/node_modules/usb']
 const ledgerPackages = [
@@ -145,6 +146,7 @@ const modernModules = require(path.join(appRoot, 'compiled/main/nebula/modules.j
 const fetchUtils = require(path.join(appRoot, 'compiled/resources/utils/fetch.js'))
 const signerCrypto = require(path.join(appRoot, 'compiled/main/signers/hot/crypto.js'))
 const sandbox = require(path.join(appRoot, 'compiled/main/security/sandbox.js'))
+const { nodeWorkerEnvironment } = require(path.join(appRoot, 'compiled/main/worker/environment.js'))
 const buildIdentity = require(path.join(appRoot, 'compiled/main/build-identity.json'))
 const packagedMetadata = require(path.join(appRoot, 'package.json'))
 const { Wallet } = require(path.join(appModules, '@ethereumjs/wallet'))
@@ -163,6 +165,23 @@ try {
 const zodPartialRecord = z.partialRecord(z.enum(['existing', 'future']), z.boolean()).parse({ existing: true })
 const zodPrefault = z.object({ enabled: z.boolean().default(true) }).prefault({}).parse(undefined)
 const zodUnsafeInteger = z.number().int().safeParse(Number.MAX_SAFE_INTEGER + 1)
+const workerEnvironment = nodeWorkerEnvironment({
+  ELECTRON_RUN_AS_NODE: '0',
+  FRAME_PACKAGE_WORKER_PROBE: 'worker'
+})
+const rendererBundles = ['tray', 'dash', 'dapp', 'onboard', 'notify']
+const rendererBundleNoncesValid = rendererBundles.every((renderer) => {
+  const html = fs.readFileSync(path.join(appRoot, 'bundle', renderer + '.html'), 'utf8')
+  const nonceMatches = [...html.matchAll(/'nonce-([^']+)'/g)]
+  const nonces = new Set(nonceMatches.map((match) => match[1]))
+  if (nonces.size !== 1) return false
+  const [nonce] = nonces
+  const scripts = [...html.matchAll(/<script\\b[^>]*>/gi)].map(([tag]) => tag)
+  return scripts.length > 0 && scripts.every((tag) => {
+    const match = tag.match(/\\bnonce\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))/i)
+    return match && (match[1] || match[2] || match[3]) === nonce
+  })
+})
 let noSandboxRejected = false
 try {
   sandbox.assertSandboxEnabled({ hasSwitch: (name) => name === 'no-sandbox' }, 'production')
@@ -179,6 +198,12 @@ Promise.all([
     desktopName: packagedMetadata.desktopName,
     buildIdentity,
     noSandboxRejected,
+    rendererBundleNoncesValid,
+    workerEnvironment: {
+      inheritedPath: workerEnvironment.PATH === process.env.PATH,
+      override: workerEnvironment.FRAME_PACKAGE_WORKER_PROBE,
+      runAsNode: workerEnvironment.ELECTRON_RUN_AS_NODE
+    },
     modules,
     ledgerApis: ledgerModules.map((module) => typeof module.default),
     ledgerVersions,
@@ -291,6 +316,12 @@ assert.equal(probeResult.electron, packageJson.devDependencies.electron)
 assert.equal(probeResult.desktopName, packageJson.desktopName)
 assertReleaseBuildIdentity(probeResult.buildIdentity, sourceIdentity, packageJson.version)
 assert.equal(probeResult.noSandboxRejected, true)
+assert.equal(probeResult.rendererBundleNoncesValid, true)
+assert.deepEqual(probeResult.workerEnvironment, {
+  inheritedPath: true,
+  override: 'worker',
+  runAsNode: '1'
+})
 assert.match(desktopEntry, /^Exec=\/opt\/Frame\/frame %U$/m)
 assert.match(desktopEntry, /^StartupWMClass=frame$/m)
 assert.match(desktopEntry, /^Categories=Office;Finance;$/m)

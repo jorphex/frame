@@ -14,6 +14,19 @@ for (const renderer of renderers) {
   if (!existsSync(htmlPath)) throw new Error(`missing ${basename(htmlPath)}`)
 
   const html = readFileSync(htmlPath, 'utf8')
+  const nonceMatches = [...html.matchAll(/'nonce-([^']+)'/g)]
+  const nonces = new Set(nonceMatches.map((match) => match[1]))
+  if (nonces.size !== 1) throw new Error(`${renderer}.html must declare exactly one CSP script nonce`)
+
+  const [nonce] = nonces
+  const scriptTags = [...html.matchAll(/<script\b[^>]*>/gi)].map(([tag]) => tag)
+  if (scriptTags.length === 0) throw new Error(`${renderer}.html contains no scripts`)
+  for (const tag of scriptTags) {
+    const scriptNonce = tag.match(/\bnonce\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i)
+    const value = scriptNonce && (scriptNonce[1] || scriptNonce[2] || scriptNonce[3])
+    if (value !== nonce) throw new Error(`${renderer}.html contains a script without its CSP nonce`)
+  }
+
   const references = [
     ...html.matchAll(/\b(?:src|href)\s*=\s*(?:"([^"#?]+)"|'([^'#?]+)'|([^\s"'<>#?]+))/gi)
   ].map(([, doubleQuoted, singleQuoted, unquoted]) => basename(doubleQuoted || singleQuoted || unquoted))
@@ -55,4 +68,4 @@ for (const renderer of renderers) {
   }
 }
 
-console.log(`Verified ${renderers.length} renderer bundles with no stale assets.`)
+console.log(`Verified ${renderers.length} renderer bundles, CSP nonces, and no stale assets.`)

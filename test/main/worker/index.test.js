@@ -28,7 +28,10 @@ describe('initializing', () => {
 
     expect(fork).toHaveBeenCalledWith('./test.js', ['--someFlag', '-t'], {
       signal: expect.anything(),
-      env: { MY_VAR: 'true' }
+      env: expect.objectContaining({
+        ELECTRON_RUN_AS_NODE: '1',
+        MY_VAR: 'true'
+      })
     })
   })
 

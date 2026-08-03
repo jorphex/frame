@@ -1,4 +1,5 @@
 import { BrowserWindow, shell, WebContentsView } from 'electron'
+import path from 'path'
 
 import {
   createViewInstance,
@@ -116,6 +117,7 @@ describe('createViewInstance', () => {
         contextIsolation: true,
         nodeIntegration: false,
         partition: 'persist:app.example',
+        preload: path.resolve(__dirname, '../../../main/windows/viewPreload.js'),
         sandbox: true,
         webviewTag: false
       })

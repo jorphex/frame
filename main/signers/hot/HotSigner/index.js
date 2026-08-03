@@ -8,6 +8,7 @@ const { v4: uuid } = require('uuid')
 
 const Signer = require('../../Signer').default
 const store = require('../../../store').default
+const { nodeWorkerEnvironment } = require('../../../worker/environment')
 // Mock windows module during tests
 const windows = app ? require('../../../windows') : { broadcast: () => {} }
 // Mock user data dir during tests
@@ -21,7 +22,7 @@ class HotSigner extends Signer {
     super()
     this.status = 'locked'
     this.addresses = signer ? signer.addresses : []
-    this._worker = fork(workerPath)
+    this._worker = fork(workerPath, [], { env: nodeWorkerEnvironment() })
     this._getToken()
     this.ready = false
   }

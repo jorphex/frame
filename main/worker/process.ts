@@ -2,6 +2,8 @@ import { ChildProcess, fork } from 'child_process'
 import { EventEmitter } from 'events'
 import log from 'electron-log'
 
+import { nodeWorkerEnvironment } from './environment'
+
 // message from a worker process to the parent
 export interface WorkerProcessMessage {
   event: string
@@ -34,7 +36,7 @@ export interface WorkerOptions {
   modulePath: string
   name: string
   args?: string[]
-  env?: Record<string, string>
+  env?: Partial<NodeJS.ProcessEnv>
   timeout?: number
 }
 
@@ -54,7 +56,7 @@ export default class WorkerProcess extends EventEmitter {
 
     this.worker = fork(opts.modulePath, opts.args, {
       signal,
-      env: opts.env as NodeJS.ProcessEnv
+      env: nodeWorkerEnvironment(opts.env)
     })
 
     log.info(`created ${this.name} worker, pid: ${this.worker.pid}`)
