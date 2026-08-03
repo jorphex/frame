@@ -9,6 +9,15 @@ const createScreen = (point) => ({
   getDisplayNearestPoint: jest.fn(() => display)
 })
 
+const createScreenSequence = (points) => {
+  let index = 0
+
+  return {
+    getCursorScreenPoint: jest.fn(() => points[Math.min(index++, points.length - 1)]),
+    getDisplayNearestPoint: jest.fn(() => display)
+  }
+}
+
 describe('isAtRightEdge', () => {
   it('accepts the final two pixels of the usable right edge', () => {
     expect(isAtRightEdge({ x: 3838, y: 1080 }, display)).toBe(true)
@@ -38,6 +47,39 @@ describe('GlideDetector', () => {
 
     jest.advanceTimersByTime(500)
     expect(reveal).toHaveBeenCalledTimes(2)
+  })
+
+  it('reveals while the pointer moves vertically along the edge', () => {
+    const screen = createScreenSequence([
+      { x: 3839, y: 800 },
+      { x: 3839, y: 812 }
+    ])
+    const reveal = jest.fn(() => true)
+    const detector = new GlideDetector(screen, () => true, reveal)
+
+    detector.start()
+    jest.advanceTimersByTime(50)
+
+    expect(reveal).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('requires consecutive edge samples', () => {
+    const screen = createScreenSequence([
+      { x: 3839, y: 800 },
+      { x: 3837, y: 800 },
+      { x: 3839, y: 800 },
+      { x: 3839, y: 800 }
+    ])
+    const reveal = jest.fn(() => true)
+    const detector = new GlideDetector(screen, () => true, reveal)
+
+    detector.start()
+    jest.advanceTimersByTime(50)
+    expect(reveal).not.toHaveBeenCalled()
+
+    jest.advanceTimersByTime(50)
+    expect(reveal).toHaveBeenCalledTimes(1)
   })
 
   it('does not create duplicate polling loops', () => {

@@ -66,12 +66,10 @@ export class GlideDetector {
 
       const currentPoint = this.screen.getCursorScreenPoint()
       const currentDisplay = this.screen.getDisplayNearestPoint(currentPoint)
-      const stationaryAtEdge =
-        currentPoint.y === initialPoint.y &&
-        isAtRightEdge(initialPoint, initialDisplay) &&
-        isAtRightEdge(currentPoint, currentDisplay)
+      const dwellingAtEdge =
+        isAtRightEdge(initialPoint, initialDisplay) && isAtRightEdge(currentPoint, currentDisplay)
 
-      if (stationaryAtEdge && this.reveal()) {
+      if (dwellingAtEdge && this.reveal()) {
         this.running = false
         return
       }
