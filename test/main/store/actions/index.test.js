@@ -24,6 +24,7 @@ import {
   updateAccount as updateAccountAction,
   navClearReq as clearNavRequestAction,
   navClearSigner as clearNavSignerAction,
+  notify as notifyAction,
   showWalletCallsStatus as showWalletCallsStatusAction,
   updateTypedDataRequest as updateTypedDataAction
 } from '../../../../main/store/actions'
@@ -38,6 +39,20 @@ afterAll(() => {
 })
 
 const owner = '0xa8be0f701d0f37088600164e71bffc0ad652c251'
+
+describe('#notify', () => {
+  it('uses serializable empty notification state when dismissed', () => {
+    const updates = []
+    const update = (path, value) => updates.push([path, value()])
+
+    notifyAction(update)
+
+    expect(updates).toEqual([
+      ['view.notify', ''],
+      ['view.notifyData', {}]
+    ])
+  })
+})
 
 const testTokens = {
   zrx: {

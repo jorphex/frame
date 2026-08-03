@@ -41,7 +41,7 @@ module.exports = {
     u('panel.show', () => true)
   },
   setBalance: (u, account, balance) => u('balances', account, () => balance),
-  notify: (u, type, data = {}) => {
+  notify: (u, type = '', data = {}) => {
     u('view.notify', () => type)
     u('view.notifyData', () => data)
   },

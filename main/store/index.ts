@@ -2,6 +2,7 @@ import Restore from 'react-restore'
 import state from './state'
 import * as actions from './actions'
 import persist from './persist'
+import { isPersistedStatePath } from './persist/path'
 
 // TODO: Layer persisted op top of initial state
 
@@ -29,7 +30,9 @@ persist.set('main', store('main'))
 store.api.feed((state, actionBatch) => {
   actionBatch.forEach((action) => {
     action.updates.forEach((update) => {
-      persist.queue(update.path, update.value)
+      if (isPersistedStatePath(update.path)) {
+        persist.queue(update.path, update.value)
+      }
     })
   })
 })
