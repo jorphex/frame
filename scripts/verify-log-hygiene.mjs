@@ -2,12 +2,19 @@ import { readFile } from 'node:fs/promises'
 
 const forbidden = {
   'main/accounts/index.ts': ['JSON.stringify(req)'],
+  'main/chains/index.js': [
+    "log.debug('resetConnection', { priority, status, target })",
+    "log.debug('killProvider', { provider })",
+    '          secondaryTarget\n        })',
+    '          primaryTarget\n        })'
+  ],
   'main/provider/index.ts': [
     "'approveRequest', txToLog",
     "'Successfully populated transaction', checkedTransaction",
     'JSON.stringify(tx)',
     "'provider subscribe', { payload }",
-    'JSON.stringify(payload)'
+    'JSON.stringify(payload)',
+    'log.error(err)'
   ],
   'main/signers/ledger/Ledger/index.ts': [
     "'successfully signed message on Ledger: ', message",

@@ -15,6 +15,7 @@ const { createGasCalculator } = require('./gas')
 const { createRpcProvider, estimateL1GasCost } = require('./optimism')
 const { NETWORK_PRESETS } = require('../../resources/constants')
 const { chainUsesOptimismFees } = require('../../resources/utils/chains')
+const { summarizeRpcEndpoint } = require('../security/rpcLogging')
 
 // These chain IDs are known to not support EIP-1559 and will be forced
 // not to use that mechanism
@@ -305,7 +306,7 @@ class ChainConnection extends EventEmitter {
   }
 
   resetConnection(priority /* 'primary' | 'secondary' */, status, target) {
-    log.debug('resetConnection', { priority, status, target })
+    log.debug('resetConnection', { priority, status, endpoint: summarizeRpcEndpoint(target) })
 
     const provider = this[priority].provider
 
@@ -331,7 +332,7 @@ class ChainConnection extends EventEmitter {
   }
 
   killProvider(provider) {
-    log.debug('killProvider', { provider })
+    log.debug('killProvider', { configured: !!provider })
 
     if (provider) {
       provider.close()
@@ -386,7 +387,7 @@ class ChainConnection extends EventEmitter {
         this.resetConnection('secondary', 'disconnected')
       } else if (!this.secondary.provider || this.secondary.currentTarget !== secondaryTarget) {
         log.info("Creating secondary connection because it didn't exist or the target changed", {
-          secondaryTarget
+          endpoint: summarizeRpcEndpoint(secondaryTarget)
         })
 
         this.resetConnection('secondary', 'loading', secondaryTarget)
@@ -454,7 +455,7 @@ class ChainConnection extends EventEmitter {
         this.resetConnection('primary', 'disconnected')
       } else if (!this.primary.provider || this.primary.currentTarget !== primaryTarget) {
         log.info("Creating primary connection because it didn't exist or the target changed", {
-          primaryTarget
+          endpoint: summarizeRpcEndpoint(primaryTarget)
         })
 
         this.resetConnection('primary', 'loading', primaryTarget)

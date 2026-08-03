@@ -54,6 +54,7 @@ import walletCallEvidenceRuntime from './walletCallEvidenceRuntime'
 import { showWalletCallStatus } from './walletCallStatusView'
 import { isUnsafeRpcForwardingMethod } from './rpcForwarding'
 import { getRequestSignal, inheritRequestSignal } from './requestSignal'
+import { summarizeRpcError } from '../security/rpcLogging'
 
 import { Subscription, SubscriptionType, hasSubscriptionPermission } from './subscriptions'
 import {
@@ -204,7 +205,7 @@ export class Provider extends EventEmitter {
     })
 
     this.connection.on('error', (chain, err) => {
-      log.error(err)
+      log.error('RPC connection error', { chain, ...summarizeRpcError(err) })
     })
 
     this.connection.on('update', (chain: Chain, event) => {
