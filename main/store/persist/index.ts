@@ -3,6 +3,7 @@ import electron from 'electron'
 import Conf, { Options } from 'conf'
 
 import migrations from '../migrate'
+import { pruneTransientPersistedState } from './state'
 
 type PersistedConfig = Record<string, unknown>
 type PersistOpts<T extends PersistedConfig> = Options<T>
@@ -31,6 +32,12 @@ class PersistStore extends Conf<PersistedConfig> {
     const updates = { ...this.updates }
     this.updates = null
     if (Object.keys(updates || {}).length > 0) super.set(updates)
+  }
+
+  pruneTransientState() {
+    const current = super.get('main')
+    const pruned = pruneTransientPersistedState(current)
+    if (pruned !== current) super.set('main', pruned)
   }
 
   queue(path: string, value: unknown) {

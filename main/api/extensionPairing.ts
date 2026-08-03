@@ -115,7 +115,10 @@ export async function authorizeExtension(
   if (rejectedIdentities.has(identity)) return false
   const active = activeByIdentity.get(identity)
   if (active) {
-    return credentialMatches(candidate, active.candidate) ? waitForPairing(active, signal) : false
+    return credentialMatches(candidate, active.candidate) &&
+      candidate.pairingCode === active.candidate.pairingCode
+      ? waitForPairing(active, signal)
+      : false
   }
   if (activeByRequest.size > 0) return false
 

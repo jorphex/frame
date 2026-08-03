@@ -23,6 +23,8 @@ import { isPersistedStatePath } from './persist/path'
 
 const store = Restore.create(state(), actions)
 
+persist.pruneTransientState()
+
 // Persist initial full state
 persist.set('main', store('main'))
 

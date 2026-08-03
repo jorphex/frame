@@ -98,6 +98,18 @@ it('deduplicates concurrent consent and persists the approved credential', async
   expect(respondToExtensionPairing(request.requestId, true)).toBe(false)
 })
 
+it('never reuses an active prompt for a different challenge code', async () => {
+  const pairing = candidate('q')
+  const first = authorizeExtension(pairing)
+
+  await expect(authorizeExtension({ ...pairing, pairingCode: '654321' })).resolves.toBe(false)
+  expect(store.notify).toHaveBeenCalledTimes(1)
+  expect(store.notify.mock.calls[0][1].pairingCode).toBe(pairing.pairingCode)
+
+  respondToExtensionPairing(store.notify.mock.calls[0][1].requestId, false)
+  await expect(first).resolves.toBe(false)
+})
+
 it('rejects a competing key for an extension identity with an active prompt', async () => {
   const firstCandidate = candidate('g')
   const competingCandidate = candidate('h', { extensionId: firstCandidate.extensionId })
