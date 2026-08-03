@@ -1,4 +1,4 @@
-import { loadKuboModule } from './modules'
+import { loadCidModule, loadKuboModule } from './modules'
 
 import type { KuboClient } from './modules'
 
@@ -7,6 +7,16 @@ const DEFAULT_MAX_JSON_BYTES = 10 * 1024 * 1024
 const DEFAULT_MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
 
 type ClientFactory = () => Promise<KuboClient>
+
+const CID_V0_PATTERN = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/
+
+async function canonicalizePath(path: string) {
+  const [root, ...segments] = path.split('/')
+  if (!root || !CID_V0_PATTERN.test(root)) return path
+
+  const { CID } = await loadCidModule()
+  return [CID.parse(root).toV1().toString(), ...segments].join('/')
+}
 
 export function getKuboOptions(env: NodeJS.ProcessEnv = process.env) {
   const url = new URL(env['FRAME_IPFS_API_URL'] || DEFAULT_IPFS_API_URL)
@@ -45,7 +55,7 @@ export default function createIpfs(
     const chunks: Buffer[] = []
     let size = 0
 
-    for await (const chunk of (await getClient()).cat(path)) {
+    for await (const chunk of (await getClient()).cat(await canonicalizePath(path))) {
       size += chunk.byteLength
       if (size > maxJsonBytes) {
         throw new Error(`IPFS JSON response exceeds ${maxJsonBytes} bytes`)
@@ -59,7 +69,7 @@ export default function createIpfs(
   return {
     async *get(path: string, options?: { archive?: boolean }) {
       let size = 0
-      for await (const chunk of (await getClient()).get(path, options)) {
+      for await (const chunk of (await getClient()).get(await canonicalizePath(path), options)) {
         size += chunk.byteLength
         if (options?.archive && size > maxArchiveBytes) {
           throw new Error(`IPFS archive exceeds ${maxArchiveBytes} bytes`)

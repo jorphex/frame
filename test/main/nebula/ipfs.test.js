@@ -1,5 +1,12 @@
 import createIpfs, { getKuboOptions } from '../../../main/nebula/ipfs'
 
+const mockParseCid = jest.fn()
+
+jest.mock('../../../main/nebula/modules', () => ({
+  loadCidModule: jest.fn(async () => ({ CID: { parse: mockParseCid } })),
+  loadKuboModule: jest.fn()
+}))
+
 async function* chunks(...values) {
   for (const value of values) yield Buffer.from(value)
 }
@@ -23,6 +30,27 @@ test('parses bounded JSON assembled from streamed chunks', async () => {
 
   await expect(ipfs.getJson('bafy-manifest')).resolves.toEqual({ tokens: [1, 2] })
   expect(client.cat).toHaveBeenCalledWith('bafy-manifest')
+})
+
+test('canonicalizes legacy CIDv0 paths before requesting content', async () => {
+  const legacyCid = 'QmeAp9nr7rTEjExtAJJhWmCSxYQncwX1DQ2s6paJa8dBzT'
+  const canonicalCid = 'bafybeihlgxobvnlhgthbxoxbzxlymwsrf7h2oeoj7bd6be6wnxpbodhy3q'
+  mockParseCid.mockReturnValueOnce({ toV1: () => ({ toString: () => canonicalCid }) })
+  mockParseCid.mockReturnValueOnce({ toV1: () => ({ toString: () => canonicalCid }) })
+  const client = {
+    get: jest.fn(() => chunks('archive')),
+    cat: jest.fn(() => chunks('{}'))
+  }
+  const ipfs = createIpfs(async () => client)
+
+  await ipfs.getJson(`${legacyCid}/metadata.json`)
+  const archive = ipfs.get(legacyCid, { archive: true })
+  await archive.next()
+
+  expect(mockParseCid).toHaveBeenNthCalledWith(1, legacyCid)
+  expect(mockParseCid).toHaveBeenNthCalledWith(2, legacyCid)
+  expect(client.cat).toHaveBeenCalledWith(`${canonicalCid}/metadata.json`)
+  expect(client.get).toHaveBeenCalledWith(canonicalCid, { archive: true })
 })
 
 test('preserves the empty JSON response fallback', async () => {
