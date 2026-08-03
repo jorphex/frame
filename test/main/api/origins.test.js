@@ -376,6 +376,31 @@ describe('#isTrusted', () => {
     return expect(isTrusted(payload)).resolves.toBe(true)
   })
 
+  it('asks again when an origin was previously denied permission', async () => {
+    const address = '0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5'
+    const payload = { method: 'eth_accounts', _origin: frameTestOriginId }
+
+    accounts.current.mockReturnValue({ address })
+    store.set('main.permissions', address, {
+      [frameTestOriginId]: {
+        origin: 'test.frame.eth',
+        provider: false
+      }
+    })
+    accounts.addRequest.mockImplementationOnce((_request, callback) => {
+      store.set('main.permissions', address, {
+        [frameTestOriginId]: {
+          origin: 'test.frame.eth',
+          provider: true
+        }
+      })
+      callback()
+    })
+
+    await expect(isTrusted(payload)).resolves.toBe(true)
+    expect(accounts.addRequest).toHaveBeenCalledTimes(1)
+  })
+
   it('sends a request to grant permission to the user', async () => {
     const address = '0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5'
     const payload = { method: 'eth_accounts', _origin: frameTestOriginId }

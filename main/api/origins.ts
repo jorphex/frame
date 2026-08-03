@@ -307,7 +307,9 @@ export async function isTrusted(payload: RPCRequestPayload, signal?: AbortSignal
   const access = getOriginAccess(payload)
   if (!access) return false
 
-  const permission = access.permission || (await requestPermission(access.address, payload, signal))
+  const permission = access.permission?.provider
+    ? access.permission
+    : await requestPermission(access.address, payload, signal)
 
   return !signal?.aborted && accountIsCurrent(access.address) && !!permission?.provider
 }
