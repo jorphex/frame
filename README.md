@@ -1,145 +1,215 @@
-## This fork adds Trezor Safe 7 support to Frame. Use at your own risk.
+<p align="center">
+  <img src="asset/png/FrameLogo512.png" alt="Frame" width="150" />
+</p>
 
-<h2 align="center">
-  <br>
-  <img src="/asset/png/FrameLogo512.png?raw=true" alt="Frame" width="150" />
-  <br>
-  <br>
-  F R A M E
-  <br>
-  <br>
-</h2>
-<h3 align="center">System-wide Web3 for macOS, Windows and Linux :tada:</h3>
-<br>
-<h5 align="center">
-  <a href="#features">Features</a> ⁃
-  <a href="#installation">Installation</a> ⁃
-  <a href="#usage">Usage</a> ⁃
-  <a href="#security-and-support">Security</a> ⁃
-  <a href="#related">Related</a>
-</h5>
-<br>
+<h1 align="center">Frame</h1>
 
-<img src="/asset/png/FrameExample0-6-3.png?raw=true" />
+<p align="center">
+  A system-wide EVM wallet and signing firewall for browsers, native applications, and command-line tools.
+</p>
 
-Frame is a web3 platform that creates a secure system-wide interface to your chains and accounts. Now any browser, command-line, or native application has the ability to access web3.
+<p align="center">
+  <a href="https://github.com/jorphex/frame/releases">Desktop releases</a> ·
+  <a href="https://github.com/jorphex/frame-extension/releases">Browser companion</a> ·
+  <a href="SECURITY.md">Security</a> ·
+  <a href="SUPPORTED_EIPS.md">Standards</a> ·
+  <a href="RPC_COMPATIBILITY.md">RPC compatibility</a>
+</p>
 
-### Features
+> [!WARNING]
+> This is a community-maintained wallet preview with no independent security audit. The current release target is Linux x64. Back up your Frame profile, verify release checksums, and test with accounts that do not hold valuable assets before relying on a release. Use at your own risk.
 
-- **First-class Hardware Signer Support**
-  - Use your GridPlus, Ledger and Trezor accounts with any dapp!
-- **Extensive Software Signer Support**
-  - Use a mnemonic phrase, keystore.json or standalone private keys to create and backup accounts!
-- **Permissions**
-  - You'll always have full control of which dapps have permission to access Frame and can monitor with full transparency what requests are being made to the network.
-- **Omnichain Routing**
-  - With Frame's Omnichain routing dapps can seamlessly use multiple chains at the same time, enabling truly multichain experiences.
-- **Transaction Decoding**
-  - By utilizing verified contract ABIs, transaction calldata can be decoded into concise and informative summaries, allowing you to sign transactions with confidence.
-- **Set your own connections to Ethereum and IPFS**
-  - Never be locked into using a centralized gateway
-- **Menu Bar Support**
-  - Frame stays out of the way and sits quietly in your menu bar until needed
-- **Cross Platform**
-  - MacOS, Windows and Linux!
+Frame runs as a desktop wallet and exposes one consistent approval and signing interface to the rest of the system. Dapps can connect through the paired browser companion or directly through Frame's local EIP-1193/JSON-RPC provider. Accounts and chains are routed independently, so applications do not have to share one global network selection.
 
-### Talks
+## Current Release
 
-- [Frame at Aracon](https://www.youtube.com/watch?v=wlZWLiy2GD0)
+Frame `0.7.0` is available as a Linux x64 AppImage and deb package from the
+[desktop releases](https://github.com/jorphex/frame/releases). Browser dapps
+require the separately packaged Frame Companion `0.13.0` from the
+[companion releases](https://github.com/jorphex/frame-extension/releases).
 
-### Installation
+| Component or platform                  | Current status                                                              |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| Linux x64 AppImage and deb             | Current qualified release target                                            |
+| Trezor Safe 7 over USB                 | Physically tested for pairing, address verification, signing, and broadcast |
+| Trezor Model One over USB              | Physically tested with documented typed-data and testnet limitations        |
+| Ledger and GridPlus Lattice1           | Implemented with automated coverage; not physically requalified for `0.7.0` |
+| Seed phrase, private key, and keystore | Implemented with encrypted local signer workers                             |
+| Watch-only addresses                   | Supported for monitoring; signing is blocked                                |
+| Chrome and Firefox companion           | Packaged and tested against the `0.7.0` desktop protocol                    |
+| macOS, Windows, and Linux arm64        | Not produced or qualified by this fork                                      |
+| Trezor Safe 7 Bluetooth                | Unsupported                                                                 |
 
-#### Downloads
+See [Signer and Platform Support](HARDWARE_SUPPORT.md) for the evidence behind
+each claim and all known limitations. Trezor Suite is not required for the
+qualified Safe 7 USB flow.
 
-- [Fork Releases](https://github.com/jorphex/frame/releases)
+## Features
 
-#### Arch Linux
+- **System-wide provider:** HTTP and WebSocket JSON-RPC endpoints let browsers,
+  native programs, and command-line tools use the same wallet.
+- **Hardware-first signing:** Trezor, Ledger, and GridPlus signer adapters keep
+  signing behind explicit device and capability checks.
+- **Software and watch accounts:** Seed, private-key, keystore, and watch-only
+  accounts coexist behind clear signing boundaries.
+- **Origin permissions:** Account access and wallet-owned RPC methods are
+  permission-gated for each requesting origin and selected account.
+- **Transaction review:** Calldata decoding, approval-risk detection,
+  configured-RPC simulation, native balance effects, logs, and bounded traces
+  provide evidence before approval. Simulation is evidence, not a guarantee.
+- **Clearer signatures:** Structured EIP-712 review, permit and Permit2
+  detection, SIWE interpretation, hardware capability warnings, and explicit
+  consent for dangerous `eth_sign` requests.
+- **Multichain routing:** Each application can target an enabled chain without
+  forcing every connected application onto one global network.
+- **Modern wallet methods:** Hardened EIP-1193 behavior, chain add/switch flows,
+  browser EIP-6963 discovery, and non-atomic EIP-5792 wallet calls.
+- **User-controlled infrastructure:** Custom Ethereum RPC and Kubo IPFS
+  endpoints remain supported.
+- **Release evidence:** Locked dependencies, automated tests, CodeQL, package
+  verification, SHA-256 manifests, CycloneDX SBOMs, and GitHub build provenance
+  accompany the release process.
 
-If you use an arch-based distro, you can use an AUR Helper like [yay](https://github.com/Jguer/yay) to install Frame by running `yay -S frame-eth` or for the development version: `yay -S frame-eth-dev`.
+Exact support boundaries are maintained in [Supported Ethereum
+Standards](SUPPORTED_EIPS.md) and [RPC Compatibility](RPC_COMPATIBILITY.md).
 
-#### Run Source
+## Install
 
-**On Ubuntu:** Run `sudo apt-get install build-essential libudev-dev`.
+Download `Frame-0.7.0.AppImage` or `frame_0.7.0_amd64.deb` together with
+`SHA256SUMS` from the [`0.7.0` release](https://github.com/jorphex/frame/releases/tag/v0.7.0).
+Verify the files from the download directory before running either package:
 
 ```bash
-# Clone
-› git clone https://github.com/jorphex/frame
-› cd frame
-
-# Use the pinned Node version
-› nvm install
-› nvm use
-
-# Use the pinned npm resolver
-› npm install --global npm@11.12.0
-
-# Install
-› npm run setup
-
-# Run
-› npm run prod
+sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-#### IPFS Connection
+Run the AppImage without installing it:
+
+```bash
+chmod +x Frame-0.7.0.AppImage
+./Frame-0.7.0.AppImage
+```
+
+Or install the deb package:
+
+```bash
+sudo apt install ./frame_0.7.0_amd64.deb
+```
+
+The Linux packages are currently unsigned. Verify their checksums and GitHub
+artifact attestations against the published release before installation.
+
+### Browser Companion
+
+The browser companion injects Frame's EIP-1193 provider and announces it using
+EIP-6963. Download the Chrome or Firefox archive from the
+[`0.13.0` companion release](https://github.com/jorphex/frame-extension/releases/tag/v0.13.0),
+verify its checksum, extract it, and follow the
+[companion installation instructions](https://github.com/jorphex/frame-extension#install).
+
+The first connection displays a six-digit code in Frame and the extension.
+Compare both codes before approving the pairing. Older store extensions do not
+implement the authenticated protocol used by this desktop release.
+
+## Run From Source
+
+The repository pins Node and npm versions. On Ubuntu or Debian, install the
+native build prerequisites first:
+
+```bash
+sudo apt-get update
+sudo apt-get install build-essential libudev-dev
+```
+
+Then install the pinned toolchain and dependencies:
+
+```bash
+git clone https://github.com/jorphex/frame.git
+cd frame
+nvm install
+nvm use
+npm install --global npm@11.12.0
+npm run setup:ci
+npm run prod
+```
+
+`npm run setup:ci` uses the committed lockfile, permits only reviewed dependency
+install scripts, installs Electron, and rebuilds the native HID module.
+
+To produce the qualified Linux package formats locally:
+
+```bash
+npm run compile
+npm run bundle
+npm run package:linux:x64
+```
+
+Release candidates require the complete checks documented in
+[Release Procedure](RELEASE.md); a successful local package command alone is
+not release qualification.
+
+## Local Provider
+
+Frame listens only on the loopback interface:
+
+```text
+http://127.0.0.1:1248
+ws://127.0.0.1:1248
+```
+
+Applications can send standard JSON-RPC requests to these endpoints and route
+an enabled EVM chain using Frame's documented request metadata. Wallet-owned
+methods, subscriptions, origin handling, limits, and known local-process trust
+boundaries are documented in [RPC Compatibility](RPC_COMPATIBILITY.md).
+
+## IPFS Configuration
 
 Frame reads decentralized dapp and token content through a Kubo RPC endpoint.
-Set `FRAME_IPFS_API_URL` to use your own endpoint (for example,
-`http://127.0.0.1:5001`) and set `NEBULA_AUTH_TOKEN` when it requires HTTP Basic
-authentication. The existing hosted endpoint remains the default.
-
-Archived dapp downloads are limited to 256 MiB before extraction and are only
-activated after their complete UnixFS directory CID matches the ENS manifest.
+Set `FRAME_IPFS_API_URL` to use a different endpoint and set
+`NEBULA_AUTH_TOKEN` when it requires HTTP Basic authentication. The existing
+hosted endpoint remains the default.
 
 Kubo RPC is an administrative interface. Keep a local endpoint bound to
-localhost or place a remote endpoint behind TLS, authentication, and a restricted
-proxy; do not expose it directly to the public internet. See the [Kubo RPC
-security guidance](https://docs.ipfs.tech/reference/kubo/rpc/).
+localhost, or place a remote endpoint behind TLS, authentication, and a
+restricted proxy. Do not expose it directly to the public internet. Archived
+dapp downloads are bounded and activated only after their complete UnixFS
+directory CID matches the ENS manifest.
 
-#### Build
+## Security
 
-```bash
-› npm run bundle # Create bundle
-› npm run build # Build Frame for current platform
-```
+Do not report wallet secrets or vulnerability details in a public issue. Follow
+the private-reporting process in [Security Policy](SECURITY.md). The
+[Threat Model](THREAT_MODEL.md) documents local RPC, renderer, persistence,
+signer, network, and release boundaries.
 
-### Usage
+Published packages do not inherit support guarantees from the original Frame
+maintainers. Only the newest release in this repository is considered for
+community security fixes.
 
-#### Connect to Frame natively
+## Direction
 
-Frame exposes system-wide JSON-RPC endpoints `ws://127.0.0.1:1248` and `http://127.0.0.1:1248` that you can connect to from any app. We recommend using [eth-provider](https://github.com/floating/eth-provider) to create a connection `const provider = ethProvider('frame')` as `eth-provider` will handle any connection edge cases across browsers and environments
+Near-term development is focused on WalletConnect compatibility and a curated,
+chain-aware Yearn Earn experience that preserves Frame's simulation and approval
+boundaries. Broader UI qualification, smart-account support, and a future mobile
+client built around shared wallet-core logic remain later work. Roadmap items
+are directional and are not support claims.
 
-### Frame's injected provider
+## Documentation
 
-Frame also has a browser extension for injecting a Frame-connected [EIP-1193](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1193.md) provider into web apps as `window.ethereum`. This can be used to inject a connection when an app does not provide the option to connect to Frame natively.
+- [Security Policy](SECURITY.md)
+- [Threat Model](THREAT_MODEL.md)
+- [Supported Ethereum Standards](SUPPORTED_EIPS.md)
+- [RPC Compatibility](RPC_COMPATIBILITY.md)
+- [Signer and Platform Support](HARDWARE_SUPPORT.md)
+- [Linux Release Qualification](QUALIFICATION.md)
+- [Release Procedure](RELEASE.md)
 
-This modernization preview requires the separately packaged
-[fork companion](https://github.com/jorphex/frame-extension/releases) using
-authentication protocol version 2. Use the companion compatibility artifact to
-select a matching desktop build; older store extensions cannot pair.
+## Origin And License
 
-### Security and Support
+This repository is a community-maintained continuation of the GPL-licensed
+Frame wallet originally developed by Frame Labs. It is not an official Frame
+Labs release and is not supported by the original maintainers.
 
-This community fork has not received an independent security audit. Before using
-it, review the [security policy](SECURITY.md), [current threat
-model](THREAT_MODEL.md), and [signer/platform support
-matrix](HARDWARE_SUPPORT.md). The implemented standards and local provider
-surface are documented in [supported EIPs](SUPPORTED_EIPS.md) and [RPC
-compatibility](RPC_COMPATIBILITY.md). Maintainers should follow the documented
-[release procedure](RELEASE.md) and [Linux qualification gate](QUALIFICATION.md).
-
-### Related
-
-- [Frame Chat](https://discord.gg/UH7NGqY) - Feel free to drop in and ask questions!
-- [Frame Companion Extension](https://github.com/jorphex/frame-extension) - Use this fork with browser dapps
-- [eth-provider](https://github.com/floating/eth-provider) - A universal Ethereum provider
-- [Restore](https://github.com/floating/restore) - A predictable and observable state container for React apps
-
-<h2>
-  <h5 align="center">
-    <br>
-    <a href="https://frame.sh">Website</a> ⁃
-    <a href="https://medium.com/@framehq">Blog</a> ⁃
-    <a href="https://twitter.com/0xFrame">Twitter</a> ⁃
-    <a href="https://discord.gg/UH7NGqY">Chat</a>
-  </h5>
-</h2>
+Frame is distributed under the [GNU General Public License v3.0](LICENSE).
+Modified versions and binaries must continue to satisfy the GPL's source,
+license, notice, and corresponding-source requirements.
