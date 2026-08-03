@@ -16,6 +16,7 @@ import { requireStoreAction } from '../store/action'
 import FrameManager from './frames'
 import { installCloseToTray } from './closeToTray'
 import { createWindow } from './window'
+import { GlideDetector } from './glide'
 import { SystemTray, SystemTrayEventHandlers } from './systemTray'
 import { registerShortcut } from '../keyboardShortcuts'
 import { Shortcut } from '../store/state/types/shortcuts'
@@ -48,7 +49,7 @@ let tray: Tray
 let dash: Dash
 let onboard: Onboard
 let notify: Notify
-let mouseTimeout: NodeJS.Timeout
+let glideDetector: GlideDetector | undefined
 let glide = false
 
 const app = {
@@ -103,34 +104,6 @@ const center = (window: BrowserWindow) => {
     x: Math.floor(screenSize.x + screenSize.width / 2 - windowWidth / 2),
     y: Math.floor(screenSize.y + screenSize.height / 2 - windowHeight / 2)
   }
-}
-
-const detectMouse = () => {
-  const m1 = screen.getCursorScreenPoint()
-  const display = screen.getDisplayNearestPoint(m1)
-  const area = display.workArea
-  const bounds = display.bounds
-  const minX = area.width + area.x - 2
-  const center = (area.height + (area.y - bounds.y)) / 2
-  const margin = (area.height + (area.y - bounds.y)) / 2 - 5
-  m1.y = m1.y - area.y
-  const minY = center - margin
-  const maxY = center + margin
-  mouseTimeout = setTimeout(() => {
-    if (m1.x >= minX && m1.y >= minY && m1.y <= maxY) {
-      const m2 = screen.getCursorScreenPoint()
-      const area = screen.getDisplayNearestPoint(m2).workArea
-      m2.y = m2.y - area.y
-      if (m2.x >= minX && m2.y === m1.y) {
-        glide = true
-        app.show()
-      } else {
-        detectMouse()
-      }
-    } else {
-      detectMouse()
-    }
-  }, 50)
 }
 
 function initWindow(id: string, opts: Electron.BrowserWindowConstructorOptions) {
@@ -315,14 +288,15 @@ export class Tray {
     requireStoreAction('toggleDash')('hide')
     requireStoreAction('trayOpen')(false)
     if (store('main.reveal')) {
-      detectMouse()
+      glideDetector?.start()
+    } else {
+      glideDetector?.stop()
     }
     windows.tray.hide()
     events.emit('tray:hide')
   }
 
   public show() {
-    clearTimeout(mouseTimeout)
     const trayWindow = windows.tray
     if (!trayWindow || trayWindow.isDestroyed()) {
       return init()
@@ -330,6 +304,7 @@ export class Tray {
     if (this.recentDisplayEvent) {
       return
     }
+    glideDetector?.stop()
     clearTimeout(this.recentDisplayEventTimeout)
     this.recentDisplayEvent = true
     this.recentDisplayEventTimeout = setTimeout(() => {
@@ -702,12 +677,25 @@ const windowFromWebContents = (webContents: WebContents) =>
   BrowserWindow.fromWebContents(webContents) as BrowserWindow
 
 const init = () => {
+  glideDetector?.stop()
   if (tray) {
     tray.destroy()
   }
 
   tray = new Tray()
   dash = new Dash()
+  glideDetector = new GlideDetector(
+    screen,
+    () => store('main.reveal'),
+    () => {
+      glide = true
+      app.show()
+      if (tray.isVisible()) return true
+
+      glide = false
+      return false
+    }
+  )
 
   if (!store('main.mute.onboardingWindow')) {
     onboard = new Onboard()
@@ -770,6 +758,20 @@ const init = () => {
 
     registerShortcut(summonShortcut, summonHandler)
   })
+
+  let revealEnabled = store('main.reveal')
+  store.observer(() => {
+    const nextRevealEnabled = store('main.reveal')
+    if (nextRevealEnabled === revealEnabled) return
+
+    revealEnabled = nextRevealEnabled
+    if (!revealEnabled) {
+      glide = false
+      glideDetector?.stop()
+    } else if (!tray.isVisible()) {
+      glideDetector?.start()
+    }
+  }, 'windows:glide')
 }
 
 const send = (id: string, channel: string, ...args: string[]) => {
