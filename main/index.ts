@@ -232,6 +232,7 @@ handleRenderer('tray:getTokenDetails', async (e, contractAddress, chainId) => {
 })
 
 handleRenderer('yearn:getCatalog', async (e, options) => yearn.getCatalog(options))
+handleRenderer('yearn:getPositions', async () => yearn.getPositions())
 
 onRenderer('tray:addToken', (e, token, req) => {
   if (token) {

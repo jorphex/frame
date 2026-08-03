@@ -155,7 +155,11 @@ const isEligibleCompanion = (vault: KongVault) =>
 const unavailableVault = (
   definition: (typeof YEARN_CATALOG)[number],
   reason: string,
-  fallback?: KongVault
+  fallback?: KongVault,
+  companions: ReadonlyArray<{
+    definition: NonNullable<(typeof YEARN_CATALOG)[number]['companions']>[number]
+    vault: KongVault | undefined
+  }> = []
 ): YearnVault => {
   const asset = fallback?.asset || {
     address: '0x0000000000000000000000000000000000000000',
@@ -163,7 +167,7 @@ const unavailableVault = (
     symbol: 'N/A',
     decimals: 18
   }
-  const variant = fallback
+  const rootVariant = fallback
     ? variantFromKong(definition.kind === 'yvUSD' ? 'unlocked' : 'direct', fallback)
     : {
         id: definition.kind === 'yvUSD' ? ('unlocked' as const) : ('direct' as const),
@@ -188,7 +192,7 @@ const unavailableVault = (
     asset,
     decimals: fallback?.decimals || 18,
     tvlUsd: fallback?.tvl || 0,
-    apy: fallback ? resolveYearnApy(fallback) : variant.apy,
+    apy: fallback ? resolveYearnApy(fallback) : rootVariant.apy,
     riskLevel: fallback?.riskLevel ?? null,
     riskLabel: riskLabel(fallback?.riskLevel),
     performanceFeeBps: fallback?.fees?.performanceFee || 0,
@@ -197,7 +201,30 @@ const unavailableVault = (
     yearnUrl: `https://yearn.fi/vaults/${definition.chainId}/${definition.address}`,
     status: 'unavailable',
     statusReason: reason,
-    variants: [variant]
+    variants: [
+      rootVariant,
+      ...companions.map(({ definition: companion, vault }) =>
+        vault
+          ? variantFromKong(companion.id, vault)
+          : {
+              id: companion.id,
+              address: companion.address,
+              name: `${definition.name} ${companion.id}`,
+              symbol: 'N/A',
+              asset: fallback
+                ? {
+                    address: fallback.address,
+                    name: fallback.name,
+                    symbol: fallback.symbol,
+                    decimals: fallback.decimals
+                  }
+                : asset,
+              decimals: fallback?.decimals || 18,
+              tvlUsd: 0,
+              apy: { value: null, label: 'Unavailable' as const, source: 'unavailable' }
+            }
+      )
+    ]
   }
 }
 
@@ -237,26 +264,26 @@ export function normalizeKongCatalog(
 
   const vaults = YEARN_CATALOG.map((definition): YearnVault => {
     const root = rows.get(yearnVaultKey(definition.chainId, definition.address))
-    if (!root) {
-      const message = `${definition.name} is missing from Kong`
-      errors.push({ chainId: definition.chainId, message })
-      return unavailableVault(definition, message)
-    }
-    if (!isEligibleRoot(root)) {
-      const message = `${definition.name} is not currently eligible for deposits`
-      errors.push({ chainId: definition.chainId, message })
-      return unavailableVault(definition, message, root)
-    }
-
     const companions = (definition.companions || []).map((companion) => ({
       definition: companion,
       vault: rows.get(yearnVaultKey(definition.chainId, companion.address))
     }))
+    if (!root) {
+      const message = `${definition.name} is missing from Kong`
+      errors.push({ chainId: definition.chainId, message })
+      return unavailableVault(definition, message, undefined, companions)
+    }
+    if (!isEligibleRoot(root)) {
+      const message = `${definition.name} is not currently eligible for deposits`
+      errors.push({ chainId: definition.chainId, message })
+      return unavailableVault(definition, message, root, companions)
+    }
+
     const invalidCompanion = companions.find(({ vault }) => !vault || !isEligibleCompanion(vault))
     if (invalidCompanion) {
       const message = `${definition.name} product metadata is incomplete`
       errors.push({ chainId: definition.chainId, message })
-      return unavailableVault(definition, message, root)
+      return unavailableVault(definition, message, root, companions)
     }
 
     const rootVariantId = definition.kind === 'yvUSD' ? 'unlocked' : 'direct'

@@ -257,6 +257,13 @@ class Settings extends React.Component {
             </div>
             <div
               className='dashModule'
+              onClick={() => link.send('tray:action', 'navDash', { view: 'earn', data: {} })}
+            >
+              <div className='dashModuleIcon'>{svg.bars(24)}</div>
+              <div className='dashModuleTitle'>{'Earn'}</div>
+            </div>
+            <div
+              className='dashModule'
               onClick={() => link.send('tray:action', 'navDash', { view: 'chains', data: {} })}
             >
               <div className='dashModuleIcon'>{svg.chain(24)}</div>

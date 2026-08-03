@@ -1,0 +1,132 @@
+import { Interface } from 'ethers'
+
+import { normalizeKongCatalog } from '../../../main/yearn/kong'
+import { createYearnPositionsService } from '../../../main/yearn/positions'
+import { makeKongVaultList } from './fixtures'
+
+const account = '0x0000000000000000000000000000000000000001'
+const erc20 = new Interface(['function balanceOf(address account) view returns (uint256)'])
+const erc4626 = new Interface(['function convertToAssets(uint256 shares) view returns (uint256)'])
+
+const catalog = () => {
+  const normalized = normalizeKongCatalog(makeKongVaultList(), 1234)
+  return { status: 'fresh' as const, fetchedAt: 1234, vaults: normalized.cache.vaults, errors: [] }
+}
+
+const encodeUint = (contract: Interface, method: string, value: bigint) =>
+  contract.encodeFunctionResult(method, [value])
+
+const reader = (balances: Record<string, bigint> = {}) =>
+  jest.fn(async (_chainId: number, address: string, data: string) => {
+    if (data.startsWith(erc20.getFunction('balanceOf').selector)) {
+      return encodeUint(erc20, 'balanceOf', balances[address.toLowerCase()] || 0n)
+    }
+    const [shares] = erc4626.decodeFunctionData('convertToAssets', data)
+    return encodeUint(erc4626, 'convertToAssets', shares * 2n)
+  })
+
+describe('Yearn account positions', () => {
+  it('does not query RPCs without a selected account', async () => {
+    const readContract = reader()
+    const getPositions = createYearnPositionsService({
+      getCatalog: async () => catalog(),
+      getCurrentAccount: () => null,
+      getNetworkStatus: () => ({ on: true, connected: true }),
+      readContract
+    })
+
+    await expect(getPositions()).resolves.toMatchObject({
+      account: null,
+      chains: [
+        { chainId: 1, status: 'no-account' },
+        { chainId: 8453, status: 'no-account' },
+        { chainId: 747474, status: 'no-account' }
+      ]
+    })
+    expect(readContract).not.toHaveBeenCalled()
+  })
+
+  it('isolates disabled and disconnected chains', async () => {
+    const readContract = reader()
+    const getPositions = createYearnPositionsService({
+      getCatalog: async () => catalog(),
+      getCurrentAccount: () => ({ address: account, lastSignerType: 'ring' }),
+      getNetworkStatus: (chainId) =>
+        chainId === 1 ? { on: true, connected: true } : { on: chainId === 8453, connected: false },
+      readContract
+    })
+
+    const result = await getPositions()
+
+    expect(result.chains.map(({ status }) => status)).toEqual(['ready', 'disconnected', 'disabled'])
+    expect(new Set(readContract.mock.calls.map(([chainId]) => chainId))).toEqual(new Set([1]))
+  })
+
+  it('returns formatted assets and shares without losing watch-only status', async () => {
+    const vault = catalog().vaults[0]
+    if (!vault) throw new Error('Fixture vault missing')
+    const readContract = reader({
+      [vault.asset.address.toLowerCase()]: 5_000_000n,
+      [vault.address.toLowerCase()]: 1_500_000n
+    })
+    const getPositions = createYearnPositionsService({
+      getCatalog: async () => catalog(),
+      getCurrentAccount: () => ({ address: account, name: 'Treasury', lastSignerType: 'address' }),
+      getNetworkStatus: () => ({ on: true, connected: true }),
+      readContract
+    })
+
+    const result = await getPositions()
+    const position = result.chains[0]?.positions[0]
+
+    expect(result.account).toMatchObject({ name: 'Treasury', readOnly: true })
+    expect(position).toMatchObject({
+      hasPosition: true,
+      assetBalanceRaw: '5000000',
+      assetBalance: '5.0'
+    })
+    expect(position?.variants[0]).toMatchObject({ id: 'unlocked', shares: '1.5', assets: '3.0' })
+  })
+
+  it('keeps an unavailable vault withdraw-only when the account owns shares', async () => {
+    const unavailable = catalog()
+    const baseIndex = unavailable.vaults.findIndex(({ chainId }) => chainId === 8453)
+    const baseVault = unavailable.vaults[baseIndex]
+    if (!baseVault) throw new Error('Fixture vault missing')
+    unavailable.vaults[baseIndex] = { ...baseVault, status: 'unavailable', statusReason: 'Retired' }
+    const getPositions = createYearnPositionsService({
+      getCatalog: async () => unavailable,
+      getCurrentAccount: () => ({ address: account, lastSignerType: 'ring' }),
+      getNetworkStatus: () => ({ on: true, connected: true }),
+      readContract: reader({ [baseVault.address.toLowerCase()]: 1n })
+    })
+
+    const result = await getPositions()
+    expect(result.chains[1]?.positions[0]).toMatchObject({
+      vaultId: baseVault.id,
+      hasPosition: true,
+      status: 'withdraw-only'
+    })
+  })
+
+  it('reports a partial chain without blanking successful chains', async () => {
+    const readContract = reader()
+    readContract.mockImplementation(async (chainId, address, data) => {
+      if (chainId === 8453) throw new Error('Base RPC failed')
+      if (data.startsWith(erc20.getFunction('balanceOf').selector)) {
+        return encodeUint(erc20, 'balanceOf', 0n)
+      }
+      return encodeUint(erc4626, 'convertToAssets', 0n)
+    })
+    const getPositions = createYearnPositionsService({
+      getCatalog: async () => catalog(),
+      getCurrentAccount: () => ({ address: account, lastSignerType: 'ring' }),
+      getNetworkStatus: () => ({ on: true, connected: true }),
+      readContract
+    })
+
+    const result = await getPositions()
+    expect(result.chains.map(({ status }) => status)).toEqual(['ready', 'partial', 'ready'])
+    expect(result.chains[1]?.positions[0]?.error).toBe('Base RPC failed')
+  })
+})

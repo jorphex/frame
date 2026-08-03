@@ -100,6 +100,22 @@ test('requires explicit Yearn catalog options and validates returned metadata', 
   ).toBe(false)
 })
 
+test('bounds Yearn position requests and results', () => {
+  expect(parse('invoke', 'yearn:getPositions', [])).toEqual([])
+  expect(parseRendererIpcArgs('invoke', 'yearn:getPositions', [{}]).success).toBe(false)
+  expect(
+    parseRendererInvokeResult('yearn:getPositions', {
+      account: null,
+      chains: [1, 8453, 747474].map((chainId) => ({
+        chainId,
+        status: 'no-account',
+        reason: 'Select an account',
+        positions: []
+      }))
+    }).success
+  ).toBe(true)
+})
+
 test('keeps only trusted request reference fields', () => {
   expect(
     parse('event', 'tray:rejectRequest', [

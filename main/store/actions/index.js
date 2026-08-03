@@ -124,6 +124,9 @@ module.exports = {
   setYearnCatalogCache: (u, catalogCache) => {
     u('main.yearn.catalogCache', () => catalogCache)
   },
+  setYearnWorkflows: (u, workflows) => {
+    u('main.yearn.workflows', () => workflows)
+  },
   setAccount: (u, account) => {
     u('selected.current', () => account.id)
     u('selected.minimized', () => false)

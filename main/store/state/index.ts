@@ -103,7 +103,7 @@ const main = (path: string, def: unknown) => {
 }
 
 const mainState = {
-  _version: main('_version', 47),
+  _version: main('_version', 48),
   instanceId: main('instanceId', generateUuid()),
   colorway: main('colorway', 'dark'),
   colorwayPrimary: {
@@ -174,7 +174,7 @@ const mainState = {
     dontRemind: main('updater.dontRemind', [])
   },
   walletCallBatches: main('walletCallBatches', {}),
-  yearn: main('yearn', { catalogCache: null }),
+  yearn: main('yearn', { catalogCache: null, workflows: {} }),
   networks: main('networks', {
     ethereum: {
       1: {

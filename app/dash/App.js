@@ -10,6 +10,7 @@ import Notify from './Notify'
 import Dapps from './Dapps'
 import Tokens from './Tokens'
 import Settings from './Settings'
+import Earn from './Earn'
 import svg from '../../resources/svg'
 import link from '../../resources/link'
 import { capitalize } from '../../resources/utils'
@@ -50,6 +51,7 @@ class Dash extends React.Component {
 
   renderPanel(view, data) {
     if (view === 'accounts') return <Accounts data={data} />
+    if (view === 'earn') return <Earn data={data} />
     if (view === 'expandedSigner' && data.signer) {
       const signerId = data.signer
       const signer = this.store('main.signers', signerId)

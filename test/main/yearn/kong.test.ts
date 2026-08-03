@@ -79,7 +79,8 @@ describe('Yearn Kong catalog normalization', () => {
     expect(cache.vaults[0]).toMatchObject({
       kind: 'yvUSD',
       status: 'unavailable',
-      statusReason: 'yvUSD product metadata is incomplete'
+      statusReason: 'yvUSD product metadata is incomplete',
+      variants: [{ id: 'unlocked' }, { id: 'locked', address: YEARN_YVUSD_LOCKED_ADDRESS }]
     })
   })
 

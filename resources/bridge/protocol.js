@@ -45,7 +45,8 @@ export const requestEventChannels = new Set([
 export const requestInvokeChannels = new Set([
   'tray:addChain',
   'tray:getTokenDetails',
-  'yearn:getCatalog'
+  'yearn:getCatalog',
+  'yearn:getPositions'
 ])
 export const responseEventChannels = new Set(['action', 'flex'])
 const methods = new Set(['event', 'invoke', 'rpc'])
