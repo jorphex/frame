@@ -20,6 +20,7 @@ upgrade automated or implemented evidence to physical qualification.
 | Signer or platform                 | Transport/package             | Evidence in this fork                                                                                        | Release status                                |
 | ---------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
 | Trezor Safe 7                      | USB through Trezor Connect    | Physical pairing, address access, transaction signing, and broadcast on Linux x64; automated bridge coverage | Workable, use at your own risk                |
+| Trezor Model One                   | USB through Trezor Connect    | Physical address, message, and hash-only EIP-712 signing on firmware 1.13.1; reconnect check pending         | Partial physical evidence on Linux x64        |
 | Other Trezor models                | USB through Trezor Connect    | Shared implementation and automated bridge coverage                                                          | Implemented, not physically requalified       |
 | Trezor Safe 7 Bluetooth            | Bluetooth                     | No Frame transport                                                                                           | Unsupported                                   |
 | Ledger                             | USB HID                       | Automated adapter/device coverage                                                                            | Implemented, not physically requalified       |
@@ -34,6 +35,16 @@ Trezor Suite is not required for the verified Safe 7 USB flow. Running another
 application that owns the device transport may cause contention. Bluetooth
 communication through Trezor Suite is not exposed to Frame as a supported signer
 transport.
+
+Model One displays EIP-712 domain and message hashes rather than the structured
+fields. Frame warns about this before typed-data and permit approval, so users
+must verify every structured field in Frame before comparing the hashes on the
+device. Strict Trezor safety checks also reject a transaction when the selected
+account's derivation coin type does not match the signed network definition. For
+example, Base Sepolia declares coin type 1 while Frame's standard Ethereum path
+uses coin type 60. Frame leaves the device setting unchanged and reports the
+request as unsigned. Use a network-matching account, or choose Prompt safety
+checks in Trezor Suite only if you understand the mismatched coin-key risk.
 
 ## Manual Safe 7 Regression
 

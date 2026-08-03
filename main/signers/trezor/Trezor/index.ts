@@ -45,6 +45,13 @@ function createError(message: string, code: string, cause: string = '') {
     : new DeviceError(message, code)
 }
 
+export function getTransactionErrorMessage(error: Error, derivation?: Derivation) {
+  if (!error.message.toLowerCase().includes('forbidden key path')) return error.message
+
+  const path = derivation || 'selected'
+  return `Trezor strict safety checks rejected the ${path} derivation path for this chain. The request was not signed. Use an account derived for this network, or choose Prompt safety checks in Trezor Suite only if you understand the mismatched coin-key risk.`
+}
+
 export default class Trezor extends Signer {
   readonly path: string
 
@@ -329,11 +336,7 @@ export default class Trezor extends Signer {
           return await TrezorBridge.signTransaction(this.device, path, trezorTx)
         } catch (e: unknown) {
           const err = e as DeviceError
-          const errMsg = err.message.toLowerCase().match(/forbidden key path/)
-            ? `Turn off strict Trezor safety checks in order to use the ${this.derivation} derivation path on this chain`
-            : err.message
-
-          throw new Error(errMsg)
+          throw new Error(getTransactionErrorMessage(err, this.derivation))
         }
       })
 
