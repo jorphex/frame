@@ -144,6 +144,42 @@ it('handles an error when using tryAggregate', async () => {
   ])
 })
 
+it.each([
+  {
+    chainId: 137,
+    method: 'aggregate',
+    abi: 'function aggregate(tuple(address target, bytes callData)[] calls) returns (uint256 blockNumber, bytes[] returndata)',
+    result: [1n, ['0x']]
+  },
+  {
+    chainId: 1,
+    method: 'tryAggregate',
+    abi: 'function tryAggregate(bool requireSuccess, tuple(address target, bytes callData)[] calls) returns (tuple(bool success, bytes returndata)[] result)',
+    result: [[[true, '0x']]]
+  }
+])(
+  'isolates malformed returndata from a successful $method call',
+  async ({ chainId, method, abi, result }) => {
+    const responseInterface = new Interface([abi])
+    eth.request.mockResolvedValue(responseInterface.encodeFunctionResult(method, result))
+    const postProcess = jest.fn((value) => toBeHex(value))
+
+    const results = await multicall(chainId, eth).call([
+      {
+        target: '0x0000000000000000000000000000000000000001',
+        call: [
+          'function balanceOf(address owner) returns (uint256 value)',
+          '0x1ad91ee08f21be3de0ba2ba6918e714da6b45836'
+        ],
+        returns: [postProcess]
+      }
+    ])
+
+    expect(results).toEqual([{ success: false, returnValues: [] }])
+    expect(postProcess).not.toHaveBeenCalled()
+  }
+)
+
 it('returns one batch if another errors', async () => {
   eth.request
     .mockRejectedValueOnce('multicall failed!')

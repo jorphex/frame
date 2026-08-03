@@ -328,7 +328,7 @@ export class Provider extends EventEmitter {
     }
 
     const payload = req.payload
-    resError({ message: 'User declined transaction', code: 4001 }, payload, res)
+    resError({ message: 'User rejected the request', code: 4001 }, payload, res)
   }
 
   verifySignature(signed: string, message: string, address: string, cb: Callback<boolean>) {

@@ -64,9 +64,10 @@ function getResultData(results: BytesLike, call: string[], target: string) {
   try {
     return callInterface.decodeFunctionResult(fnName, results)
   } catch (e) {
-    log.warn(`Failed to decode ${fnName},`, { target, results })
-    const outputs = callInterface.getFunction(fnName)?.outputs || []
-    return outputs.map(() => null)
+    // Some token contracts return successful calls with malformed returndata.
+    // Keep that contract isolated from the rest of the multicall batch.
+    log.verbose(`Failed to decode ${fnName}`, { target, results })
+    return undefined
   }
 }
 
@@ -103,6 +104,7 @@ async function aggregate<R, T>(calls: Call<R, T>[], config: MulticallConfig): Pr
     const result = returndata[i]
     if (result === undefined) throw new Error(`multicall aggregate omitted result ${i}`)
     const resultData = getResultData(result, call, target)
+    if (!resultData) return { success: false, returnValues: [] }
 
     return { success: true, returnValues: returns.map((handler, j) => handler(resultData[j])) }
   })
@@ -128,6 +130,7 @@ async function tryAggregate<R, T>(calls: Call<R, T>[], config: MulticallConfig) 
 
     if (returndata === undefined) throw new Error(`multicall tryAggregate result ${i} omitted returndata`)
     const resultData = getResultData(returndata, call, target)
+    if (!resultData) return { success: false, returnValues: [] }
 
     return { success: true, returnValues: returns.map((handler, j) => handler(resultData[j])) }
   })

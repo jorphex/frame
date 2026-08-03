@@ -1,5 +1,6 @@
 import React from 'react'
 import Restore from 'react-restore'
+import BigNumber from 'bignumber.js'
 
 import link from '../../../../../../resources/link'
 import svg from '../../../../../../resources/svg'
@@ -26,7 +27,8 @@ class TxRecipient extends React.Component {
     const address = req.data.to ? getAddress(req.data.to) : ''
     const ensName = req.recipient && req.recipient.length < 25 ? req.recipient : ''
     const value = req.data.value || '0x'
-    if (req.recipientType !== 'contract' && (value !== '0x' || parseInt(value, 16)) !== 0) return null
+    const isZeroValue = value === '0x' || new BigNumber(value).isZero()
+    if (req.recipientType !== 'contract' && !isZeroValue) return null
 
     const title = req.recipientType === 'contract' ? 'Calling Contract' : 'Recipient Account'
     return (

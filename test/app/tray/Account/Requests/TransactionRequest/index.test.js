@@ -4,6 +4,7 @@ import store from '../../../../../../main/store'
 import { screen, render } from '../../../../../componentSetup'
 import TxRequestComponent from '../../../../../../app/tray/Account/Requests/TransactionRequest'
 import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew'
+import TxRecipientComponent from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxRecipient'
 import {
   getAllowancePresentation,
   getAccessListPresentation,
@@ -36,6 +37,7 @@ jest.mock('../../../../../../main/store/persist')
 jest.mock('../../../../../../resources/link', () => ({ rpc: jest.fn() }))
 
 const TxRequest = Restore.connect(TxRequestComponent, store)
+const TxRecipient = Restore.connect(TxRecipientComponent, store)
 
 const account = '0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5'
 
@@ -50,6 +52,23 @@ function addRequest(req) {
 }
 
 describe('confirm', () => {
+  it('shows the recipient for a zero-value EOA transaction', () => {
+    const recipient = '0x1111111111111111111111111111111111111111'
+
+    render(
+      <TxRecipient
+        i={0}
+        req={{
+          data: { to: recipient, value: '0x0' },
+          recipientType: 'external'
+        }}
+      />
+    )
+
+    expect(screen.getByText('Recipient Account')).toBeTruthy()
+    expect(screen.getByText(recipient)).toBeTruthy()
+  })
+
   it('renders a confirming transaction', () => {
     const req = {
       handlerId: 'test-req',

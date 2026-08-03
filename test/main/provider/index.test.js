@@ -260,6 +260,29 @@ describe('#approveSign', () => {
   })
 })
 
+describe('#declineRequest', () => {
+  it.each(['personal_sign', 'eth_signTypedData_v4', 'eth_sendTransaction'])(
+    'returns a method-neutral rejection for %s',
+    (method) => {
+      const respond = jest.fn()
+      const handlerId = `decline-${method}`
+      provider.handlers[handlerId] = respond
+
+      provider.declineRequest({
+        handlerId,
+        payload: { id: 1, jsonrpc: '2.0', method, params: [] }
+      })
+
+      expect(respond).toHaveBeenCalledWith({
+        id: 1,
+        jsonrpc: '2.0',
+        error: { code: 4001, message: 'User rejected the request' }
+      })
+      expect(provider.handlers).toEqual({})
+    }
+  )
+})
+
 describe('#wallet-call provider boundary', () => {
   const originId = '8073729a-5e59-53b7-9e69-5d9bcff94087'
   const payload = (overrides = {}) => ({
