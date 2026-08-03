@@ -3,7 +3,10 @@ import { z } from 'zod'
 const statusValues = [
   'connected',
   'disconnected',
+  'degraded',
   'loading',
+  'pending',
+  'syncing',
   'standby',
   'off',
   'error',

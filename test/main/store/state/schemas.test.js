@@ -2,6 +2,7 @@ import { DappSchema } from '../../../../main/store/state/types/dapp'
 import { MainSchema } from '../../../../main/store/state/types/main'
 import { AccountMetadataSchema, AccountSchema } from '../../../../main/store/state/types/account'
 import { OriginSchema } from '../../../../main/store/state/types/origin'
+import { ConnectionSchema } from '../../../../main/store/state/types/connection'
 
 describe('persisted state schema compatibility', () => {
   it('accepts notification records from before every notification key existed', () => {
@@ -78,5 +79,17 @@ describe('persisted state schema compatibility', () => {
     expect(OriginSchema.parse(origin)).toMatchObject({ sessionOnly: false })
     expect(OriginSchema.parse({ ...origin, sessionOnly: true })).toMatchObject({ sessionOnly: true })
     expect(() => OriginSchema.parse({ ...origin, sessionOnly: 'yes' })).toThrow()
+  })
+
+  it.each(['degraded', 'pending', 'syncing'])('persists the %s runtime connection status', (status) => {
+    expect(
+      ConnectionSchema.parse({
+        on: true,
+        connected: false,
+        current: 'custom',
+        status,
+        custom: 'https://rpc.example.test'
+      }).status
+    ).toBe(status)
   })
 })
