@@ -36,7 +36,7 @@ export default {
       height: 0,
       titleBarStyle: 'hidden',
       trafficLightPosition: { x: 10, y: 9 },
-      icon: path.join(__dirname, './AppIcon.png')
+      icon: path.join(__dirname, '../AppIcon.png')
     })
 
     frameInstance.loadURL(
