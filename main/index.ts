@@ -1,11 +1,15 @@
 import { app, protocol, clipboard, powerMonitor } from 'electron'
 import path from 'path'
-import log from 'electron-log'
 import url from 'url'
 
 // DO NOT MOVE - env var below is required for app init and must be set before all local imports
 process.env.BUNDLE_LOCATION = process.env.BUNDLE_LOCATION || path.resolve(__dirname, './../..', 'bundle')
 
+import { purgeLegacyLogFiles } from './security/logSanitization'
+
+purgeLegacyLogFiles(app.getPath('userData'))
+
+import log from 'electron-log'
 import windows from './windows'
 import menu from './menu'
 import store from './store'
