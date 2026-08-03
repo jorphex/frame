@@ -164,7 +164,7 @@ export class Accounts extends EventEmitter {
 
     let account = this.accounts[address]
     if (!account) {
-      log.info(`Account ${address} not found, creating account`)
+      log.info('Account not found, creating account')
 
       const created = 'new:' + Date.now()
       const accountMetaId = uuidv5(address, accountNS)

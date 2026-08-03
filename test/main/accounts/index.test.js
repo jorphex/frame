@@ -111,6 +111,21 @@ it('rejects renaming an unknown account', () => {
   expect(() => Accounts.rename('0xmissing', 'Missing')).toThrow(/could not find account/i)
 })
 
+it('does not log an account address when creating an account', () => {
+  const address = '0x1111111111111111111111111111111111111111'
+  const info = jest.spyOn(log, 'info').mockImplementation()
+
+  try {
+    Accounts.add(address, 'Private Account', { type: 'ring' })
+
+    expect(info).toHaveBeenCalledWith('Account not found, creating account')
+    expect(info.mock.calls.flat().join(' ')).not.toContain(address)
+  } finally {
+    delete Accounts.accounts[address]
+    info.mockRestore()
+  }
+})
+
 describe('#updatePendingFees', () => {
   beforeEach(() => {
     request.data.gasFeesSource = GasFeesSource.Frame
