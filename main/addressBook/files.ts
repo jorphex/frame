@@ -34,7 +34,7 @@ export async function readAddressBookFile(path: string): Promise<string> {
       offset += bytesRead
     }
 
-    if (offset > MAX_ADDRESS_BOOK_FILE_BYTES) throw new Error('Address-book file exceeds 1 MiB')
+    if (offset > MAX_ADDRESS_BOOK_FILE_BYTES) throw new Error('Contacts file exceeds 1 MiB')
     return buffer.subarray(0, offset).toString('utf8')
   } finally {
     await file.close()
@@ -68,19 +68,19 @@ export function createAddressBookFileService(overrides: Partial<AddressBookFileD
     if (!path) return { success: false, canceled: true }
 
     const stat = await dependencies.stat(path)
-    if (!stat.isFile()) throw new Error('Selected address-book path is not a file')
-    if (stat.size > MAX_ADDRESS_BOOK_FILE_BYTES) throw new Error('Address-book file exceeds 1 MiB')
+    if (!stat.isFile()) throw new Error('Selected contacts path is not a file')
+    if (stat.size > MAX_ADDRESS_BOOK_FILE_BYTES) throw new Error('Contacts file exceeds 1 MiB')
 
     const contents = await dependencies.readFile(path)
     if (Buffer.byteLength(contents, 'utf8') > MAX_ADDRESS_BOOK_FILE_BYTES) {
-      throw new Error('Address-book file exceeds 1 MiB')
+      throw new Error('Contacts file exceeds 1 MiB')
     }
 
     let parsed: unknown
     try {
       parsed = JSON.parse(contents)
     } catch {
-      throw new Error('Address-book file is not valid JSON')
+      throw new Error('Contacts file is not valid JSON')
     }
 
     // Validate before invoking the store action so malformed imports cannot partially apply.

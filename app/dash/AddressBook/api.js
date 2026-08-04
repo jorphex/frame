@@ -1,8 +1,8 @@
 import link from '../../../resources/link'
 
 const mutationResult = (result) => {
-  if (!result || typeof result.success !== 'boolean') throw new Error('Address-book response was unavailable')
-  if (!result.success && !result.canceled) throw new Error(result.error || 'Address-book operation failed')
+  if (!result || typeof result.success !== 'boolean') throw new Error('Contacts response was unavailable')
+  if (!result.success && !result.canceled) throw new Error(result.error || 'Contact operation failed')
   return result
 }
 

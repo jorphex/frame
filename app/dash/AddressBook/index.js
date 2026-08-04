@@ -187,7 +187,7 @@ export class AddressBook extends React.Component {
     } catch (error) {
       this.setState({
         working: false,
-        status: error instanceof Error ? error.message : 'Address-book operation failed'
+        status: error instanceof Error ? error.message : 'Contact operation failed'
       })
     }
   }
@@ -291,9 +291,9 @@ export class AddressBook extends React.Component {
           <div className='addressBookMissing cardShow'>
             <div>{svg.people(28)}</div>
             <strong>Contact not found</strong>
-            <span>It may have been removed or replaced by an imported address book.</span>
+            <span>It may have been removed or replaced by imported contacts.</span>
             <button onClick={() => link.send('tray:action', 'backDash')} type='button'>
-              Return to Address Book
+              Return to Contacts
             </button>
           </div>
         )

@@ -52,7 +52,7 @@ qualified Safe 7 USB flow.
   signing behind explicit device and capability checks.
 - **Software and watch accounts:** Seed, private-key, keystore, and watch-only
   accounts coexist behind clear signing boundaries.
-- **Local address book:** Save, search, back up, and restore trusted EVM
+- **Local contacts:** Save, search, back up, and restore trusted EVM
   destinations. Saved contacts and existing Frame account names appear beside
   the full address during transfer and approval review without changing the
   signed payload; saved contacts take precedence.
@@ -200,7 +200,7 @@ community security fixes.
 ## Direction
 
 The current development branch contains the first headlessly qualified Yearn
-Earn milestone and a local address book; the Earn scope and deferred live
+Earn milestone and local contacts; the Earn scope and deferred live
 qualification are documented in [Yearn Earn](YEARN_EARN.md). Near-term desktop
 work focuses on broader UI qualification. Smart-account support and a future
 mobile client with WalletConnect built around shared wallet-core logic remain

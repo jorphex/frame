@@ -113,6 +113,6 @@ test('does not turn a stale edit route into a new contact', async () => {
 
   expect(screen.getByText('Contact not found')).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Save Contact' })).toBeNull()
-  await user.click(screen.getByRole('button', { name: 'Return to Address Book' }))
+  await user.click(screen.getByRole('button', { name: 'Return to Contacts' }))
   expect(link.send).toHaveBeenCalledWith('tray:action', 'backDash')
 })

@@ -237,9 +237,9 @@ const addressBookMutation = async (operation: () => Promise<unknown> | unknown) 
   try {
     return await operation()
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Address-book operation failed'
-    log.warn('Address-book operation failed', { reason: message.slice(0, 240) })
-    return { success: false as const, error: message.trim().slice(0, 240) || 'Address-book operation failed' }
+    const message = error instanceof Error ? error.message : 'Contact operation failed'
+    log.warn('Contact operation failed', { reason: message.slice(0, 240) })
+    return { success: false as const, error: message.trim().slice(0, 240) || 'Contact operation failed' }
   }
 }
 

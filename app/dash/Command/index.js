@@ -31,7 +31,7 @@ class Command extends React.Component {
   }
   render() {
     const { view } = this.store('windows.dash.nav')[0] || { view: '', data: {} }
-    const title = view === 'addressBook' ? 'Address Book' : view
+    const title = view === 'addressBook' ? 'Contacts' : view
     return (
       <div className='command'>
         {this.store('windows.dash.nav').length ? (

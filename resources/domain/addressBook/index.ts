@@ -71,10 +71,10 @@ export const AddressBookEntrySchema = z
 
 export const AddressBookSchema = z
   .record(z.string().regex(KEY), AddressBookEntrySchema)
-  .refine((book) => Object.keys(book).length <= MAX_ADDRESS_BOOK_ENTRIES, 'Address book is too large')
+  .refine((book) => Object.keys(book).length <= MAX_ADDRESS_BOOK_ENTRIES, 'Contacts list is too large')
   .refine(
     (book) => Object.entries(book).every(([key, entry]) => key === entry.address.toLowerCase()),
-    'Address book key does not match its entry'
+    'Contact key does not match its entry'
   )
 
 export const AddressBookSaveRequestSchema = z
@@ -143,10 +143,10 @@ export function saveAddressBookEntry(
   const key = address.toLowerCase()
   const existing = addressBook[key]
 
-  if (parsed.mode === 'add' && existing) throw new Error('Address is already in your address book')
-  if (parsed.mode === 'edit' && !existing) throw new Error('Address-book entry no longer exists')
+  if (parsed.mode === 'add' && existing) throw new Error('Address is already in your contacts')
+  if (parsed.mode === 'edit' && !existing) throw new Error('Contact no longer exists')
   if (!existing && Object.keys(addressBook).length >= MAX_ADDRESS_BOOK_ENTRIES) {
-    throw new Error(`Address book cannot exceed ${MAX_ADDRESS_BOOK_ENTRIES} entries`)
+    throw new Error(`Contacts cannot exceed ${MAX_ADDRESS_BOOK_ENTRIES} entries`)
   }
   if (duplicateName(addressBook, parsed.name, key)) {
     throw new Error('Name is already used by another address')
@@ -166,7 +166,7 @@ export function removeAddressBookEntry(current: unknown, address: unknown): Addr
   const addressBook = AddressBookSchema.parse(current)
   const parsedAddress = AddressBookAddressInputSchema.parse(address)
   const key = entryKey(parsedAddress)
-  if (!addressBook[key]) throw new Error('Address-book entry no longer exists')
+  if (!addressBook[key]) throw new Error('Contact no longer exists')
 
   const next = { ...addressBook }
   delete next[key]
