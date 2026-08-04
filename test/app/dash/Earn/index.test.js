@@ -308,6 +308,38 @@ it('shows a direct vault position as a balance without exposing the internal var
   expect(screen.getByText('1.5 USDC')).toBeTruthy()
 })
 
+it('opens a persistent deposit form with available balance and visible Max behavior', async () => {
+  getYearnPositions.mockResolvedValue({
+    ...makePositions(),
+    chains: makePositions().chains.map((chain) =>
+      chain.chainId === 8453 ? { ...chain, status: 'ready', positions: [directPosition] } : chain
+    )
+  })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Base' })
+
+  await user.click(screen.getByRole('button', { name: 'Manage Base Vault position' }))
+
+  const deposit = screen.getByRole('button', { name: 'Deposit' })
+  const withdraw = screen.getByRole('button', { name: 'Withdraw' })
+  const amount = screen.getByRole('textbox', { name: 'Amount in USDC' })
+  expect(deposit.getAttribute('aria-pressed')).toBe('true')
+  expect(withdraw.getAttribute('aria-pressed')).toBe('false')
+  expect(screen.getByText('Available to deposit: 5 USDC')).toBeTruthy()
+  expect(screen.queryByText(/^Position:/)).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Close Earn action' })).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Max' }))
+  expect(amount.value).toBe('Max')
+  expect(screen.getByRole('button', { name: 'Max' }).getAttribute('aria-pressed')).toBe('true')
+
+  await user.click(screen.getByRole('button', { name: 'Max' }))
+  expect(amount.value).toBe('')
+  await user.click(withdraw)
+  expect(screen.getByText('Available to withdraw: 1.5 USDC')).toBeTruthy()
+  expect(withdraw.getAttribute('aria-pressed')).toBe('true')
+})
+
 it('filters by chain without mixing vaults', async () => {
   const { user } = render(<ConnectedEarn />)
   await screen.findByRole('heading', { name: 'Ethereum' })
@@ -358,10 +390,9 @@ it('moves focus through vault details and restores the invoking controls', async
   expect(document.activeElement).toBe(document.querySelector('.earnDetails'))
 
   const depositButton = screen.getByRole('button', { name: 'Deposit' })
+  expect(screen.queryByRole('button', { name: 'Close Earn action' })).toBeNull()
   await user.click(depositButton)
   expect(document.activeElement).toBe(document.querySelector('.earnActionForm'))
-  await user.click(screen.getByRole('button', { name: 'Close Earn action' }))
-  expect(document.activeElement).toBe(depositButton)
 
   await user.click(screen.getByRole('button', { name: '<- All vaults' }))
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
@@ -400,11 +431,11 @@ it('describes approvals only for routes that can request them', async () => {
   await screen.findByRole('heading', { name: 'Ethereum' })
   await user.click(screen.getByRole('button', { name: 'Manage yvUSD position' }))
 
+  expect(screen.getByText(/requests only the exact amount/i)).toBeTruthy()
   await user.click(screen.getByRole('button', { name: 'Withdraw' }))
   expect(screen.getByText(/does not request a token approval/i)).toBeTruthy()
   expect(screen.queryByText(/requests only the exact amount/i)).toBeNull()
 
-  await user.click(screen.getByRole('button', { name: 'Close Earn action' }))
   await user.click(screen.getByRole('button', { name: 'Deposit' }))
   expect(screen.getByText(/requests only the exact amount/i)).toBeTruthy()
 })
@@ -429,10 +460,11 @@ it('describes staking as staking rather than a withdrawal', async () => {
   await user.click(screen.getByRole('button', { name: 'Stake existing yBOLD' }))
 
   expect(screen.getByText('Stake existing yBOLD and receive ysyBOLD.')).toBeTruthy()
+  expect(screen.getByText('Available to stake: 1.5 yBOLD')).toBeTruthy()
   expect(screen.queryByText(/Withdraw directly/)).toBeNull()
 })
 
-it('clears an open action when the selected account changes', () => {
+it('resets the persistent action to deposit when the selected account changes', () => {
   const component = new Earn({})
   const nextAddress = '0x0000000000000000000000000000000000000002'
   component.accountKey = address
@@ -447,7 +479,17 @@ it('clears an open action when the selected account changes', () => {
 
   component.componentDidUpdate()
 
-  expect(component.setState).toHaveBeenCalledWith({ form: null, error: '' })
+  expect(component.setState).toHaveBeenCalledWith({
+    form: {
+      action: 'deposit',
+      variant: '',
+      amount: '',
+      max: false,
+      busy: false,
+      error: ''
+    },
+    error: ''
+  })
 })
 
 it('keeps persisted workflow mutations disabled for a watch-only account', async () => {
@@ -476,6 +518,20 @@ it('keeps persisted workflow mutations disabled for a watch-only account', async
 
   expect(screen.getByRole('button', { name: 'Resume' }).disabled).toBe(true)
   expect(screen.getByRole('button', { name: 'Revoke approval' }).disabled).toBe(true)
+})
+
+it('does not present unexecuted steps as ready after a workflow was canceled', async () => {
+  getYearnWorkflows.mockResolvedValue({
+    workflows: [{ ...makeReadyWorkflow(), status: 'canceled' }]
+  })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+
+  await user.click(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
+
+  const step = screen.getByText('Deposit into yvUSD').closest('li')
+  expect(step.textContent.toLowerCase()).toContain('canceled')
+  expect(step.textContent.toLowerCase()).not.toContain('ready')
 })
 
 it('requires a separate recheck before offering to retry an unknown approval cleanup', async () => {
@@ -626,7 +682,7 @@ it('shows cooldown-held locked shares in the withdrawal form', async () => {
   await user.click(screen.getByRole('button', { name: /^Locked/ }))
   await user.click(screen.getByRole('button', { name: 'Withdraw' }))
 
-  expect(screen.getByText('Cooldown: 2 styvUSD')).toBeTruthy()
+  expect(screen.getByText('Shares in withdrawal window: 2 styvUSD')).toBeTruthy()
   expect(screen.queryByText('Position: 0 yvUSD')).toBeNull()
 })
 

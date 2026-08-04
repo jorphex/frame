@@ -98,5 +98,10 @@ export function cancelYearnWorkflow(workflow: YearnWorkflow, now = Date.now()) {
     throw new Error('Revoke the remaining token approval before closing this workflow')
   }
   if (workflow.status === 'complete') throw new Error('A completed Yearn workflow cannot be canceled')
-  return update(workflow, { status: 'canceled', error: undefined }, now)
+  const steps = workflow.steps.map((step) =>
+    ['pending', 'ready'].includes(step.status) || (step.status === 'error' && !step.txHash)
+      ? { ...step, status: 'canceled' as const, error: undefined }
+      : step
+  )
+  return update(workflow, { steps, status: 'canceled', error: undefined }, now)
 }

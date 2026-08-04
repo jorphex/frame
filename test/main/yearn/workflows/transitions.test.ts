@@ -98,5 +98,7 @@ it('requires a revoke after a confirmed approval and blocks cancellation in flig
   const approved = confirmYearnStep(submitted)
   expect(hasOutstandingApproval(approved)).toBe(true)
   expect(() => cancelYearnWorkflow(approved)).toThrow('Revoke')
-  expect(cancelYearnWorkflow(original).status).toBe('canceled')
+  const canceled = cancelYearnWorkflow(original)
+  expect(canceled.status).toBe('canceled')
+  expect(canceled.steps.map(({ status }) => status)).toEqual(['canceled', 'canceled'])
 })

@@ -213,6 +213,51 @@ const actionTitle = (action) =>
     revoke: 'Revoke approval'
   })[action] || 'Yearn action'
 
+const actionForm = (action, variant) => ({
+  action,
+  variant,
+  amount: '',
+  max: false,
+  busy: false,
+  error: ''
+})
+
+const availableForAction = (vault, position, form) => {
+  if (form.action === 'cancel-cooldown') return null
+  if (form.action === 'deposit') {
+    return position?.assetBalance === null || position?.assetBalance === undefined
+      ? null
+      : { label: 'Available to deposit', amount: position.assetBalance, symbol: vault.asset.symbol }
+  }
+
+  const owned = position?.variants.find(({ id }) => id === form.variant)
+  if (!owned) return null
+  if (form.action === 'stake') {
+    return { label: 'Available to stake', amount: owned.shares, symbol: owned.symbol }
+  }
+  if (form.action === 'withdraw' && form.variant === 'locked' && owned.sharesRaw === '0') {
+    const cooldownShares = owned.cooldown?.shares
+    return cooldownShares === null || cooldownShares === undefined
+      ? null
+      : { label: 'Shares in withdrawal window', amount: cooldownShares, symbol: owned.symbol }
+  }
+  if (form.action === 'withdraw' && form.variant === 'staked') {
+    return { label: 'Available to withdraw', amount: owned.shares, symbol: owned.symbol }
+  }
+
+  const amount = owned.assets ?? owned.shares
+  const symbol = owned.assets !== null ? owned.assetSymbol : owned.symbol
+  const labels = {
+    withdraw: 'Available to withdraw',
+    'start-cooldown': 'Locked position'
+  }
+  return amount === null || amount === undefined
+    ? null
+    : { label: labels[form.action] || 'Available', amount, symbol }
+}
+
+const hasAvailableAmount = (available) => Boolean(available && /[1-9]/.test(String(available.amount)))
+
 const durationDays = (seconds, fallback) => {
   if (!Number.isFinite(seconds) || seconds <= 0) return fallback
   const days = seconds / 86_400
@@ -293,41 +338,47 @@ const WorkflowCard = ({ workflow, onResume, onCancel, onRevoke, busy, canTransac
         {workflow.displayAmount} {workflow.symbol}
       </div>
       <ol>
-        {workflow.steps.map((step, index) => (
-          <li className={step.status} key={step.id}>
-            <span>{index + 1}</span>
-            <div>
-              <strong>{step.label}</strong>
-              <em>{step.status.replaceAll('-', ' ')}</em>
-              {step.txHash ? (
-                <button
-                  type='button'
-                  className='earnReceiptLink'
-                  onClick={() =>
-                    link.send('tray:openExplorer', { type: 'ethereum', id: workflow.chainId }, step.txHash)
-                  }
-                >
-                  View transaction
-                </button>
-              ) : null}
-              {step.receiptTransfers?.length ? (
-                <div className='earnReceiptTransfers' role='status' aria-live='polite'>
-                  {step.receiptTransfers.map((transfer) => (
-                    <span key={`${transfer.token}:${transfer.direction}`} title={transfer.token}>
-                      {transfer.direction === 'in' ? 'Received' : 'Sent'}{' '}
-                      {formatReceiptAmount(transfer.amountRaw, transfer.decimals)} {transfer.symbol}
-                    </span>
-                  ))}
-                  {step.receiptTransfersTruncated ? <em>Additional transfer evidence omitted</em> : null}
-                </div>
-              ) : step.receiptTransfersTruncated ? (
-                <div className='earnReceiptTransfers' role='status' aria-live='polite'>
-                  Transfer evidence exceeded the display bound
-                </div>
-              ) : null}
-            </div>
-          </li>
-        ))}
+        {workflow.steps.map((step, index) => {
+          const status =
+            workflow.status === 'canceled' && ['pending', 'ready'].includes(step.status)
+              ? 'canceled'
+              : step.status
+          return (
+            <li className={status} key={step.id}>
+              <span>{index + 1}</span>
+              <div>
+                <strong>{step.label}</strong>
+                <em>{status.replaceAll('-', ' ')}</em>
+                {step.txHash ? (
+                  <button
+                    type='button'
+                    className='earnReceiptLink'
+                    onClick={() =>
+                      link.send('tray:openExplorer', { type: 'ethereum', id: workflow.chainId }, step.txHash)
+                    }
+                  >
+                    View transaction
+                  </button>
+                ) : null}
+                {step.receiptTransfers?.length ? (
+                  <div className='earnReceiptTransfers' role='status' aria-live='polite'>
+                    {step.receiptTransfers.map((transfer) => (
+                      <span key={`${transfer.token}:${transfer.direction}`} title={transfer.token}>
+                        {transfer.direction === 'in' ? 'Received' : 'Sent'}{' '}
+                        {formatReceiptAmount(transfer.amountRaw, transfer.decimals)} {transfer.symbol}
+                      </span>
+                    ))}
+                    {step.receiptTransfersTruncated ? <em>Additional transfer evidence omitted</em> : null}
+                  </div>
+                ) : step.receiptTransfersTruncated ? (
+                  <div className='earnReceiptTransfers' role='status' aria-live='polite'>
+                    Transfer evidence exceeded the display bound
+                  </div>
+                ) : null}
+              </div>
+            </li>
+          )
+        })}
       </ol>
       {workflow.error ? (
         <div className='earnWorkflowError' role='alert'>
@@ -360,11 +411,12 @@ const WorkflowCard = ({ workflow, onResume, onCancel, onRevoke, busy, canTransac
   )
 }
 
-const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose, formRef }) => {
+const ActionForm = ({ vault, position, form, disabled, onChange, onSubmit, formRef }) => {
   const variant = vault.variants.find(({ id }) => id === form.variant)
-  const owned = position?.variants.find(({ id }) => id === form.variant)
   const isCancel = form.action === 'cancel-cooldown'
   const needsApproval = routeNeedsApproval(form.action, form.variant)
+  const available = availableForAction(vault, position, form)
+  const maxAvailable = hasAvailableAmount(available)
   const symbol =
     form.action === 'deposit' ||
     (form.action === 'withdraw' && ['direct', 'unlocked', 'locked'].includes(form.variant)) ||
@@ -383,9 +435,6 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose, formRe
           <span>{vault.chainName}</span>
           <h2>{actionTitle(form.action)}</h2>
         </div>
-        <button type='button' onClick={onClose} aria-label='Close Earn action'>
-          x
-        </button>
       </div>
       <p>{actionDescription(vault, form)}</p>
       {!isCancel ? (
@@ -399,8 +448,8 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose, formRe
               autoComplete='off'
               aria-describedby={form.error ? 'earn-action-error' : undefined}
               aria-invalid={Boolean(form.error)}
-              value={form.amount}
-              disabled={form.max || form.busy}
+              value={form.max ? 'Max' : form.amount}
+              disabled={form.max || form.busy || disabled}
               onChange={(event) => onChange({ amount: event.target.value, max: false, error: '' })}
               placeholder='0.0'
             />
@@ -408,27 +457,25 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose, formRe
               type='button'
               className={form.max ? 'active' : ''}
               aria-pressed={form.max}
-              disabled={form.busy}
-              onClick={() => onChange({ max: !form.max, error: '' })}
+              disabled={form.busy || disabled || (!form.max && !maxAvailable)}
+              onClick={() =>
+                onChange({
+                  amount: form.max ? '' : '0',
+                  max: !form.max,
+                  error: ''
+                })
+              }
             >
               Max
             </button>
           </div>
         </div>
       ) : null}
-      {owned ? (
+      {available ? (
         <div className='earnAvailable'>
-          {owned.sharesRaw !== '0' ? (
-            <span>
-              Position: {formatAmount(owned.assets ?? owned.shares)}{' '}
-              {owned.assets !== null ? owned.assetSymbol : owned.symbol}
-            </span>
-          ) : null}
-          {(owned.cooldown?.sharesRaw || '0') !== '0' ? (
-            <span>
-              Cooldown: {formatAmount(owned.cooldown.shares)} {owned.symbol}
-            </span>
-          ) : null}
+          <span>
+            {available.label}: {formatAmount(available.amount)} {available.symbol}
+          </span>
         </div>
       ) : null}
       {form.error ? (
@@ -446,7 +493,7 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose, formRe
       <button
         type='button'
         className='earnPrimaryAction'
-        disabled={form.busy || (!isCancel && !form.max && !form.amount)}
+        disabled={disabled || form.busy || (!isCancel && !form.max && !form.amount)}
         onClick={onSubmit}
       >
         {form.busy ? 'Preparing...' : `Review ${actionTitle(form.action)}`}
@@ -469,7 +516,6 @@ const VaultDetails = ({
   onOpenAction,
   onFormChange,
   onSubmit,
-  onCloseForm,
   onResume,
   onCancel,
   onRevoke,
@@ -500,6 +546,13 @@ const VaultDetails = ({
       : Boolean(canExit && selectedOwned && selectedOwned.sharesRaw !== '0')
   const canCancelCooldown =
     canExit && ['cooling-down', 'withdrawal-window', 'expired'].includes(cooldown?.status)
+  const actionEnabled = {
+    deposit: canDeposit,
+    withdraw: canWithdrawSelected,
+    stake: canDeposit,
+    'start-cooldown': canStartCooldown,
+    'cancel-cooldown': canCancelCooldown
+  }
   return (
     <div className='earnDetails cardShow' ref={detailsRef} tabIndex='-1'>
       <button type='button' className='earnTextButton' onClick={onBack}>
@@ -607,12 +660,20 @@ const VaultDetails = ({
           withdrawable.
         </div>
       ) : null}
-      <div className='earnActions'>
-        <button type='button' disabled={!canDeposit} onClick={() => onOpenAction('deposit', selectedVariant)}>
+      <div className='earnActions' role='group' aria-label='Vault action'>
+        <button
+          type='button'
+          aria-pressed={form?.action === 'deposit'}
+          className={form?.action === 'deposit' ? 'active' : ''}
+          disabled={!canDeposit}
+          onClick={() => onOpenAction('deposit', selectedVariant)}
+        >
           Deposit
         </button>
         <button
           type='button'
+          aria-pressed={form?.action === 'withdraw'}
+          className={form?.action === 'withdraw' ? 'active' : ''}
           disabled={!canWithdrawSelected}
           onClick={() => onOpenAction('withdraw', selectedVariant)}
         >
@@ -649,9 +710,9 @@ const VaultDetails = ({
           vault={vault}
           position={position}
           form={form}
+          disabled={!actionEnabled[form.action]}
           onChange={onFormChange}
           onSubmit={onSubmit}
-          onClose={onCloseForm}
           formRef={formRef}
         />
       ) : null}
@@ -721,7 +782,12 @@ export class Earn extends React.Component {
     const nextAccountKey = this.store('selected.current') || ''
     if (nextAccountKey !== this.accountKey) {
       this.accountKey = nextAccountKey
-      if (this.state.form) this.setState({ form: null, error: '' })
+      if (this.state.form) {
+        this.setState({
+          form: actionForm('deposit', this.state.selectedVariant),
+          error: ''
+        })
+      }
     }
     const nextKey = this.currentStoreKey()
     if (nextKey !== this.storeKey) {
@@ -814,24 +880,22 @@ export class Earn extends React.Component {
     const selectedVariant =
       vault?.kind === 'yvUSD' ? 'unlocked' : vault?.kind === 'yBOLD' ? 'staked' : 'direct'
     this.vaultTriggerLabel = trigger?.getAttribute('aria-label')
-    this.setState({ selected, selectedVariant, form: null, error: '' }, () => this.earnDetails?.focus())
+    this.setState(
+      { selected, selectedVariant, form: actionForm('deposit', selectedVariant), error: '' },
+      () => this.earnDetails?.focus()
+    )
   }
 
   openAction(action, variant) {
     const vault = this.state.catalog?.vaults.find(({ id }) => id === this.state.selected)
     const safeVariant = vault?.kind === 'yBOLD' && action === 'deposit' ? 'staked' : variant
-    this.actionTrigger = document.activeElement
     this.setState(
       {
         selectedVariant: safeVariant,
-        form: { action, variant: safeVariant, amount: '', max: false, busy: false, error: '' }
+        form: actionForm(action, safeVariant)
       },
       () => this.earnActionForm?.focus()
     )
-  }
-
-  closeAction() {
-    this.setState({ form: null }, () => this.actionTrigger?.focus())
   }
 
   closeDetails() {
@@ -848,7 +912,10 @@ export class Earn extends React.Component {
       if (changes.variant) this.setState({ selectedVariant: changes.variant })
       return
     }
-    this.setState(({ form }) => ({ form: { ...form, ...changes } }))
+    this.setState(({ form }) => ({
+      ...(changes.variant && { selectedVariant: changes.variant }),
+      form: changes.variant ? actionForm(form.action, changes.variant) : { ...form, ...changes }
+    }))
   }
 
   async submitForm() {
@@ -866,7 +933,7 @@ export class Earn extends React.Component {
       if (this.mounted) {
         this.setState(({ workflows }) => ({
           workflows: [workflow, ...workflows.filter(({ id }) => id !== workflow.id)],
-          form: null
+          form: actionForm(form.action, form.variant)
         }))
       }
     } catch (error) {
@@ -1000,7 +1067,6 @@ export class Earn extends React.Component {
           onOpenAction={(action, variant) => this.openAction(action, variant)}
           onFormChange={(changes) => this.changeForm(changes)}
           onSubmit={() => this.submitForm()}
-          onCloseForm={() => this.closeAction()}
           onResume={(id) => this.runWorkflow(resumeYearnWorkflow, id)}
           onCancel={(id) => this.runWorkflow(cancelYearnWorkflow, id)}
           onRevoke={(id) => this.runWorkflow(revokeYearnWorkflow, id)}

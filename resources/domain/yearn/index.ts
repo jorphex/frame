@@ -192,7 +192,7 @@ export const YearnWorkflowStepSchema = z
     target: YearnAddressSchema,
     data: z.string().regex(/^0x[0-9a-fA-F]{8}(?:[0-9a-fA-F]{2}){0,16380}$/),
     amountRaw: BaseUnitAmountSchema,
-    status: z.enum(['pending', 'ready', 'awaiting-review', 'submitted', 'confirmed', 'error']),
+    status: z.enum(['pending', 'ready', 'awaiting-review', 'submitted', 'confirmed', 'error', 'canceled']),
     txHash: z
       .string()
       .regex(/^0x[0-9a-fA-F]{64}$/)
