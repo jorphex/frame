@@ -12,9 +12,9 @@ const wire = (id: unknown, method: unknown, ...args: unknown[]) =>
   )
 
 test('parses a bounded method-specific RPC request', () => {
-  expect(parseRendererRpcRequest(wire(1, 'getAccountCodeClassification', address, 1))).toEqual({
+  expect(parseRendererRpcRequest(wire(1, 'resolveEnsName', 'yearn.eth'))).toEqual({
     success: true,
-    data: { id: 1, method: 'getAccountCodeClassification', args: [address, 1] }
+    data: { id: 1, method: 'resolveEnsName', args: ['yearn.eth'] }
   })
   expect(parseRendererRpcRequest(wire('1', 'getState')).success).toBe(false)
   expect(parseRendererRpcRequest(wire(1, 'getState', 'extra')).success).toBe(false)

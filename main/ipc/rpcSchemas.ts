@@ -48,16 +48,6 @@ const result = <T extends z.ZodType>(schema: T) =>
     .transform((args) => (typeof args[0] === 'string' ? [args[0]] : args))
 
 const SignerIdSchema = z.object({ id: IdSchema }).transform(({ id }) => ({ id }))
-const AccountCodeSchema = z
-  .object({
-    status: z.enum(['no-code', 'delegated', 'contract', 'unavailable']),
-    source: z.literal('eth_getCode'),
-    account: AddressSchema,
-    chainId: ChainIdSchema,
-    delegate: AddressSchema.optional(),
-    reason: z.string().max(240).optional()
-  })
-  .strict()
 const CompatibilitySchema = z
   .object({ signer: z.string().max(32), tx: z.string().max(32), compatible: z.boolean() })
   .strict()
@@ -127,10 +117,6 @@ const rpcSchemas = {
     response: result(SignerIdSchema)
   },
   declineRequest: { request: z.tuple([ActionRequestReferenceSchema]), response: actionResult },
-  getAccountCodeClassification: {
-    request: z.tuple([AddressSchema, ChainIdSchema]),
-    response: result(AccountCodeSchema)
-  },
   getFrameId: { request: noArgs, response: result(IdSchema) },
   getState: { request: noArgs, response: result(JsonRecordSchema) },
   latticePair: {

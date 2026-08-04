@@ -20,11 +20,8 @@ const nebulaApi = require('../nebula').default
 const { arraysEqual, randomLetters } = require('../../resources/utils')
 const { isSignatureRequest } = require('../signatures')
 const { default: TrezorBridge } = require('../../main/signers/trezor/bridge')
-const { createAccountCodeReader } = require('../accounts/accountCode')
 const { onRendererRpc } = require('../ipc/renderer')
 const { encodeRendererRpcValues, parseRendererRpcResponse } = require('../ipc/rpcSchemas')
-
-const accountCodeReader = createAccountCodeReader(provider.connection)
 
 const callbackWhenDone = (fn, cb) => {
   try {
@@ -45,9 +42,6 @@ const rpc = {
     } else {
       cb(new Error('No frameId set for this window'))
     }
-  },
-  getAccountCodeClassification(address, chainId, cb) {
-    accountCodeReader.read(address, chainId).then((result) => cb(null, result), cb)
   },
   // Review
   // getSigners: signers.getSigners,

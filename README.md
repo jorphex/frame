@@ -195,9 +195,9 @@ community security fixes.
 
 The current development branch contains the first headlessly qualified Yearn
 Earn milestone; its exact scope and deferred live qualification are documented
-in [Yearn Earn](YEARN_EARN.md). Near-term desktop work focuses on account-code
-reliability and local address-book support. Broader UI qualification,
-smart-account support, and a future mobile client with WalletConnect built
+in [Yearn Earn](YEARN_EARN.md). Near-term desktop work focuses on local
+address-book support and broader UI qualification. Smart-account support and a
+future mobile client with WalletConnect built
 around shared wallet-core logic remain later work. Roadmap items are directional
 and are not release support claims.
 

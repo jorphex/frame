@@ -19,43 +19,6 @@ function toDisplayUSD(num) {
   return BigNumber(num).toFixed(num >= 10 ? 0 : 2)
 }
 
-export function getAccountCodePresentation(classification) {
-  if (classification?.status === 'no-code') {
-    return {
-      className: 'accountCodeType accountCodeTypeNoCode',
-      label: 'RPC No Code',
-      title:
-        'The configured RPC reports no code for this address on this chain. This does not prove the address is an EOA.'
-    }
-  }
-  if (classification?.status === 'delegated') {
-    return {
-      className: 'accountCodeType accountCodeTypeDelegated',
-      label: 'RPC 7702',
-      title: `The configured RPC reports an EIP-7702 delegation to ${classification.delegate}.`
-    }
-  }
-  if (classification?.status === 'contract') {
-    return {
-      className: 'accountCodeType accountCodeTypeContract',
-      label: 'RPC Contract',
-      title: 'The configured RPC reports contract code for this account on this chain.'
-    }
-  }
-  if (classification?.status === 'unavailable') {
-    return {
-      className: 'accountCodeType accountCodeTypeUnavailable',
-      label: 'RPC Unknown',
-      title: classification.reason || 'The configured RPC account code check is unavailable.'
-    }
-  }
-  return {
-    className: 'accountCodeType accountCodeTypePending',
-    label: 'RPC Checking',
-    title: 'Checking account code through the configured RPC.'
-  }
-}
-
 const GasFees = ({ gasPrice, color }) => (
   <div className='gasItem gasItemLarge'>
     <div className='gasGweiNum'>{gasPrice}</div>
@@ -131,44 +94,7 @@ const GasFeesMarket = ({ gasPrice, fees: { nextBaseFee, maxPriorityFeePerGas }, 
 export class ChainSummaryComponent extends Component {
   constructor(...args) {
     super(...args)
-    this.state = {
-      expand: false,
-      accountCode: undefined
-    }
-    this.accountCodeRequest = 0
-  }
-
-  componentDidMount() {
-    this.refreshAccountCode()
-    this.accountCodeRefresh = setInterval(() => this.refreshAccountCode(), 30_000)
-  }
-
-  componentDidUpdate(previousProps) {
-    if (previousProps.address !== this.props.address || previousProps.chainId !== this.props.chainId) {
-      this.refreshAccountCode()
-    }
-  }
-
-  componentWillUnmount() {
-    this.accountCodeRequest += 1
-    clearInterval(this.accountCodeRefresh)
-  }
-
-  refreshAccountCode() {
-    const { address, chainId } = this.props
-    const request = ++this.accountCodeRequest
-    if (!address || !chainId) return this.setState({ accountCode: undefined })
-
-    this.setState({ accountCode: { status: 'pending', source: 'eth_getCode' } })
-    link.rpc('getAccountCodeClassification', address, chainId, (error, result) => {
-      if (request !== this.accountCodeRequest) return
-
-      this.setState({
-        accountCode: error
-          ? { status: 'unavailable', source: 'eth_getCode', reason: String(error).slice(0, 240) }
-          : result
-      })
-    })
+    this.state = { expanded: false }
   }
 
   render() {
@@ -190,8 +116,6 @@ export class ChainSummaryComponent extends Component {
           BigNumber(fees.maxPriorityFeePerGas).plus(BigNumber(fees.nextBaseFee)).shiftedBy(-9).toNumber()
         )
       : gasPrice
-    const accountCode = address ? getAccountCodePresentation(this.state.accountCode) : undefined
-
     return (
       <>
         <ClusterRow>
@@ -226,13 +150,6 @@ export class ChainSummaryComponent extends Component {
               <div>{address ? svg.accounts(16) : svg.telescope(18)}</div>
             </div>
           </ClusterValue>
-          {accountCode && (
-            <ClusterValue style={{ minWidth: '100px', maxWidth: '100px' }} pointerEvents={true}>
-              <div className={accountCode.className} title={accountCode.title}>
-                {accountCode.label}
-              </div>
-            </ClusterValue>
-          )}
         </ClusterRow>
         {this.state.expanded && (
           <ClusterRow>
