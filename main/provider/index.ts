@@ -241,11 +241,17 @@ export class Provider extends EventEmitter {
   accountsChanged(accounts: string[]) {
     const address = accounts[0]
 
-    this.subscriptions.accountsChanged
-      .filter((subscription) =>
-        hasSubscriptionPermission(SubscriptionType.ACCOUNTS, address, subscription.originId)
+    this.subscriptions.accountsChanged.forEach((subscription) => {
+      const visibleAccounts = hasSubscriptionPermission(
+        SubscriptionType.ACCOUNTS,
+        address,
+        subscription.originId
       )
-      .forEach((subscription) => this.sendSubscriptionData(subscription.id, accounts))
+        ? accounts
+        : []
+
+      this.sendSubscriptionData(subscription.id, visibleAccounts)
+    })
   }
 
   assetsChanged(address: string, assets: RPC.GetAssets.Assets) {

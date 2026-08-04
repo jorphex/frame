@@ -17,6 +17,7 @@ import { requireStoreAction } from './store/action'
 import { addRequestedChain } from './chains/addRequestedChain'
 import dapps from './dapps'
 import accounts from './accounts'
+import provider from './provider'
 import * as launch from './launch'
 import updater from './updater'
 import signers from './signers'
@@ -26,6 +27,7 @@ import { openBlockExplorer, openExternal } from './windows/window'
 import Erc20Contract from './contracts/erc20'
 import { getErrorCode } from '../resources/utils'
 import walletCallEvidenceRuntime from './provider/walletCallEvidenceRuntime'
+import { applyPermissionAction } from './provider/permissionEvents'
 import { handleRenderer, onRenderer } from './ipc/renderer'
 import { isPathInsideRoot } from './security/fileAccess'
 import { assertSandboxEnabled } from './security/sandbox'
@@ -379,7 +381,12 @@ app.on('ready', () => {
 
 onRenderer('tray:action', (e, action, ...args) => {
   const storeAction = typeof action === 'string' ? store[action] : undefined
-  if (typeof storeAction === 'function') return storeAction(...args)
+  if (typeof storeAction === 'function') {
+    if ((action === 'toggleAccess' || action === 'clearPermissions') && typeof args[0] === 'string') {
+      return applyPermissionAction(args[0], () => storeAction(...args), accounts, provider)
+    }
+    return storeAction(...args)
+  }
   log.info('Tray sent unrecognized action: ', action)
 })
 

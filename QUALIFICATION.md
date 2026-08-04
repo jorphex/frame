@@ -110,10 +110,13 @@ For **both Chrome and Firefox**:
    approve it in Frame. A page session must not create a separate pairing prompt.
 2. Reject one account connection, then approve one. Confirm only the selected
    disposable account is returned.
-3. Change the selected account and approved testnet in Frame. Confirm the page
-   logs the corresponding `accountsChanged` and `chainChanged` events once.
-4. Open the page in two tabs. Submit a request in one tab and confirm the other
-   tab receives neither its approval result nor its events.
+3. Change the selected account and approved testnet in Frame. Confirm every
+   connected tab for that origin logs the corresponding `accountsChanged` and
+   `chainChanged` events once.
+4. Open the page in two tabs. Submit a request in one tab and confirm its RPC
+   result remains tab-local; the other tab must receive no result or signing
+   payload. Account and chain events are origin state and should reach both
+   tabs.
 5. Close/reopen the tab and restart the browser. Confirm the known companion
    reconnects without another pairing approval.
 6. Revoke the browser credential in Frame and confirm requests stop. Pair again,

@@ -3425,6 +3425,35 @@ describe('#send', () => {
         })
       })
     })
+
+    it('publishes an empty account list to subscribers that lose access', () => {
+      provider.subscriptions.accountsChanged = [
+        { id: 'allowed-subscription', originId: 'allowed-origin' },
+        { id: 'revoked-subscription', originId: 'revoked-origin' }
+      ]
+      hasSubscriptionPermission.mockImplementation(
+        (_type, _address, originId) => originId === 'allowed-origin'
+      )
+      const payloads = []
+      const listener = (payload) => payloads.push(payload)
+      provider.on('data:subscription', listener)
+
+      provider.accountsChanged([address])
+
+      provider.off('data:subscription', listener)
+      expect(payloads).toEqual([
+        {
+          jsonrpc: '2.0',
+          method: 'eth_subscription',
+          params: { subscription: 'allowed-subscription', result: [address] }
+        },
+        {
+          jsonrpc: '2.0',
+          method: 'eth_subscription',
+          params: { subscription: 'revoked-subscription', result: [] }
+        }
+      ])
+    })
   })
 })
 
