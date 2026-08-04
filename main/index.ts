@@ -30,6 +30,7 @@ import { handleRenderer, onRenderer } from './ipc/renderer'
 import { isPathInsideRoot } from './security/fileAccess'
 import { assertSandboxEnabled } from './security/sandbox'
 import yearn from './yearn'
+import { installShutdownHandlers } from './lifecycle/shutdown'
 
 const isDev = process.env.NODE_ENV === 'development'
 assertSandboxEnabled(app.commandLine)
@@ -373,8 +374,7 @@ app.on('before-quit', () => {
   }
 })
 
-app.on('will-quit', () => app.quit())
-app.on('quit', () => {
+installShutdownHandlers(app, () => {
   log.info('Application closing')
 
   // await clients.stop()
