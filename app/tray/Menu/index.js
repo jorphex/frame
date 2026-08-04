@@ -3,13 +3,23 @@ import Restore from 'react-restore'
 import link from '../../../resources/link'
 import svg from '../../../resources/svg'
 
-class Menu extends React.Component {
+const activateOnKeyboard = (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    event.currentTarget.click()
+  }
+}
+
+export class Menu extends React.Component {
   constructor(...args) {
     super(...args)
     this.state = {
       glitchOnSend: false,
       glitchOnSidebar: false
     }
+  }
+  componentWillUnmount() {
+    clearTimeout(this.clickTimer)
   }
   glitch(el, on) {
     return (
@@ -28,6 +38,10 @@ class Menu extends React.Component {
       <div className='panelMenu'>
         <div
           className={'panelMenuItem panelMenuItemOpen'}
+          role='button'
+          aria-label='Open dashboard'
+          tabIndex='0'
+          onKeyDown={activateOnKeyboard}
           onClick={() => {
             this.setState({ glitchOnSidebar: false })
             link.send('tray:action', 'setDash', {
@@ -42,6 +56,10 @@ class Menu extends React.Component {
         </div>
         <div
           className={'panelMenuItem panelMenuItemSend'}
+          role='button'
+          aria-label='Open Frame Send'
+          tabIndex='0'
+          onKeyDown={activateOnKeyboard}
           onClick={() => {
             clearTimeout(this.clickTimer)
             this.clickTimer = setTimeout(() => {

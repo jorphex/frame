@@ -55,7 +55,7 @@ const RevokeCompanion = styled.div`
   text-transform: uppercase;
 `
 
-class Settings extends Component {
+export class Settings extends Component {
   constructor(props, context) {
     super(props, context)
     const latticeEndpoint = context.store('main.latticeSettings.endpointCustom')
@@ -75,7 +75,7 @@ class Settings extends Component {
     this.setState({ latticeEndpoint: value })
     // TODO: Update to target specific Lattice device rather than global
     this.inputLatticeTimeout = setTimeout(
-      () => link.send('tray:action', 'setLatticeEndpointCustom', this.state.latticeEndpoint),
+      () => link.send('tray:action', 'setLatticeEndpointCustom', value),
       1000
     )
   }

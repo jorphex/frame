@@ -1,4 +1,4 @@
-import { useState, useEffect, createRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 function findIndex(options, value) {
   const index = options.findIndex((option) => option.value === value)
@@ -6,28 +6,21 @@ function findIndex(options, value) {
 }
 
 const Dropdown = ({ options, syncValue, initialValue, style, className = '', onChange }) => {
-  const [selectedIndex, setSelectedIndex] = useState(
-    findIndex(options, syncValue || initialValue) || options[0]
+  const [localSelectedIndex, setLocalSelectedIndex] = useState(
+    findIndex(options, syncValue ?? initialValue) ?? 0
   )
+  const selectedIndex = syncValue === undefined ? localSelectedIndex : (findIndex(options, syncValue) ?? 0)
   const [expanded, setExpanded] = useState(false)
-  const ref = createRef()
+  const ref = useRef(null)
 
-  const clickHandler = (e) => {
-    if (!e.composedPath().includes(ref.current) && expanded) {
-      setExpanded(false)
-    }
-  }
-  // On mount -> register listener for document clicks
   useEffect(() => {
+    const clickHandler = (e) => {
+      if (!e.composedPath().includes(ref.current)) setExpanded(false)
+    }
+
     document.addEventListener('click', clickHandler)
     return () => document.removeEventListener('click', clickHandler)
-  })
-
-  // Handle new sync value
-  const syncIndex = findIndex(options, syncValue)
-  if (syncIndex !== selectedIndex) {
-    setSelectedIndex(syncIndex)
-  }
+  }, [])
 
   // Handle item selected
   const handleSelect = (option, index) => {
@@ -36,7 +29,7 @@ const Dropdown = ({ options, syncValue, initialValue, style, className = '', onC
       // Return new value
       onChange(option.value)
       // Update state
-      setSelectedIndex(index)
+      setLocalSelectedIndex(index)
     }
   }
 
