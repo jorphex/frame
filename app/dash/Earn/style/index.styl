@@ -1,4 +1,4 @@
-.earn, .earnDetails
+.earn, .earnDetails, .earnActivityView
   min-height 100%
   box-sizing border-box
   padding 10px 8px 44px
@@ -689,6 +689,34 @@
     letter-spacing 1px
     text-transform uppercase
 
+.earnWorkflowsPreview
+  position relative
+
+  > div
+    display flow-root
+
+.earnMoreButton
+  width 100%
+  height 38px
+  margin 0 0 7px
+  border 0
+  border-radius 14px
+  color var(--outerspace06)
+  background var(--ghostB)
+  font-family 'MainFont'
+  font-size 11px
+  letter-spacing 1px
+  text-transform uppercase
+  cursor pointer
+
+.earnMoreButton:hover
+  color var(--outerspace)
+  background var(--ghostC)
+
+.earnMoreButton:focus-visible
+  outline 2px solid var(--outerspace04)
+  outline-offset 1px
+
 .earnWorkflow
   margin-bottom 7px
   padding 15px
@@ -783,6 +811,27 @@
   color var(--bad)
   font-size 11px
   line-height 16px
+
+.earnDetailsFooter
+  display flow-root
+
+.earnActivityHeader
+  margin 7px 10px 20px
+  padding-bottom 16px
+  border-bottom 1px solid var(--ghostC)
+
+  h1
+    margin 5px 0 4px
+    font-size 28px
+    font-weight 300
+
+  p
+    margin 0
+    color var(--outerspace07)
+    font-size 13px
+
+.earnWorkflowsExpanded
+  margin-top 0
 
 .earnYearnLink
   display block

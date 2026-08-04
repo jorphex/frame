@@ -1,7 +1,12 @@
 import Restore from 'react-restore'
 
 import { render, screen, waitFor } from '../../../componentSetup'
-import { Earn, formatReceiptAmount, positionsMatchAccount } from '../../../../app/dash/Earn'
+import {
+  Earn,
+  activityPreviewLimit,
+  formatReceiptAmount,
+  positionsMatchAccount
+} from '../../../../app/dash/Earn'
 import {
   getYearnCatalog,
   getYearnPositions,
@@ -263,6 +268,27 @@ it('formats receipt base units without floating-point conversion', () => {
   expect(formatReceiptAmount('42', 0)).toBe('42')
 })
 
+it('fits activity cards within the remaining viewport budget', () => {
+  expect(
+    activityPreviewLimit({
+      cardHeights: [100, 100, 100],
+      total: 5,
+      budget: 265,
+      headingHeight: 20,
+      moreHeight: 45
+    })
+  ).toBe(2)
+  expect(
+    activityPreviewLimit({
+      cardHeights: [100, 100, 100],
+      total: 5,
+      budget: 164,
+      headingHeight: 20,
+      moreHeight: 45
+    })
+  ).toBe(0)
+})
+
 it('fails closed while positions belong to the previously selected account', () => {
   const positions = makePositions()
   expect(positionsMatchAccount(positions, address.toUpperCase())).toBe(true)
@@ -480,6 +506,7 @@ it('resets the persistent action to deposit when the selected account changes', 
   component.componentDidUpdate()
 
   expect(component.setState).toHaveBeenCalledWith({
+    activityExpanded: false,
     form: {
       action: 'deposit',
       variant: '',
@@ -532,6 +559,34 @@ it('does not present unexecuted steps as ready after a workflow was canceled', a
   const step = screen.getByText('Deposit into yvUSD').closest('li')
   expect(step.textContent.toLowerCase()).toContain('canceled')
   expect(step.textContent.toLowerCase()).not.toContain('ready')
+})
+
+it('bounds recent activity and opens the complete history without nested scrolling', async () => {
+  const workflows = Array.from({ length: 5 }, (_, index) => ({
+    ...makeWorkflow(),
+    id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    displayAmount: String(index + 1),
+    updatedAt: index + 1,
+    steps: [
+      {
+        ...makeWorkflow().steps[0],
+        id: `00000000-0000-4000-9000-${String(index + 1).padStart(12, '0')}`
+      }
+    ]
+  }))
+  getYearnWorkflows.mockResolvedValue({ workflows })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+  await user.click(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
+
+  expect(document.querySelectorAll('.earnWorkflowsPreview .earnWorkflow')).toHaveLength(3)
+  expect(document.querySelector('.earnDetailsFooter')).toBeTruthy()
+  await user.click(screen.getByRole('button', { name: '+2 More' }))
+
+  expect(screen.getByRole('heading', { name: 'Earn activity' })).toBeTruthy()
+  expect(document.querySelectorAll('.earnWorkflowsExpanded .earnWorkflow')).toHaveLength(5)
+  await user.click(screen.getByRole('button', { name: '<- Vault details' }))
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: '+2 More' }))
 })
 
 it('requires a separate recheck before offering to retry an unknown approval cleanup', async () => {

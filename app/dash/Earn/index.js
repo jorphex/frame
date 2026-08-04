@@ -19,6 +19,9 @@ const CHAINS = [
   { id: 747474, name: 'Katana' }
 ]
 
+const ACTIVITY_PREVIEW_MAX = 3
+const ACTIVITY_MORE_FALLBACK_HEIGHT = 45
+
 export const formatPercent = (value) =>
   typeof value === 'number'
     ? `${(value * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
@@ -50,6 +53,16 @@ export const formatReceiptAmount = (raw, decimals) => {
   if (!fraction) return whole
   const visible = fraction.slice(0, 6)
   return `${fraction.length > visible.length ? '~' : ''}${whole}.${visible}`
+}
+
+export const activityPreviewLimit = ({ cardHeights, total, budget, headingHeight, moreHeight }) => {
+  const maximum = Math.min(ACTIVITY_PREVIEW_MAX, total, cardHeights.length)
+  for (let count = maximum; count >= 0; count -= 1) {
+    const cardsHeight = cardHeights.slice(0, count).reduce((sum, height) => sum + height, 0)
+    const overflowHeight = count < total ? moreHeight : 0
+    if (headingHeight + cardsHeight + overflowHeight <= budget) return count
+  }
+  return 0
 }
 
 const formatTimestamp = (value) =>
@@ -411,6 +424,168 @@ const WorkflowCard = ({ workflow, onResume, onCancel, onRevoke, busy, canTransac
   )
 }
 
+const workflowPreviewOrder = (workflows) => [
+  ...workflows.filter(({ status }) => !['complete', 'canceled'].includes(status)),
+  ...workflows.filter(({ status }) => ['complete', 'canceled'].includes(status))
+]
+
+const elementOuterHeight = (element) => {
+  if (!element) return 0
+  const style = window.getComputedStyle(element)
+  return element.offsetHeight + parseFloat(style.marginTop || 0) + parseFloat(style.marginBottom || 0)
+}
+
+class ActivityPreview extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      visibleCount: Math.min(ACTIVITY_PREVIEW_MAX, props.workflows.length),
+      measured: false
+    }
+  }
+
+  componentDidMount() {
+    this.viewport = this.section?.closest('.dashMainScroll')
+    if (this.viewport && typeof ResizeObserver === 'function') {
+      this.resizeObserver = new ResizeObserver(() => this.prepareMeasure())
+      this.resizeObserver.observe(this.viewport)
+    }
+    this.measure()
+  }
+
+  componentDidUpdate(previousProps) {
+    if (previousProps.layoutKey !== this.props.layoutKey) this.prepareMeasure()
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.measureTimer)
+    this.resizeObserver?.disconnect()
+  }
+
+  prepareMeasure() {
+    clearTimeout(this.measureTimer)
+    const visibleCount = Math.min(ACTIVITY_PREVIEW_MAX, this.props.workflows.length)
+    this.setState({ visibleCount, measured: false }, () => {
+      this.measureTimer = setTimeout(() => this.measure(), 0)
+    })
+  }
+
+  measure() {
+    const footer = this.section?.parentElement?.querySelector('.earnDetailsFooter')
+    if (!this.section || !footer || !this.viewport || this.viewport.clientHeight <= 0) {
+      if (!this.state.measured) this.setState({ measured: true })
+      return
+    }
+    const root = this.section.parentElement
+    const rootStyle = window.getComputedStyle(root)
+    const bottomPadding = parseFloat(rootStyle.paddingBottom || 0)
+    const budget = this.viewport.clientHeight - this.section.offsetTop - footer.offsetHeight - bottomPadding
+    const cardHeights = this.cards.map(elementOuterHeight)
+    const visibleCount = activityPreviewLimit({
+      cardHeights,
+      total: this.props.workflows.length,
+      budget,
+      headingHeight: elementOuterHeight(this.heading),
+      moreHeight: elementOuterHeight(this.more) || ACTIVITY_MORE_FALLBACK_HEIGHT
+    })
+    if (visibleCount !== this.state.visibleCount || !this.state.measured) {
+      this.setState({ visibleCount, measured: true })
+    }
+  }
+
+  render() {
+    const { workflows, workflowBusy, canTransact, onResume, onCancel, onRevoke, onMore } = this.props
+    const ordered = workflowPreviewOrder(workflows)
+    const visible = ordered.slice(0, this.state.visibleCount)
+    const hidden = workflows.length - visible.length
+    this.cards = []
+    return (
+      <section
+        className='earnWorkflows earnWorkflowsPreview'
+        aria-labelledby='earn-recent-activity'
+        ref={(element) => {
+          this.section = element
+        }}
+        style={{ visibility: this.state.measured ? 'visible' : 'hidden' }}
+      >
+        <h2
+          id='earn-recent-activity'
+          ref={(element) => {
+            this.heading = element
+          }}
+        >
+          Recent activity
+        </h2>
+        {visible.map((workflow, index) => (
+          <div
+            key={workflow.id}
+            ref={(element) => {
+              if (element) this.cards[index] = element
+            }}
+          >
+            <WorkflowCard
+              workflow={workflow}
+              busy={workflowBusy}
+              canTransact={canTransact}
+              onResume={onResume}
+              onCancel={onCancel}
+              onRevoke={onRevoke}
+            />
+          </div>
+        ))}
+        {hidden > 0 ? (
+          <button
+            type='button'
+            className='earnMoreButton'
+            ref={(element) => {
+              this.more = element
+            }}
+            onClick={(event) => onMore(event.currentTarget)}
+          >
+            +{hidden} More
+          </button>
+        ) : null}
+      </section>
+    )
+  }
+}
+
+const ActivityView = ({
+  vault,
+  workflows,
+  workflowBusy,
+  canTransact,
+  onBack,
+  onResume,
+  onCancel,
+  onRevoke,
+  viewRef
+}) => (
+  <div className='earnActivityView cardShow' ref={viewRef} tabIndex='-1'>
+    <button type='button' className='earnTextButton' onClick={onBack}>
+      {'<- Vault details'}
+    </button>
+    <header className='earnActivityHeader'>
+      <div className='earnEyebrow'>{vault.chainName}</div>
+      <h1>Earn activity</h1>
+      <p>{vault.name}</p>
+    </header>
+    <div className='earnWorkflows earnWorkflowsExpanded'>
+      {workflows.map((workflow) => (
+        <WorkflowCard
+          key={workflow.id}
+          workflow={workflow}
+          busy={workflowBusy}
+          canTransact={canTransact}
+          onResume={onResume}
+          onCancel={onCancel}
+          onRevoke={onRevoke}
+        />
+      ))}
+    </div>
+  </div>
+)
+
 const ActionForm = ({ vault, position, form, disabled, onChange, onSubmit, formRef }) => {
   const variant = vault.variants.find(({ id }) => id === form.variant)
   const isCancel = form.action === 'cancel-cooldown'
@@ -516,6 +691,7 @@ const VaultDetails = ({
   onOpenAction,
   onFormChange,
   onSubmit,
+  onOpenActivity,
   onResume,
   onCancel,
   onRevoke,
@@ -717,39 +893,39 @@ const VaultDetails = ({
         />
       ) : null}
       {workflows.length ? (
-        <div className='earnWorkflows'>
-          <h2>Recent activity</h2>
-          {workflows.map((workflow) => (
-            <WorkflowCard
-              key={workflow.id}
-              workflow={workflow}
-              busy={workflowBusy}
-              canTransact={Boolean(signingAccount)}
-              onResume={onResume}
-              onCancel={onCancel}
-              onRevoke={onRevoke}
-            />
-          ))}
-        </div>
+        <ActivityPreview
+          workflows={workflows}
+          workflowBusy={workflowBusy}
+          canTransact={Boolean(signingAccount)}
+          layoutKey={`${form?.action}:${form?.variant}:${Boolean(form?.error)}:${workflows
+            .map(({ id, updatedAt, status }) => `${id}:${updatedAt}:${status}`)
+            .join('|')}`}
+          onMore={onOpenActivity}
+          onResume={onResume}
+          onCancel={onCancel}
+          onRevoke={onRevoke}
+        />
       ) : null}
-      <button
-        type='button'
-        className='earnYearnLink'
-        onClick={() => link.send('tray:openExternal', vault.yearnUrl)}
-      >
-        View on Yearn (external)
-      </button>
-      <button
-        type='button'
-        className='earnYearnLink'
-        onClick={() =>
-          link.send('tray:openExplorer', { type: 'ethereum', id: vault.chainId }, null, vault.address)
-        }
-      >
-        View vault contract (external)
-      </button>
-      <div className='earnDisclosure'>
-        Powered by Yearn. Vault deposits involve smart-contract and strategy risk.
+      <div className='earnDetailsFooter'>
+        <button
+          type='button'
+          className='earnYearnLink'
+          onClick={() => link.send('tray:openExternal', vault.yearnUrl)}
+        >
+          View on Yearn (external)
+        </button>
+        <button
+          type='button'
+          className='earnYearnLink'
+          onClick={() =>
+            link.send('tray:openExplorer', { type: 'ethereum', id: vault.chainId }, null, vault.address)
+          }
+        >
+          View vault contract (external)
+        </button>
+        <div className='earnDisclosure'>
+          Powered by Yearn. Vault deposits involve smart-contract and strategy risk.
+        </div>
       </div>
     </div>
   )
@@ -766,6 +942,7 @@ export class Earn extends React.Component {
     filter: 'all',
     selected: '',
     selectedVariant: '',
+    activityExpanded: false,
     form: null,
     workflowBusy: false
   }
@@ -785,6 +962,7 @@ export class Earn extends React.Component {
       if (this.state.form) {
         this.setState({
           form: actionForm('deposit', this.state.selectedVariant),
+          activityExpanded: false,
           error: ''
         })
       }
@@ -881,7 +1059,13 @@ export class Earn extends React.Component {
       vault?.kind === 'yvUSD' ? 'unlocked' : vault?.kind === 'yBOLD' ? 'staked' : 'direct'
     this.vaultTriggerLabel = trigger?.getAttribute('aria-label')
     this.setState(
-      { selected, selectedVariant, form: actionForm('deposit', selectedVariant), error: '' },
+      {
+        selected,
+        selectedVariant,
+        activityExpanded: false,
+        form: actionForm('deposit', selectedVariant),
+        error: ''
+      },
       () => this.earnDetails?.focus()
     )
   }
@@ -899,12 +1083,20 @@ export class Earn extends React.Component {
   }
 
   closeDetails() {
-    this.setState({ selected: '', selectedVariant: '', form: null }, () => {
+    this.setState({ selected: '', selectedVariant: '', activityExpanded: false, form: null }, () => {
       const trigger = [...document.querySelectorAll('button')].find(
         (button) => button.getAttribute('aria-label') === this.vaultTriggerLabel
       )
       trigger?.focus()
     })
+  }
+
+  openActivity() {
+    this.setState({ activityExpanded: true }, () => this.earnActivity?.focus())
+  }
+
+  closeActivity() {
+    this.setState({ activityExpanded: false }, () => document.querySelector('.earnMoreButton')?.focus())
   }
 
   changeForm(changes) {
@@ -1042,18 +1234,41 @@ export class Earn extends React.Component {
     }
     const selectedVault = catalog.vaults.find(({ id }) => id === selected)
     if (selectedVault) {
+      const selectedWorkflows = workflows.filter(
+        ({ vaultId, account }) =>
+          vaultId === selectedVault.id &&
+          account.toLowerCase() === currentPositions?.account?.address.toLowerCase()
+      )
+      const selectedChain = currentPositions?.chains.find(({ chainId }) => chainId === selectedVault.chainId)
+      const signingAccount =
+        currentPositions?.account &&
+        !currentPositions.account.readOnly &&
+        ['ready', 'partial'].includes(selectedChain?.status)
+      if (this.state.activityExpanded) {
+        return (
+          <ActivityView
+            vault={selectedVault}
+            workflows={selectedWorkflows}
+            workflowBusy={this.state.workflowBusy}
+            canTransact={Boolean(signingAccount)}
+            viewRef={(element) => {
+              this.earnActivity = element
+            }}
+            onBack={() => this.closeActivity()}
+            onResume={(id) => this.runWorkflow(resumeYearnWorkflow, id)}
+            onCancel={(id) => this.runWorkflow(cancelYearnWorkflow, id)}
+            onRevoke={(id) => this.runWorkflow(revokeYearnWorkflow, id)}
+          />
+        )
+      }
       return (
         <VaultDetails
           vault={selectedVault}
           position={this.positionFor(selectedVault.id)}
           catalogStatus={catalog.status}
           account={currentPositions?.account}
-          chain={currentPositions?.chains.find(({ chainId }) => chainId === selectedVault.chainId)}
-          workflows={workflows.filter(
-            ({ vaultId, account }) =>
-              vaultId === selectedVault.id &&
-              account.toLowerCase() === currentPositions?.account?.address.toLowerCase()
-          )}
+          chain={selectedChain}
+          workflows={selectedWorkflows}
           form={this.state.form}
           workflowBusy={this.state.workflowBusy}
           selectedVariant={this.state.selectedVariant}
@@ -1067,6 +1282,7 @@ export class Earn extends React.Component {
           onOpenAction={(action, variant) => this.openAction(action, variant)}
           onFormChange={(changes) => this.changeForm(changes)}
           onSubmit={() => this.submitForm()}
+          onOpenActivity={() => this.openActivity()}
           onResume={(id) => this.runWorkflow(resumeYearnWorkflow, id)}
           onCancel={(id) => this.runWorkflow(cancelYearnWorkflow, id)}
           onRevoke={(id) => this.runWorkflow(revokeYearnWorkflow, id)}
