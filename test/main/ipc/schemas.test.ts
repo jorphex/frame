@@ -235,7 +235,7 @@ test('keeps only trusted request reference fields', () => {
     parse('event', 'tray:rejectRequest', [
       { handlerId, account: address, data: { value: 'renderer snapshot' }, locked: true }
     ])
-  ).toEqual([{ handlerId }])
+  ).toEqual([{ account: address, handlerId }])
 
   expect(
     parse('event', 'tray:addToken', [
@@ -250,6 +250,20 @@ test('keeps only trusted request reference fields', () => {
       true
     ])
   ).toEqual([{ type: 'access', handlerId, origin: 'example.test', account: address }, true])
+
+  for (const [channel, trailingArgs] of [
+    ['tray:adjustNonce', [-1]],
+    ['tray:replaceTx', ['speed']],
+    ['tray:resetNonce', []]
+  ] as const) {
+    expect(
+      parse('event', channel, [
+        { handlerId, account: address, data: { value: 'renderer snapshot' }, locked: true },
+        ...trailingArgs
+      ])
+    ).toEqual([{ account: address, handlerId }, ...trailingArgs])
+    expect(parseRendererIpcArgs('event', channel, [{ handlerId }, ...trailingArgs]).success).toBe(false)
+  }
 })
 
 test('allows partial navigation updates but bounds their data', () => {

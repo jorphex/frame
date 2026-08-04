@@ -44,7 +44,9 @@ class TransactionRequest extends React.Component {
       <EditTokenSpend
         data={data}
         requestedAmount={requestedAmount}
-        updateRequest={(amount) => link.rpc('updateRequest', handlerId, { amount }, actionId, () => {})}
+        updateRequest={(amount) =>
+          link.rpc('updateRequest', req.account, handlerId, { amount }, actionId, () => {})
+        }
         canRevoke={true}
       />
     )

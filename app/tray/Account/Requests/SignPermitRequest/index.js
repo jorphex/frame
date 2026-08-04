@@ -166,7 +166,7 @@ const EditPermit = ({ req }) => {
   const { verifyingContract: contract, spender, value: amount, deadline: deadlineInSeconds } = permit
 
   const updateRequest = (newAmt) => {
-    link.rpc('updateRequest', req.handlerId, { amount: newAmt }, null, () => {})
+    link.rpc('updateRequest', req.account, req.handlerId, { amount: newAmt }, null, () => {})
   }
   const deadline = deadlineInSeconds * 1000
 

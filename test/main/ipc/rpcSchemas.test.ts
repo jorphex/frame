@@ -62,9 +62,25 @@ test('validates sensitive signer methods without coercion', () => {
 })
 
 test('validates fee quantities and request identifiers', () => {
-  expect(parseRendererRpcRequest(wire(1, 'setGasLimit', '0x5208', handlerId)).success).toBe(true)
-  expect(parseRendererRpcRequest(wire(1, 'setGasLimit', '21000', handlerId)).success).toBe(false)
-  expect(parseRendererRpcRequest(wire(1, 'setGasLimit', '0x5208', '1')).success).toBe(false)
+  expect(parseRendererRpcRequest(wire(1, 'setGasLimit', address, '0x5208', handlerId)).success).toBe(true)
+  expect(parseRendererRpcRequest(wire(1, 'setGasLimit', address, '21000', handlerId)).success).toBe(false)
+  expect(parseRendererRpcRequest(wire(1, 'setGasLimit', address, '0x5208', '1')).success).toBe(false)
+})
+
+test('binds signer compatibility checks to an account and request', () => {
+  expect(parseRendererRpcRequest(wire(1, 'signerCompatibility', address, handlerId)).success).toBe(true)
+  expect(parseRendererRpcRequest(wire(1, 'signerCompatibility', handlerId)).success).toBe(false)
+})
+
+test('binds request mutations to an account and request', () => {
+  expect(
+    parseRendererRpcRequest(wire(1, 'updateRequest', address, handlerId, { amount: '1' }, null)).success
+  ).toBe(true)
+  expect(parseRendererRpcRequest(wire(1, 'updateRequest', handlerId, { amount: '1' }, null)).success).toBe(
+    false
+  )
+  expect(parseRendererRpcRequest(wire(1, 'removeFeeUpdateNotice', address, handlerId)).success).toBe(true)
+  expect(parseRendererRpcRequest(wire(1, 'removeFeeUpdateNotice', handlerId)).success).toBe(false)
 })
 
 test('accepts the ERC-1967 implementation-slot approval type', () => {

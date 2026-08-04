@@ -143,7 +143,11 @@ class RequestCommand extends React.Component {
                   <div
                     className='txActionButton txActionButtonBad'
                     onClick={() => {
-                      link.send('tray:replaceTx', req.handlerId, 'cancel')
+                      link.send(
+                        'tray:replaceTx',
+                        { account: req.account, handlerId: req.handlerId },
+                        'cancel'
+                      )
                     }}
                   >
                     Cancel
@@ -159,7 +163,7 @@ class RequestCommand extends React.Component {
                   <div
                     className='txActionButton txActionButtonGood'
                     onClick={() => {
-                      link.send('tray:replaceTx', req.handlerId, 'speed')
+                      link.send('tray:replaceTx', { account: req.account, handlerId: req.handlerId }, 'speed')
                     }}
                   >
                     Speed Up
@@ -259,7 +263,7 @@ class RequestCommand extends React.Component {
             style={{ pointerEvents: allowApproval ? 'auto' : 'none' }}
             onClick={() => {
               if (allowApproval) {
-                link.rpc('signerCompatibility', req.handlerId, (e, compatibility) => {
+                link.rpc('signerCompatibility', req.account, req.handlerId, (e, compatibility) => {
                   if (isNoSignerError(e)) {
                     this.store.notify('noSignerWarning', { req })
                   } else if (e === 'Signer unavailable') {
@@ -319,7 +323,7 @@ class RequestCommand extends React.Component {
             <div
               className='txActionButton txActionButtonGood'
               onClick={() => {
-                link.rpc('removeFeeUpdateNotice', req.handlerId, (e) => {
+                link.rpc('removeFeeUpdateNotice', req.account, req.handlerId, (e) => {
                   if (e) console.error(e)
                 })
               }}
@@ -438,7 +442,7 @@ class RequestCommand extends React.Component {
               style={{ pointerEvents: this.state.allowInput ? 'auto' : 'none' }}
               onClick={() => {
                 if (this.state.allowInput) {
-                  link.rpc('signerCompatibility', req.handlerId, (e) => {
+                  link.rpc('signerCompatibility', req.account, req.handlerId, (e) => {
                     if (isNoSignerError(e)) {
                       this.store.notify('noSignerWarning', { req })
                     } else if (e === 'Signer unavailable') {

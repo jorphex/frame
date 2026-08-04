@@ -35,6 +35,7 @@ const typedData = {
 }
 
 const req = {
+  account: '0x0000000000000000000000000000000000000001',
   type: 'signErc20Permit',
   status: 'pending',
   handlerId: 'permit-request',
@@ -158,6 +159,7 @@ it('sends only a normalized amount request from the permit editor', async () => 
 
   expect(link.rpc).toHaveBeenCalledWith(
     'updateRequest',
+    req.account,
     req.handlerId,
     { amount: (2n ** 256n - 1n).toString(10) },
     null,

@@ -458,49 +458,53 @@ export class Provider extends EventEmitter {
       resError(err, payload, res)
       cb(new Error(err))
     } else {
-      accounts.signTransaction(rawTx, (err, signedTx) => {
+      accounts.signTransactionForAccount(req.account, rawTx, (err, signedTx) => {
         // Sign Transaction
         if (err) {
           resError(err, payload, res)
           cb(err)
         } else {
-          accounts.setTxSigned(req.handlerId, (err) => {
-            if (err) return cb(err)
-            let done = false
-            const cast = () => {
-              this.connection.send(
-                {
-                  id: req.payload.id,
-                  jsonrpc: req.payload.jsonrpc,
-                  method: 'eth_sendRawTransaction',
-                  params: [signedTx]
-                },
-                (response) => {
-                  clearInterval(broadcastTimer)
-                  if (done) return
-                  done = true
-                  if (response.error) {
-                    resError(response.error, payload, res)
-                    cb(new Error(response.error.message))
-                  } else {
-                    if (typeof response.result !== 'string' || !TRANSACTION_HASH.test(response.result)) {
-                      const error = new Error('Invalid transaction hash response')
-                      resError(error.message, payload, res)
-                      return cb(error)
+          accounts.setTxSigned(
+            req.handlerId,
+            (err) => {
+              if (err) return cb(err)
+              let done = false
+              const cast = () => {
+                this.connection.send(
+                  {
+                    id: req.payload.id,
+                    jsonrpc: req.payload.jsonrpc,
+                    method: 'eth_sendRawTransaction',
+                    params: [signedTx]
+                  },
+                  (response) => {
+                    clearInterval(broadcastTimer)
+                    if (done) return
+                    done = true
+                    if (response.error) {
+                      resError(response.error, payload, res)
+                      cb(new Error(response.error.message))
+                    } else {
+                      if (typeof response.result !== 'string' || !TRANSACTION_HASH.test(response.result)) {
+                        const error = new Error('Invalid transaction hash response')
+                        resError(error.message, payload, res)
+                        return cb(error)
+                      }
+                      res(response)
+                      cb(null, response.result)
                     }
-                    res(response)
-                    cb(null, response.result)
+                  },
+                  {
+                    type: 'ethereum',
+                    id: parseInt(req.data.chainId, 16)
                   }
-                },
-                {
-                  type: 'ethereum',
-                  id: parseInt(req.data.chainId, 16)
-                }
-              )
-            }
-            const broadcastTimer = setInterval(() => cast(), 1000)
-            cast()
-          })
+                )
+              }
+              const broadcastTimer = setInterval(() => cast(), 1000)
+              cast()
+            },
+            req.account
+          )
         }
       })
     }
@@ -524,7 +528,7 @@ export class Provider extends EventEmitter {
       this.signAndSend(requestToSign, cb)
     }
 
-    accounts.lockRequest(req.handlerId)
+    accounts.lockRequest(req.handlerId, req.account)
 
     if (req.data.nonce) return signAndSend(req)
 
@@ -538,7 +542,7 @@ export class Provider extends EventEmitter {
       if (typeof response.result !== 'string' || parseRpcQuantity(response.result) === undefined) {
         return cb(new Error('Invalid transaction nonce response'))
       }
-      const updatedReq = accounts.updateNonce(req.handlerId, response.result)
+      const updatedReq = accounts.updateNonce(req.handlerId, response.result, req.account)
 
       if (updatedReq) {
         signAndSend(updatedReq)

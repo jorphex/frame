@@ -19,8 +19,8 @@ const NetworkReferenceSchema = z
   .object({ type: z.literal('ethereum'), id: ChainIdSchema })
   .transform(({ type, id }) => ({ type, id }))
 const RequestReferenceSchema = z
-  .object({ handlerId: HandlerIdSchema })
-  .transform(({ handlerId }) => ({ handlerId }))
+  .object({ handlerId: HandlerIdSchema, account: AddressSchema })
+  .transform(({ handlerId, account }) => ({ handlerId, account }))
 const ActionRequestReferenceSchema = z
   .object({ handlerId: HandlerIdSchema, account: AddressSchema, type: z.string().min(1).max(32) })
   .transform(({ handlerId, account, type }) => ({ handlerId, account, type }))
@@ -130,7 +130,10 @@ const rpcSchemas = {
     request: z.tuple([AddressSchema, z.object({}).strict()]),
     response: actionResult
   },
-  removeFeeUpdateNotice: { request: z.tuple([HandlerIdSchema]), response: actionResult },
+  removeFeeUpdateNotice: {
+    request: z.tuple([AddressSchema, HandlerIdSchema]),
+    response: actionResult
+  },
   resolveEnsName: {
     request: z.tuple([z.string().min(1).max(255)]),
     response: result(AddressSchema)
@@ -143,12 +146,27 @@ const rpcSchemas = {
     request: z.tuple([z.string().regex(/^[A-Za-z0-9_-]{43}$/)]),
     response: actionResult
   },
-  setBaseFee: { request: z.tuple([QuantitySchema, HandlerIdSchema]), response: actionResult },
-  setGasLimit: { request: z.tuple([QuantitySchema, HandlerIdSchema]), response: actionResult },
-  setGasPrice: { request: z.tuple([QuantitySchema, HandlerIdSchema]), response: actionResult },
-  setPriorityFee: { request: z.tuple([QuantitySchema, HandlerIdSchema]), response: actionResult },
+  setBaseFee: {
+    request: z.tuple([AddressSchema, QuantitySchema, HandlerIdSchema]),
+    response: actionResult
+  },
+  setGasLimit: {
+    request: z.tuple([AddressSchema, QuantitySchema, HandlerIdSchema]),
+    response: actionResult
+  },
+  setGasPrice: {
+    request: z.tuple([AddressSchema, QuantitySchema, HandlerIdSchema]),
+    response: actionResult
+  },
+  setPriorityFee: {
+    request: z.tuple([AddressSchema, QuantitySchema, HandlerIdSchema]),
+    response: actionResult
+  },
   setSigner: { request: z.tuple([AddressSchema]), response: actionResult },
-  signerCompatibility: { request: z.tuple([HandlerIdSchema]), response: result(CompatibilitySchema) },
+  signerCompatibility: {
+    request: z.tuple([AddressSchema, HandlerIdSchema]),
+    response: result(CompatibilitySchema)
+  },
   trezorEnterPhrase: { request: z.tuple([IdSchema]), response: actionResult },
   trezorPairing: {
     request: z.tuple([IdSchema, z.object({ tag: z.string().max(256) }).strict()]),
@@ -159,7 +177,12 @@ const rpcSchemas = {
   unlockSigner: { request: z.tuple([IdSchema, PasswordSchema]), response: actionResult },
   unsetSigner: { request: z.tuple([AddressSchema]), response: actionResult },
   updateRequest: {
-    request: z.tuple([HandlerIdSchema, z.object({ amount: AmountSchema }).strict(), ActionIdSchema]),
+    request: z.tuple([
+      AddressSchema,
+      HandlerIdSchema,
+      z.object({ amount: AmountSchema }).strict(),
+      ActionIdSchema
+    ]),
     response: actionResult
   },
   verifyAddress: { request: noArgs, response: actionResult }

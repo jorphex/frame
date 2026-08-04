@@ -94,15 +94,11 @@ const BreadcrumbSchema = z.object({ view: z.string().min(1).max(128), data: Plai
 const BreadcrumbUpdateSchema = z
   .object({ view: z.string().min(1).max(128).optional(), data: PlainRecordSchema })
   .strict()
-const RequestReferenceSchema = z
-  .object({ handlerId: HandlerIdSchema })
-  .transform(({ handlerId }) => ({ handlerId }))
-const AssetSuggestionReferenceSchema = z
+const AccountRequestReferenceSchema = z
   .object({ account: AddressSchema, handlerId: HandlerIdSchema })
   .transform(({ account, handlerId }) => ({ account, handlerId }))
-const AddChainRequestReferenceSchema = z
-  .object({ account: AddressSchema, handlerId: HandlerIdSchema })
-  .transform(({ account, handlerId }) => ({ account, handlerId }))
+const AssetSuggestionReferenceSchema = AccountRequestReferenceSchema
+const AddChainRequestReferenceSchema = AccountRequestReferenceSchema
 const AccessReferenceSchema = z
   .object({
     type: z.literal('access'),
@@ -257,7 +253,7 @@ const eventSchemas: Record<string, z.ZodType> = {
     z.union([TokenSchema, z.literal(false)]),
     AssetSuggestionReferenceSchema.optional()
   ]),
-  'tray:adjustNonce': z.tuple([HandlerIdSchema, z.union([z.literal(-1), z.literal(1)])]),
+  'tray:adjustNonce': z.tuple([AccountRequestReferenceSchema, z.union([z.literal(-1), z.literal(1)])]),
   'tray:clearRequestsByOrigin': z.tuple([AddressSchema, OriginSchema]),
   'tray:clipboardData': z.tuple([BoundedStringSchema]),
   'tray:copyTxHash': z.tuple([HashSchema]),
@@ -273,12 +269,12 @@ const eventSchemas: Record<string, z.ZodType> = {
   'tray:openExternal': z.tuple([z.string().url().max(MAX_URL)]),
   'tray:quit': noArgs,
   'tray:ready': noArgs,
-  'tray:rejectRequest': z.tuple([RequestReferenceSchema]),
+  'tray:rejectRequest': z.tuple([AccountRequestReferenceSchema]),
   'tray:removeToken': z.tuple([TokenIdSchema]),
   'tray:renameAccount': z.tuple([AddressSchema, z.string().trim().min(1).max(128)]),
-  'tray:replaceTx': z.tuple([HandlerIdSchema, z.enum(['cancel', 'speed'])]),
+  'tray:replaceTx': z.tuple([AccountRequestReferenceSchema, z.enum(['cancel', 'speed'])]),
   'tray:resetAllSettings': noArgs,
-  'tray:resetNonce': z.tuple([HandlerIdSchema]),
+  'tray:resetNonce': z.tuple([AccountRequestReferenceSchema]),
   'tray:updateRestart': noArgs
 }
 

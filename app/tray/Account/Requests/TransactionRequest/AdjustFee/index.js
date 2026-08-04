@@ -215,7 +215,7 @@ class TxFeeOverlay extends Component {
 
   render() {
     const {
-      req: { data, handlerId }
+      req: { account, data, handlerId }
     } = this.props
     const { baseFee, gasLimit, priorityFee, gasPrice } = this.state
     const maxTotalFee = BigNumber(getMaxTotalFee(data))
@@ -271,9 +271,15 @@ class TxFeeOverlay extends Component {
         [name]: value
       })
 
-      link.rpc(`set${name.charAt(0).toUpperCase() + name.slice(1)}`, bnToHex(value), handlerId, (e) => {
-        if (e) console.error(e)
-      })
+      link.rpc(
+        `set${name.charAt(0).toUpperCase() + name.slice(1)}`,
+        account,
+        bnToHex(value),
+        handlerId,
+        (e) => {
+          if (e) console.error(e)
+        }
+      )
     }
 
     return (

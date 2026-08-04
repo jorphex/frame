@@ -1154,6 +1154,69 @@ describe('#rejectRequest', () => {
   })
 })
 
+describe('account-bound request transitions', () => {
+  const targetRequest = (handlerId, type = 'transaction') => ({
+    ...request,
+    handlerId,
+    type,
+    account: account2.address,
+    data: { ...request.data, from: account2.address }
+  })
+
+  it('updates pending and error state on the originating account after selection changes', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const explicit = targetRequest('account-bound-error')
+    targetAccount.addRequest(explicit)
+
+    Accounts.setRequestPending(explicit)
+    Accounts.setRequestError(explicit.handlerId, new Error('Device declined'), account2.address)
+
+    expect(Accounts.current().id).toBe(account.address)
+    expect(targetAccount.requests[explicit.handlerId]).toMatchObject({
+      status: 'error',
+      notice: 'Device declined'
+    })
+  })
+
+  it('settles access on its originating account rather than the selected account', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const response = jest.fn()
+    const explicit = {
+      ...targetRequest('account-bound-access', 'access'),
+      origin: '8073729a-5e59-53b7-9e69-5d9bcff94087'
+    }
+    store.initOrigin(explicit.origin, {
+      name: 'account-bound.example',
+      chain: { type: 'ethereum', id: 1 }
+    })
+    targetAccount.addRequest(explicit, response)
+
+    expect(Accounts.setAccess(explicit, true)).toBe(true)
+
+    expect(Accounts.current().id).toBe(account.address)
+    expect(targetAccount.requests[explicit.handlerId]).toBeUndefined()
+    expect(response).toHaveBeenCalledWith({
+      id: request.payload.id,
+      jsonrpc: request.payload.jsonrpc,
+      result: undefined
+    })
+  })
+
+  it('declines on the originating account while another account is selected', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const explicit = targetRequest('account-bound-decline')
+    targetAccount.addRequest(explicit)
+
+    Accounts.declineRequest(explicit.handlerId, account2.address)
+
+    expect(Accounts.current().id).toBe(account.address)
+    expect(targetAccount.requests[explicit.handlerId]).toMatchObject({
+      status: 'declined',
+      notice: 'Signature Declined'
+    })
+  })
+})
+
 describe('#cancelUnapprovedRequestForAccount', () => {
   const accessRequest = (handlerId) => ({
     handlerId,

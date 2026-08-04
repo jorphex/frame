@@ -121,7 +121,10 @@ const rpc = {
     }
   },
   confirmRequestApproval(req, approvalType, approvalData, cb) {
-    callbackWhenDone(() => accounts.confirmRequestApproval(req.handlerId, approvalType, approvalData), cb)
+    callbackWhenDone(
+      () => accounts.confirmRequestApproval(req.handlerId, approvalType, approvalData, req.account),
+      cb
+    )
   },
   respondToExtensionRequest(requestId, approved, cb) {
     callbackWhenDone(() => {
@@ -136,8 +139,8 @@ const rpc = {
       disconnectExtensionCredential(fingerprint)
     }, cb)
   },
-  updateRequest(reqId, data, actionId, cb) {
-    callbackWhenDone(() => accounts.updateRequest(reqId, data, actionId), cb)
+  updateRequest(accountId, reqId, data, actionId, cb) {
+    callbackWhenDone(() => accounts.updateRequest(reqId, data, actionId, accountId), cb)
   },
   approveRequest(req, cb = () => {}) {
     if (
@@ -169,22 +172,22 @@ const rpc = {
     }
     if (req.type === 'transaction') {
       provider.approveTransactionRequest(req, (err, res) => {
-        if (err) return accounts.setRequestError(req.handlerId, err)
-        setTimeout(() => accounts.setTxSent(req.handlerId, res), 1800)
+        if (err) return accounts.setRequestError(req.handlerId, err, req.account)
+        setTimeout(() => accounts.setTxSent(req.handlerId, res, req.account), 1800)
       })
     } else if (req.type === 'sign') {
-      provider.approveSign(req, (err, res) => {
-        if (err) return accounts.setRequestError(req.handlerId, err)
-        accounts.setRequestSuccess(req.handlerId, res)
+      provider.approveSign(req, (err) => {
+        if (err) return accounts.setRequestError(req.handlerId, err, req.account)
+        accounts.setRequestSuccess(req.handlerId, req.account)
       })
     } else if (req.type === 'signTypedData' || req.type === 'signErc20Permit') {
-      provider.approveSignTypedData(req, (err, res) => {
-        if (err) return accounts.setRequestError(req.handlerId, err)
-        accounts.setRequestSuccess(req.handlerId, res)
+      provider.approveSignTypedData(req, (err) => {
+        if (err) return accounts.setRequestError(req.handlerId, err, req.account)
+        accounts.setRequestSuccess(req.handlerId, req.account)
       })
     } else if (req.type === 'switchChain') {
       provider.approveSwitchChain(req.handlerId, (err) => {
-        if (err) accounts.setRequestError(req.handlerId, err)
+        if (err) accounts.setRequestError(req.handlerId, err, req.account)
       })
     }
     cb(null)
@@ -208,7 +211,7 @@ const rpc = {
     req = storedRequest
 
     if (req.type === 'transaction' || isSignatureRequest(req)) {
-      accounts.declineRequest(req.handlerId)
+      accounts.declineRequest(req.handlerId, req.account)
       provider.declineRequest(req)
     }
     cb(null)
@@ -289,23 +292,23 @@ const rpc = {
     const res = (err, data) => cb(err, data || false)
     accounts.verifyAddress(true, res)
   },
-  setBaseFee(fee, handlerId, cb) {
-    callbackWhenDone(() => accounts.setBaseFee(fee, handlerId, true), cb)
+  setBaseFee(accountId, fee, handlerId, cb) {
+    callbackWhenDone(() => accounts.setBaseFee(fee, handlerId, true, accountId), cb)
   },
-  setPriorityFee(fee, handlerId, cb) {
-    callbackWhenDone(() => accounts.setPriorityFee(fee, handlerId, true), cb)
+  setPriorityFee(accountId, fee, handlerId, cb) {
+    callbackWhenDone(() => accounts.setPriorityFee(fee, handlerId, true, accountId), cb)
   },
-  setGasPrice(price, handlerId, cb) {
-    callbackWhenDone(() => accounts.setGasPrice(price, handlerId, true), cb)
+  setGasPrice(accountId, price, handlerId, cb) {
+    callbackWhenDone(() => accounts.setGasPrice(price, handlerId, true, accountId), cb)
   },
-  setGasLimit(limit, handlerId, cb) {
-    callbackWhenDone(() => accounts.setGasLimit(limit, handlerId, true), cb)
+  setGasLimit(accountId, limit, handlerId, cb) {
+    callbackWhenDone(() => accounts.setGasLimit(limit, handlerId, true, accountId), cb)
   },
-  removeFeeUpdateNotice(handlerId, cb) {
-    accounts.removeFeeUpdateNotice(handlerId, cb)
+  removeFeeUpdateNotice(accountId, handlerId, cb) {
+    accounts.removeFeeUpdateNotice(handlerId, cb, accountId)
   },
-  signerCompatibility(handlerId, cb) {
-    accounts.signerCompatibility(handlerId, cb)
+  signerCompatibility(accountId, handlerId, cb) {
+    accounts.signerCompatibility(handlerId, cb, accountId)
   },
   openExplorer(chain, cb) {
     if (store('main.mute.explorerWarning')) {

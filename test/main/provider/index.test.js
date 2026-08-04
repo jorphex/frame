@@ -152,6 +152,7 @@ beforeEach(() => {
     addr === address ? { id: address, address, lastSignerType: 'ring' } : undefined
   )
   accounts.signTransaction = jest.fn()
+  accounts.signTransactionForAccount = jest.fn()
   accounts.setTxSigned = jest.fn()
   accounts.lockRequest = jest.fn()
   accounts.rejectUnapprovedRequestsForOriginChain = jest.fn()
@@ -171,7 +172,7 @@ describe('#approveTransactionRequest', () => {
       (error) => {
         expect(error.message).toMatch(/execution check is still pending/i)
         expect(accounts.lockRequest).not.toHaveBeenCalled()
-        expect(accounts.signTransaction).not.toHaveBeenCalled()
+        expect(accounts.signTransactionForAccount).not.toHaveBeenCalled()
         done()
       }
     )
@@ -188,7 +189,7 @@ describe('#approveTransactionRequest', () => {
       (error) => {
         expect(error.message).toMatch(/unconfirmed required approval/i)
         expect(accounts.lockRequest).not.toHaveBeenCalled()
-        expect(accounts.signTransaction).not.toHaveBeenCalled()
+        expect(accounts.signTransactionForAccount).not.toHaveBeenCalled()
         done()
       }
     )
@@ -3437,6 +3438,7 @@ describe('#signAndSend', () => {
     tx = {}
 
     request = {
+      account: address,
       handlerId: 99,
       payload: { jsonrpc: '2.0', id: 2, method: 'eth_sendTransaction' },
       data: tx
@@ -3450,7 +3452,7 @@ describe('#signAndSend', () => {
     tx.gasPrice = toBeHex(parseUnits('210', 'gwei'))
     tx.gasLimit = addHexPrefix((1e7).toString(16))
 
-    accounts.signTransaction.mockImplementation(() => done())
+    accounts.signTransactionForAccount.mockImplementation(() => done())
 
     signAndSend(done)
   })
@@ -3536,9 +3538,13 @@ describe('#signAndSend', () => {
         gasPrice: '0x1',
         gasLimit: '0x5208'
       })
-      accounts.signTransaction.mockImplementation((_, cb) => cb(null, signedTx))
-      accounts.setTxSigned.mockImplementation((reqId, cb) => {
+      accounts.signTransactionForAccount.mockImplementation((accountId, _tx, cb) => {
+        expect(accountId).toBe(address)
+        cb(null, signedTx)
+      })
+      accounts.setTxSigned.mockImplementation((reqId, cb, accountId) => {
         expect(reqId).toBe(request.handlerId)
+        expect(accountId).toBe(address)
         cb()
       })
     })

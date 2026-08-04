@@ -135,11 +135,11 @@ onRenderer('tray:resetAllSettings', () => {
   app.exit(0)
 })
 
-onRenderer('tray:replaceTx', async (e, id, type) => {
+onRenderer('tray:replaceTx', async (e, request, type) => {
   requireStoreAction('navBack')('panel')
   setTimeout(async () => {
     try {
-      await accounts.replaceTx(id, type)
+      await accounts.replaceTx(request.account, request.handlerId, type)
     } catch (e) {
       log.error('tray:replaceTx Error', e)
     }
@@ -180,7 +180,7 @@ onRenderer('dash:reloadSigner', (e, id) => {
 
 onRenderer('tray:rejectRequest', (e, req) => {
   const err = { code: 4001, message: 'User rejected the request' }
-  accounts.rejectRequest(req, err)
+  accounts.rejectRequestForAccount(req.account, req.handlerId, err)
 })
 
 onRenderer('tray:clearRequestsByOrigin', (e, account, origin) => {
@@ -290,12 +290,12 @@ onRenderer('tray:removeToken', (e, token) => {
   }
 })
 
-onRenderer('tray:adjustNonce', (e, handlerId, nonceAdjust) => {
-  accounts.adjustNonce(handlerId, nonceAdjust)
+onRenderer('tray:adjustNonce', (e, request, nonceAdjust) => {
+  accounts.adjustNonce(request.handlerId, nonceAdjust, request.account)
 })
 
-onRenderer('tray:resetNonce', (e, handlerId) => {
-  accounts.resetNonce(handlerId)
+onRenderer('tray:resetNonce', (e, request) => {
+  accounts.resetNonce(request.handlerId, request.account)
 })
 
 onRenderer('tray:ready', () => {
