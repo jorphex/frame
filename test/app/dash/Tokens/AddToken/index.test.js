@@ -318,4 +318,34 @@ describe('setting token details', () => {
     expect(tokenSymbolInput.value).toEqual('mFRT')
     expect(tokenDecimalsInput.value).toEqual('18')
   })
+
+  it('settles a reviewed asset suggestion only when the token is saved', async () => {
+    const requestReference = {
+      account: '0x0000000000000000000000000000000000000001',
+      handlerId: '11111111-1111-4111-8111-111111111111'
+    }
+    const tokenData = { name: 'Test Token', symbol: 'TEST', decimals: 6, logoURI: '' }
+    const address = '0x64aa3364F17a4D01c6f1751Fd97C2BD3D7e7f1D4'
+    const { user } = render(
+      <AddToken
+        data={{
+          notifyData: {
+            address,
+            chain: { id: 1, name: 'Mainnet' },
+            requestReference,
+            tokenData
+          }
+        }}
+      />,
+      { advanceTimersAfterInput: true }
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Add Token' }))
+
+    expect(link.send).toHaveBeenCalledWith(
+      'tray:addToken',
+      { ...tokenData, address, chainId: 1 },
+      requestReference
+    )
+  })
 })

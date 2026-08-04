@@ -412,8 +412,8 @@ const TokenDetailsForm = ({ req, chain, tokenData, isEdit }) => {
   )
 }
 
-const AddToken = ({ data, req }) => {
-  const { address, chain, error, tokenData, isEdit } = data?.notifyData || {}
+const AddToken = ({ data }) => {
+  const { address, chain, error, tokenData, isEdit, requestReference } = data?.notifyData || {}
 
   if (!chain) return <SelectChain />
   if (!address) return <EnterAddress chain={chain} />
@@ -423,7 +423,7 @@ const AddToken = ({ data, req }) => {
     <TokenDetailsForm
       key={`${chain.id}:${address}:${Boolean(isEdit)}`}
       chain={chain}
-      req={req}
+      req={requestReference}
       tokenData={{ ...tokenData, address }}
       isEdit={isEdit}
     />

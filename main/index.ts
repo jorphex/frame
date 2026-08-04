@@ -178,10 +178,6 @@ onRenderer('dash:reloadSigner', (e, id) => {
   signers.reload(id)
 })
 
-onRenderer('tray:resolveRequest', (e, req, result) => {
-  accounts.resolveRequest(req, result)
-})
-
 onRenderer('tray:rejectRequest', (e, req) => {
   const err = { code: 4001, message: 'User rejected the request' }
   accounts.rejectRequest(req, err)
@@ -282,7 +278,7 @@ onRenderer('tray:addToken', (e, token, req) => {
     log.info('adding custom token', token)
     requireStoreAction('addCustomTokens')([token])
   }
-  if (req) accounts.resolveRequest(req)
+  if (req) accounts.resolveRequestForAccount(req.account, req.handlerId)
 })
 
 onRenderer('tray:removeToken', (e, token) => {

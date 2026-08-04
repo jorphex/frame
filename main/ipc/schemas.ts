@@ -97,6 +97,9 @@ const BreadcrumbUpdateSchema = z
 const RequestReferenceSchema = z
   .object({ handlerId: HandlerIdSchema })
   .transform(({ handlerId }) => ({ handlerId }))
+const AssetSuggestionReferenceSchema = z
+  .object({ account: AddressSchema, handlerId: HandlerIdSchema })
+  .transform(({ account, handlerId }) => ({ account, handlerId }))
 const AddChainRequestReferenceSchema = z
   .object({ account: AddressSchema, handlerId: HandlerIdSchema })
   .transform(({ account, handlerId }) => ({ account, handlerId }))
@@ -250,7 +253,10 @@ const eventSchemas: Record<string, z.ZodType> = {
   'nav:forward': z.tuple([WindowIdSchema, BreadcrumbSchema]),
   'nav:update': z.tuple([WindowIdSchema, BreadcrumbUpdateSchema, z.boolean().optional()]),
   'tray:action': TrayActionArgsSchema,
-  'tray:addToken': z.tuple([z.union([TokenSchema, z.literal(false)]), RequestReferenceSchema.optional()]),
+  'tray:addToken': z.tuple([
+    z.union([TokenSchema, z.literal(false)]),
+    AssetSuggestionReferenceSchema.optional()
+  ]),
   'tray:adjustNonce': z.tuple([HandlerIdSchema, z.union([z.literal(-1), z.literal(1)])]),
   'tray:clearRequestsByOrigin': z.tuple([AddressSchema, OriginSchema]),
   'tray:clipboardData': z.tuple([BoundedStringSchema]),
@@ -273,7 +279,6 @@ const eventSchemas: Record<string, z.ZodType> = {
   'tray:replaceTx': z.tuple([HandlerIdSchema, z.enum(['cancel', 'speed'])]),
   'tray:resetAllSettings': noArgs,
   'tray:resetNonce': z.tuple([HandlerIdSchema]),
-  'tray:resolveRequest': z.tuple([RequestReferenceSchema, z.null()]),
   'tray:updateRestart': noArgs
 }
 

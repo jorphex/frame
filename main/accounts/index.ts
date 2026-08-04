@@ -956,6 +956,22 @@ export class Accounts extends EventEmitter {
     }
   }
 
+  resolveRequestForAccount<T>(accountId: string, handlerId: string, result?: T) {
+    if (typeof accountId !== 'string' || typeof handlerId !== 'string' || !handlerId) {
+      throw new Error('Invalid account request identity')
+    }
+
+    const account = this.accounts[accountId.toLowerCase()]
+    const request = account?.getRequest(handlerId)
+    if (!account || !request) return false
+    if (typeof request.account !== 'string' || request.account.toLowerCase() !== account.id) {
+      throw new Error('Request does not belong to account')
+    }
+
+    account.resolveRequest(request, result)
+    return true
+  }
+
   rejectRequest(req: AccountRequest, error: EVMError) {
     const currentAccount = this.current()
     if (currentAccount) {

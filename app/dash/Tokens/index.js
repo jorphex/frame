@@ -3,14 +3,10 @@ import Restore from 'react-restore'
 import AddToken from './AddToken'
 import CustomTokens from './CustomTokens'
 
-const AddTokenForm = ({ store, data }) => {
-  return <AddToken req={store('view.notifyData')} data={data} />
-}
+const AddTokenForm = ({ data }) => <AddToken data={data} />
 
 function Tokens({ data }) {
-  return (
-    <>{data.notify === 'addToken' ? <AddTokenForm store={this.store} data={data} /> : <CustomTokens />}</>
-  )
+  return <>{data.notify === 'addToken' ? <AddTokenForm data={data} /> : <CustomTokens />}</>
 }
 
 export default Restore.connect(Tokens)

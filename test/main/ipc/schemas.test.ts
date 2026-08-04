@@ -238,6 +238,13 @@ test('keeps only trusted request reference fields', () => {
   ).toEqual([{ handlerId }])
 
   expect(
+    parse('event', 'tray:addToken', [
+      false,
+      { account: address, handlerId, data: { value: 'renderer snapshot' }, locked: true }
+    ])
+  ).toEqual([false, { account: address, handlerId }])
+
+  expect(
     parse('event', 'tray:giveAccess', [
       { type: 'access', handlerId, origin: 'example.test', account: address, provider: true },
       true

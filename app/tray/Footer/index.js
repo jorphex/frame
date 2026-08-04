@@ -26,7 +26,7 @@ export const canApproveWalletCalls = (req, actionRequestId, accountSignerType) =
   req.simulation?.delegation?.status !== 'delegated' &&
   req.preparation?.status === 'succeeded'
 
-class Footer extends React.Component {
+export class Footer extends React.Component {
   constructor(...args) {
     super(...args)
     this.state = {
@@ -204,21 +204,17 @@ class Footer extends React.Component {
             </div>
           )
         } else if (req.type === 'addToken') {
+          const requestReference = { account: req.account, handlerId: req.handlerId }
           return (
             <div className='requestApprove'>
               <div
                 className='requestDecline'
                 style={{ pointerEvents: this.state.allowInput ? 'auto' : 'none' }}
                 onClick={() => {
-                  if (this.state.allowInput) link.send('tray:addToken', false, this.props.req)
+                  if (this.state.allowInput) link.send('tray:addToken', false, requestReference)
                 }}
               >
-                <div
-                  className='requestDeclineButton _txButton _txButtonBad'
-                  onClick={() => {
-                    this.rejectRequest(req)
-                  }}
-                >
+                <div className='requestDeclineButton _txButton _txButtonBad'>
                   <span>Decline</span>
                 </div>
               </div>
@@ -228,7 +224,6 @@ class Footer extends React.Component {
                 onClick={() => {
                   if (this.state.allowInput) {
                     const { address, symbol, decimals, logoURI, name, chainId } = req.token
-                    link.send('tray:resolveRequest', req, null)
                     link.send('tray:action', 'navDash', {
                       view: 'tokens',
                       data: {
@@ -236,7 +231,8 @@ class Footer extends React.Component {
                         notifyData: {
                           tokenData: { symbol, decimals, logoURI, name },
                           chain: { id: chainId },
-                          address
+                          address,
+                          requestReference
                         }
                       }
                     })

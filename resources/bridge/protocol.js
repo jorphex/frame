@@ -38,7 +38,6 @@ export const requestEventChannels = new Set([
   'tray:replaceTx',
   'tray:resetAllSettings',
   'tray:resetNonce',
-  'tray:resolveRequest',
   'tray:updateRestart'
 ])
 

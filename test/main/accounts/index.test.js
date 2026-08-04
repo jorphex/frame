@@ -817,6 +817,26 @@ describe('#resolveRequest', () => {
 
     expect(Object.keys(Accounts.current().requests)).toHaveLength(0)
   })
+
+  it('resolves from the explicit account while another account remains current', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const explicit = {
+      ...request,
+      handlerId: 'explicit-resolution',
+      account: account2.address,
+      data: { ...request.data, from: account2.address }
+    }
+    targetAccount.addRequest(explicit)
+
+    expect(Accounts.resolveRequestForAccount(account2.address.toUpperCase(), explicit.handlerId)).toBe(true)
+
+    expect(Accounts.current().id).toBe(account.address)
+    expect(targetAccount.requests[explicit.handlerId]).toBeUndefined()
+  })
+
+  it('treats an already settled explicit request as a no-op', () => {
+    expect(Accounts.resolveRequestForAccount(account2.address, 'missing-request')).toBe(false)
+  })
 })
 
 describe('#updateRequest', () => {
