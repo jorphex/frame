@@ -36,6 +36,8 @@
     position absolute
     cursor pointer
     border 3px solid var(--ghostZ)
+    color inherit
+    padding 0
 
 
     *
@@ -43,6 +45,9 @@
 
   .commandItem:hover
     background var(--ghostC)
+
+  .commandItem:focus-visible
+    box-shadow 0 0 0 2px var(--moon)
 
   .commandItemBack
     left 14px

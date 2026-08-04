@@ -9,7 +9,7 @@ import {
   FRAME_SUPPORT_URL
 } from '../../../resources/constants'
 
-class Settings extends React.Component {
+export class Main extends React.Component {
   constructor(props, context) {
     super(props, context)
     this.customMessage = 'Custom Endpoint'
@@ -21,9 +21,16 @@ class Settings extends React.Component {
       latticeEndpointMode,
       resetConfirm: false,
       expandNetwork: false,
-      instanceIdHover: false,
       instanceIdCopied: false
     }
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.instanceIdCopiedTimeout)
+    clearTimeout(this.customPrimaryInputTimeout)
+    clearTimeout(this.customSecondaryInputTimeout)
+    clearTimeout(this.inputLatticeTimeout)
+    clearTimeout(this.localShakeTimeout)
   }
 
   appInfo() {
@@ -33,28 +40,19 @@ class Settings extends React.Component {
     const instanceId = this.store('main.instanceId')
     return (
       <div className='appInfo'>
-        <div
+        <button
+          type='button'
           className='appInfoLine appInfoLineInstanceId'
-          onMouseOver={(e) => {
-            e.stopPropagation()
-            e.preventDefault()
-            this.setState({ instanceIdHover: true })
-          }}
           onMouseLeave={(e) => {
             e.stopPropagation()
             e.preventDefault()
-            this.setState({ instanceIdHover: false, instanceIdCopied: false })
+            this.setState({ instanceIdCopied: false })
           }}
           onClick={() => {
-            if (this.state.instanceIdHover) {
-              clearTimeout(this.instanceIdCopiedTimeout)
-              link.send('tray:clipboardData', instanceId)
-              this.setState({ instanceIdCopied: true })
-              this.instanceIdCopiedTimeout = setTimeout(
-                () => this.setState({ instanceIdCopied: false }),
-                1800
-              )
-            }
+            clearTimeout(this.instanceIdCopiedTimeout)
+            link.send('tray:clipboardData', instanceId)
+            this.setState({ instanceIdCopied: true })
+            this.instanceIdCopiedTimeout = setTimeout(() => this.setState({ instanceIdCopied: false }), 1800)
           }}
         >
           {this.state.instanceIdCopied ? (
@@ -62,35 +60,45 @@ class Settings extends React.Component {
           ) : (
             instanceId
           )}
-        </div>
+        </button>
         <div className='appInfoLine appInfoLineVersion'>{`v${appVersion}`}</div>
-        <div className='appInfoViewLicense' onClick={() => link.send('tray:openExternal', FRAME_LICENSE_URL)}>
+        <button
+          type='button'
+          className='appInfoViewLicense'
+          onClick={() => link.send('tray:openExternal', FRAME_LICENSE_URL)}
+        >
           View License
-        </div>
+        </button>
         <div className='appInfoLine appInfoLineReset'>
           {this.state.resetConfirm ? (
             <>
               <span className='appInfoLineResetConfirm'>Are you sure you want to reset everything?</span>
               <span className='appInfoLineResetConfirmButtons'>
-                <span
+                <button
+                  type='button'
                   className='appInfoLineResetConfirmButton'
                   onClick={() => link.send('tray:resetAllSettings')}
                 >
                   Yes
-                </span>
+                </button>
                 <span> / </span>
-                <span
+                <button
+                  type='button'
                   className='appInfoLineResetConfirmButton'
                   onClick={() => this.setState({ resetConfirm: false })}
                 >
                   No
-                </span>
+                </button>
               </span>
             </>
           ) : (
-            <span className='appInfoLineResetButton' onClick={() => this.setState({ resetConfirm: true })}>
+            <button
+              type='button'
+              className='appInfoLineResetButton'
+              onClick={() => this.setState({ resetConfirm: true })}
+            >
               Reset All Settings & Data
-            </span>
+            </button>
           )}
         </div>
       </div>
@@ -145,7 +153,7 @@ class Settings extends React.Component {
     const localShake = Object.assign({}, this.state.localShake)
     localShake[key] = true
     this.setState({ localShake })
-    setTimeout(() => {
+    this.localShakeTimeout = setTimeout(() => {
       const localShake = Object.assign({}, this.state.localShake)
       localShake[key] = false
       this.setState({ localShake })
@@ -236,13 +244,14 @@ class Settings extends React.Component {
       <div className={'localSettings cardShow'}>
         <div className='localSettingsWrap'>
           <div className='dashModules'>
-            <div
+            <button
+              type='button'
               className='dashModule'
               onClick={() => link.send('tray:action', 'navDash', { view: 'accounts', data: {} })}
             >
               <div className='dashModuleIcon'>{svg.accounts(24)}</div>
               <div className='dashModuleTitle'>{'Accounts'}</div>
-            </div>
+            </button>
             <button
               type='button'
               className='dashModule'
@@ -259,50 +268,58 @@ class Settings extends React.Component {
               <div className='dashModuleIcon'>{svg.bars(24)}</div>
               <div className='dashModuleTitle'>{'Earn'}</div>
             </button>
-            <div
+            <button
+              type='button'
               className='dashModule'
               onClick={() => link.send('tray:action', 'navDash', { view: 'chains', data: {} })}
             >
               <div className='dashModuleIcon'>{svg.chain(24)}</div>
               <div className='dashModuleTitle'>{'Chains'}</div>
-            </div>
-            <div
+            </button>
+            <button
+              type='button'
               className='dashModule'
               onClick={() => link.send('tray:action', 'navDash', { view: 'tokens', data: {} })}
             >
               <div className='dashModuleIcon'>{svg.tokens(24)}</div>
               <div className='dashModuleTitle'>{'Tokens'}</div>
-            </div>
-            <div
+            </button>
+            <button
+              type='button'
               className='dashModule'
               onClick={() => link.send('tray:action', 'navDash', { view: 'dapps', data: {} })}
             >
               <div className='dashModuleIcon'>{svg.window(24)}</div>
               <div className='dashModuleTitle'>{'Dapps'}</div>
-            </div>
-            <div
+            </button>
+            <button
+              type='button'
               className='dashModule'
               onClick={() => link.send('tray:action', 'navDash', { view: 'settings', data: {} })}
             >
               <div className='dashModuleIcon'>{svg.settings(24)}</div>
               <div className='dashModuleTitle'>{'Settings'}</div>
-            </div>
+            </button>
           </div>
           <div className='snipIt'>
             <div>Using a dapp that doesn&apos;t support Frame natively?</div>
             <div className='snipItBrowserExtensionIcons'>
-              <div
+              <button
+                type='button'
+                aria-label='Download Chrome companion'
                 className='snipItBrowserExtensionIcon snipItBrowserExtensionIconChrome'
                 onClick={() => link.send('tray:openExternal', FRAME_COMPANION_RELEASES_URL)}
               >
                 {svg.chrome(28)}
-              </div>
-              <div
+              </button>
+              <button
+                type='button'
+                aria-label='Download Firefox companion'
                 className='snipItBrowserExtensionIcon snipItBrowserExtensionIconFirefox'
                 onClick={() => link.send('tray:openExternal', FRAME_COMPANION_RELEASES_URL)}
               >
                 {svg.firefox(28)}
-              </div>
+              </button>
               {/* <div 
                 className='snipItBrowserExtensionIcon snipItBrowserExtensionIconSafari'
               >
@@ -312,44 +329,48 @@ class Settings extends React.Component {
             <div>Inject a connection with our browser extension!</div>
           </div>
           <div className='requestFeature'>
-            <div
+            <button
+              type='button'
               className='requestFeatureButton'
               onClick={() => {
                 link.send('tray:openExternal', FRAME_SUPPORT_URL)
               }}
             >
               Request a Feature or Report an Issue
-            </div>
+            </button>
           </div>
           <div className='requestFeature'>
-            <div
+            <button
+              type='button'
               className='requestFeatureButton'
               onClick={() => {
                 link.send('tray:openExternal', FRAME_SUPPORT_URL)
               }}
             >
               Get Community Support
-            </div>
+            </button>
           </div>
           <div className='requestFeature'>
-            <div
+            <button
+              type='button'
               className='requestFeatureButton'
               onClick={() => {
                 link.send('tray:action', 'setOnboard', { showing: true })
               }}
             >
               Open Frame Tutorial
-            </div>
+            </button>
           </div>
           <div className='requestFeature'>
-            <div
+            <button
+              type='button'
               className='requestFeatureButton'
               onClick={() => {
                 link.send('tray:quit')
               }}
             >
               Quit
-            </div>
+            </button>
           </div>
           {this.appInfo()}
         </div>
@@ -358,4 +379,4 @@ class Settings extends React.Component {
   }
 }
 
-export default Restore.connect(Settings)
+export default Restore.connect(Main)

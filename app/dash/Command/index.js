@@ -3,7 +3,7 @@ import Restore from 'react-restore'
 import link from '../../../resources/link'
 import svg from '../../../resources/svg'
 
-class Command extends React.Component {
+export class Command extends React.Component {
   renderSignerIcon(type) {
     if (type === 'ledger') {
       return <div className='expandedSignerIcon'>{svg.ledger(20)}</div>
@@ -35,26 +35,30 @@ class Command extends React.Component {
     return (
       <div className='command'>
         {this.store('windows.dash.nav').length ? (
-          <div
+          <button
+            type='button'
+            aria-label='Back'
             className='commandItem commandItemBack cardShow'
             onClick={() => {
               link.send('tray:action', 'backDash')
             }}
           >
             {svg.chevronLeft(16)}
-          </div>
+          </button>
         ) : null}
         <div key={view} className='commandTitle cardShow'>
           {view === 'expandedSigner' ? this.renderSignerTitle() : title}
         </div>
-        <div
+        <button
+          type='button'
+          aria-label='Close'
           className='commandItem commandItemClose'
           onClick={() => {
             link.send('tray:action', 'closeDash')
           }}
         >
           {svg.x(16)}
-        </div>
+        </button>
       </div>
     )
   }
