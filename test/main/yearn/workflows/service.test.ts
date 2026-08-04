@@ -176,6 +176,7 @@ function setup(
     delayedReceipt?: boolean
     assetDecimals?: number
     vaultDecimals?: number
+    fullBalanceRedeem?: boolean
   } = {}
 ) {
   let workflows: YearnWorkflows = {}
@@ -232,6 +233,14 @@ function setup(
     }
     throw new Error('Unexpected contract call')
   })
+  const simulateContract = jest.fn(async (_chainId: number, _target: string, data: string, _from: string) => {
+    const [shares] = erc4626.decodeFunctionData('redeem', data)
+    const capacity = maxRedeemSequence[0] ?? maxRedeem ?? shareBalance
+    if (options.fullBalanceRedeem !== true && shares > capacity) {
+      throw new Error('ERC-4626 redeem exceeds maxRedeem')
+    }
+    return erc4626.encodeFunctionResult('redeem', [shares])
+  })
   const createService = () =>
     createYearnWorkflowService({
       getCatalog: async () => catalog(catalogStatus),
@@ -241,6 +250,7 @@ function setup(
       }),
       getNetworkStatus: () => ({ on: true, connected: true }),
       readContract,
+      simulateContract,
       getReceipt: async (_chainId, hash) => {
         if (options.delayedReceipt) {
           await new Promise<void>((resolve) => {
@@ -270,6 +280,7 @@ function setup(
     queued,
     receipts,
     readContract,
+    simulateContract,
     workflows: () => workflows,
     setAllowance: (value: bigint) => (allowance = value),
     setTokenBalance: (value: bigint) => (tokenBalance = value),
@@ -339,6 +350,7 @@ function setupLocked() {
     getCurrentAccount: () => ({ id: account, lastSignerType: 'ring' }),
     getNetworkStatus: () => ({ on: true, connected: true }),
     readContract,
+    simulateContract: readContract,
     getReceipt: async (_chainId, hash) => receipts.get(hash) ?? null,
     queueTransaction: async (transaction, respond) => queued.push({ transaction, respond }),
     readWorkflows: () => workflows,
@@ -388,6 +400,7 @@ function setupYBold() {
     getCurrentAccount: () => ({ id: account, lastSignerType: 'ring' }),
     getNetworkStatus: () => ({ on: true, connected: true }),
     readContract,
+    simulateContract: readContract,
     getReceipt: async (_chainId, hash) => receipts.get(hash) ?? null,
     queueTransaction: async (transaction, respond) => queued.push({ transaction, respond }),
     readWorkflows: () => workflows,
@@ -482,6 +495,24 @@ it('uses executable on-chain capacity for a Max direct withdrawal', async () => 
   expect(started.steps).toHaveLength(1)
   expect(started.steps[0].kind).toBe('redeem')
   expect(erc4626Writes.decodeFunctionData('redeem', started.steps[0].data)[0]).toBe(72n)
+})
+
+it('redeems the complete share balance when maxRedeem rounds below an executable full exit', async () => {
+  const subject = setup({ fullBalanceRedeem: true })
+  subject.setShareBalance(919_866n)
+  subject.setMaxRedeem(919_865n)
+  const started = await subject.service.start({
+    vaultId: vault.id,
+    action: 'withdraw',
+    variant: 'direct',
+    amount: '0',
+    max: true
+  })
+
+  expect(started.amountRaw).toBe('919866')
+  expect(started.steps[0].kind).toBe('redeem')
+  expect(erc4626Writes.decodeFunctionData('redeem', started.steps[0].data)[0]).toBe(919_866n)
+  expect(subject.simulateContract).toHaveBeenCalledTimes(2)
 })
 
 it('does not retain a workflow when initial withdrawal capacity changes before queueing', async () => {

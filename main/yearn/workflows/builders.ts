@@ -223,7 +223,7 @@ function operationFor(input: BuildYearnWorkflowInput): Operation {
   return max
     ? {
         kind: 'redeem',
-        label: `Withdraw all from ${vault.name}`,
+        label: `Withdraw maximum from ${vault.name}`,
         target: variantAddress,
         data: erc4626.encodeFunctionData('redeem', [amountRaw, account, account]),
         amountRaw,

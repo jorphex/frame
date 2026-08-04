@@ -49,6 +49,12 @@ const readContract = async (chainId: number, address: string, data: string) => {
   return result
 }
 
+const simulateContract = async (chainId: number, address: string, data: string, from: string) => {
+  const result = await sendRpc(chainId, 'eth_call', [{ from, to: address, data }, 'latest'])
+  if (typeof result !== 'string') throw new Error('RPC simulation returned no value')
+  return result
+}
+
 const getPositions = createYearnPositionsService({
   getCatalog: () => catalogService.getCatalog(),
   getCurrentAccount: () => accounts.current() || null,
@@ -134,6 +140,7 @@ const workflowService = createYearnWorkflowService({
       : null
   },
   readContract,
+  simulateContract,
   getReceipt: (chainId, hash) => sendRpc(chainId, 'eth_getTransactionReceipt', [hash]),
   queueTransaction,
   hasQueuedTransaction: (transaction) => {

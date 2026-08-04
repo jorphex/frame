@@ -408,20 +408,28 @@ it('opens product details and keeps watch-only transactions disabled', async () 
 })
 
 it('moves focus through vault details and restores the invoking controls', async () => {
-  const { user } = render(<ConnectedEarn />)
+  const { user, rerender } = render(<ConnectedEarn data={{}} />)
   await screen.findByRole('heading', { name: 'Ethereum' })
   const vaultButton = screen.getByRole('button', { name: 'View yvUSD on Ethereum' })
 
   await user.click(vaultButton)
   expect(document.activeElement).toBe(document.querySelector('.earnDetails'))
+  expect(link.send).toHaveBeenCalledWith('nav:forward', 'dash', {
+    view: 'earn',
+    data: { vaultId: 'ethereum-yvusd', variant: 'unlocked', screen: 'vault' }
+  })
+  expect(screen.queryByRole('button', { name: '<- All vaults' })).toBeNull()
 
   const depositButton = screen.getByRole('button', { name: 'Deposit' })
   expect(screen.queryByRole('button', { name: 'Close Earn action' })).toBeNull()
   await user.click(depositButton)
   expect(document.activeElement).toBe(document.querySelector('.earnActionForm'))
 
-  await user.click(screen.getByRole('button', { name: '<- All vaults' }))
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
+  rerender(<ConnectedEarn data={{ vaultId: 'ethereum-yvusd', variant: 'unlocked', screen: 'vault' }} />)
+  rerender(<ConnectedEarn data={{}} />)
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
+  )
 })
 
 it('uses selected locked yvUSD metrics and labels root risk explicitly', async () => {
@@ -433,6 +441,15 @@ it('uses selected locked yvUSD metrics and labels root risk explicitly', async (
   expect(screen.getByText('7%')).toBeTruthy()
   expect(screen.getByText('$500,000.0')).toBeTruthy()
   expect(screen.getByText('Underlying vault risk')).toBeTruthy()
+  expect(link.send).toHaveBeenCalledWith(
+    'nav:update',
+    'dash',
+    {
+      view: 'earn',
+      data: { vaultId: 'ethereum-yvusd', variant: 'locked', screen: 'vault' }
+    },
+    false
+  )
 })
 
 it('explains an inactive locked withdrawal cooldown in user-facing terms', async () => {
@@ -503,10 +520,9 @@ it('resets the persistent action to deposit when the selected account changes', 
   component.setState = jest.fn()
   component.loadPositions = jest.fn()
 
-  component.componentDidUpdate()
+  component.componentDidUpdate({})
 
   expect(component.setState).toHaveBeenCalledWith({
-    activityExpanded: false,
     form: {
       action: 'deposit',
       variant: '',
@@ -575,7 +591,7 @@ it('bounds recent activity and opens the complete history without nested scrolli
     ]
   }))
   getYearnWorkflows.mockResolvedValue({ workflows })
-  const { user } = render(<ConnectedEarn />)
+  const { user, rerender } = render(<ConnectedEarn data={{}} />)
   await screen.findByRole('heading', { name: 'Ethereum' })
   await user.click(screen.getByRole('button', { name: 'View yvUSD on Ethereum' }))
 
@@ -585,8 +601,15 @@ it('bounds recent activity and opens the complete history without nested scrolli
 
   expect(screen.getByRole('heading', { name: 'Earn activity' })).toBeTruthy()
   expect(document.querySelectorAll('.earnWorkflowsExpanded .earnWorkflow')).toHaveLength(5)
-  await user.click(screen.getByRole('button', { name: '<- Vault details' }))
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: '+2 More' }))
+  expect(link.send).toHaveBeenCalledWith('nav:forward', 'dash', {
+    view: 'earn',
+    data: { vaultId: 'ethereum-yvusd', variant: 'unlocked', screen: 'activity' }
+  })
+  expect(screen.queryByRole('button', { name: '<- Vault details' })).toBeNull()
+
+  rerender(<ConnectedEarn data={{ vaultId: 'ethereum-yvusd', variant: 'unlocked', screen: 'activity' }} />)
+  rerender(<ConnectedEarn data={{ vaultId: 'ethereum-yvusd', variant: 'unlocked', screen: 'vault' }} />)
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: '+2 More' })))
 })
 
 it('requires a separate recheck before offering to retry an unknown approval cleanup', async () => {

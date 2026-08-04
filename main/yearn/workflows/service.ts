@@ -72,6 +72,7 @@ interface YearnWorkflowServiceDependencies {
   getCurrentAccount: () => YearnWorkflowAccount | null
   getNetworkStatus: (chainId: number) => { on: boolean; connected: boolean } | null
   readContract: (chainId: number, address: string, data: string) => Promise<string>
+  simulateContract: (chainId: number, address: string, data: string, from: string) => Promise<string>
   getReceipt: (chainId: number, hash: string) => Promise<unknown>
   queueTransaction: (
     transaction: YearnQueuedTransaction,
@@ -255,6 +256,7 @@ export function createYearnWorkflowService({
   getCurrentAccount,
   getNetworkStatus,
   readContract,
+  simulateContract,
   getReceipt,
   queueTransaction,
   readWorkflows,
@@ -335,6 +337,21 @@ export function createYearnWorkflowService({
   const readAsset = async (chainId: number, address: string) => {
     const result = await readContract(chainId, address, erc4626.encodeFunctionData('asset'))
     return decodeAddress(erc4626, 'asset', result)
+  }
+
+  const canRedeem = async (chainId: number, address: string, shares: bigint, account: string) => {
+    try {
+      const result = await simulateContract(
+        chainId,
+        address,
+        erc4626.encodeFunctionData('redeem', [shares, account, account]),
+        account
+      )
+      decodeUint(erc4626, 'redeem', result)
+      return true
+    } catch {
+      return false
+    }
   }
 
   const readDecimals = (chainId: number, address: string) =>
@@ -495,7 +512,11 @@ export function createYearnWorkflowService({
       }
     }
     if (request.action === 'withdraw' && request.max && ['direct', 'unlocked'].includes(request.variant)) {
-      const shares = await readUint(vault.chainId, variant.address, 'maxRedeem', [account])
+      const balance = await readUint(vault.chainId, variant.address, 'balanceOf', [account])
+      if (balance <= 0n) throw new Error(`No ${variant.symbol} is currently available to withdraw`)
+      const shares = (await canRedeem(vault.chainId, variant.address, balance, account))
+        ? balance
+        : await readUint(vault.chainId, variant.address, 'maxRedeem', [account])
       if (shares <= 0n) throw new Error(`No ${variant.symbol} is currently available to withdraw`)
       const assets = await readUint(vault.chainId, variant.address, 'previewRedeem', [shares])
       if (assets <= 0n) throw new Error(`${variant.asset.symbol} withdrawal quote is unavailable`)
@@ -668,7 +689,28 @@ export function createYearnWorkflowService({
       }
     }
 
-    if (
+    const directMaxRedeem =
+      workflow.action === 'withdraw' &&
+      workflow.max &&
+      current.kind === 'redeem' &&
+      ['direct', 'unlocked'].includes(workflow.variant) &&
+      checksum(current.target) === checksum(routeVariant.address)
+    if (directMaxRedeem) {
+      const amount = BigInt(current.amountRaw)
+      const balance = await readUint(workflow.chainId, current.target, 'balanceOf', [workflow.account])
+      if (
+        amount > balance ||
+        (amount === balance && !(await canRedeem(workflow.chainId, current.target, amount, workflow.account)))
+      ) {
+        throw new Error('Yearn withdrawal capacity changed; prepare the withdrawal again')
+      }
+      if (amount < balance) {
+        const available = await readUint(workflow.chainId, current.target, 'maxRedeem', [workflow.account])
+        if (amount > available) {
+          throw new Error('Yearn withdrawal capacity changed; prepare the withdrawal again')
+        }
+      }
+    } else if (
       ['withdraw', 'redeem'].includes(current.kind) &&
       [vault.address, routeVariant.address].some((address) => checksum(address) === checksum(current.target))
     ) {

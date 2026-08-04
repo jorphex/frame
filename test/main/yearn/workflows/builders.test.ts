@@ -139,6 +139,7 @@ it('uses redeem for Max and withdraw for an exact direct asset amount', () => {
     'withdraw'
   )
   expect(max.steps[0].kind).toBe('redeem')
+  expect(max.steps[0].label).toBe(`Withdraw maximum from ${subject.name}`)
   expect(YearnWorkflowInterfaces.erc4626.parseTransaction({ data: max.steps[0].data })?.name).toBe('redeem')
 })
 

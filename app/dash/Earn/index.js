@@ -22,6 +22,17 @@ const CHAINS = [
 const ACTIVITY_PREVIEW_MAX = 3
 const ACTIVITY_MORE_FALLBACK_HEIGHT = 45
 
+const earnRoute = (data = {}) => ({
+  selected: typeof data.vaultId === 'string' ? data.vaultId : '',
+  selectedVariant: typeof data.variant === 'string' ? data.variant : '',
+  activityExpanded: data.screen === 'activity' && typeof data.vaultId === 'string'
+})
+
+const earnCrumb = (selected, selectedVariant, screen = 'vault') => ({
+  view: 'earn',
+  data: { vaultId: selected, variant: selectedVariant, screen }
+})
+
 export const formatPercent = (value) =>
   typeof value === 'number'
     ? `${(value * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
@@ -555,16 +566,12 @@ const ActivityView = ({
   workflows,
   workflowBusy,
   canTransact,
-  onBack,
   onResume,
   onCancel,
   onRevoke,
   viewRef
 }) => (
   <div className='earnActivityView cardShow' ref={viewRef} tabIndex='-1'>
-    <button type='button' className='earnTextButton' onClick={onBack}>
-      {'<- Vault details'}
-    </button>
     <header className='earnActivityHeader'>
       <div className='earnEyebrow'>{vault.chainName}</div>
       <h1>Earn activity</h1>
@@ -687,7 +694,6 @@ const VaultDetails = ({
   form,
   workflowBusy,
   selectedVariant: selectedVariantProp,
-  onBack,
   onOpenAction,
   onFormChange,
   onSubmit,
@@ -731,9 +737,6 @@ const VaultDetails = ({
   }
   return (
     <div className='earnDetails cardShow' ref={detailsRef} tabIndex='-1'>
-      <button type='button' className='earnTextButton' onClick={onBack}>
-        {'<- All vaults'}
-      </button>
       <div className='earnDetailsHero'>
         <div className='earnDetailsIdentity'>
           <VaultArtwork vault={vault} size='hero' />
@@ -932,19 +935,21 @@ const VaultDetails = ({
 }
 
 export class Earn extends React.Component {
-  state = {
-    loading: true,
-    refreshing: false,
-    error: '',
-    catalog: null,
-    positions: null,
-    workflows: [],
-    filter: 'all',
-    selected: '',
-    selectedVariant: '',
-    activityExpanded: false,
-    form: null,
-    workflowBusy: false
+  constructor(props) {
+    super(props)
+    const route = earnRoute(props.data)
+    this.state = {
+      loading: true,
+      refreshing: false,
+      error: '',
+      catalog: null,
+      positions: null,
+      workflows: [],
+      filter: 'all',
+      ...route,
+      form: route.selected ? actionForm('deposit', route.selectedVariant) : null,
+      workflowBusy: false
+    }
   }
 
   componentDidMount() {
@@ -955,14 +960,41 @@ export class Earn extends React.Component {
     this.workflowTimer = setInterval(() => this.loadWorkflows(), 15_000)
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(previousProps) {
+    const previousRoute = earnRoute(previousProps.data)
+    const route = earnRoute(this.props.data)
+    if (JSON.stringify(previousRoute) !== JSON.stringify(route)) {
+      const sameVault = route.selected && route.selected === this.state.selected
+      this.setState(
+        {
+          ...route,
+          form: route.selected
+            ? sameVault
+              ? this.state.form || actionForm('deposit', route.selectedVariant)
+              : actionForm('deposit', route.selectedVariant)
+            : null
+        },
+        () => {
+          if (route.activityExpanded) {
+            this.earnActivity?.focus()
+          } else if (route.selected) {
+            if (previousRoute.activityExpanded) document.querySelector('.earnMoreButton')?.focus()
+            else this.earnDetails?.focus()
+          } else if (previousRoute.selected) {
+            const trigger = [...document.querySelectorAll('button')].find(
+              (button) => button.getAttribute('aria-label') === this.vaultTriggerLabel
+            )
+            trigger?.focus()
+          }
+        }
+      )
+    }
     const nextAccountKey = this.store('selected.current') || ''
     if (nextAccountKey !== this.accountKey) {
       this.accountKey = nextAccountKey
       if (this.state.form) {
         this.setState({
           form: actionForm('deposit', this.state.selectedVariant),
-          activityExpanded: false,
           error: ''
         })
       }
@@ -1058,6 +1090,7 @@ export class Earn extends React.Component {
     const selectedVariant =
       vault?.kind === 'yvUSD' ? 'unlocked' : vault?.kind === 'yBOLD' ? 'staked' : 'direct'
     this.vaultTriggerLabel = trigger?.getAttribute('aria-label')
+    link.send('nav:forward', 'dash', earnCrumb(selected, selectedVariant))
     this.setState(
       {
         selected,
@@ -1073,6 +1106,7 @@ export class Earn extends React.Component {
   openAction(action, variant) {
     const vault = this.state.catalog?.vaults.find(({ id }) => id === this.state.selected)
     const safeVariant = vault?.kind === 'yBOLD' && action === 'deposit' ? 'staked' : variant
+    link.send('nav:update', 'dash', earnCrumb(this.state.selected, safeVariant), false)
     this.setState(
       {
         selectedVariant: safeVariant,
@@ -1082,27 +1116,21 @@ export class Earn extends React.Component {
     )
   }
 
-  closeDetails() {
-    this.setState({ selected: '', selectedVariant: '', activityExpanded: false, form: null }, () => {
-      const trigger = [...document.querySelectorAll('button')].find(
-        (button) => button.getAttribute('aria-label') === this.vaultTriggerLabel
-      )
-      trigger?.focus()
-    })
-  }
-
   openActivity() {
+    link.send('nav:forward', 'dash', earnCrumb(this.state.selected, this.state.selectedVariant, 'activity'))
     this.setState({ activityExpanded: true }, () => this.earnActivity?.focus())
-  }
-
-  closeActivity() {
-    this.setState({ activityExpanded: false }, () => document.querySelector('.earnMoreButton')?.focus())
   }
 
   changeForm(changes) {
     if (!this.state.form) {
-      if (changes.variant) this.setState({ selectedVariant: changes.variant })
+      if (changes.variant) {
+        link.send('nav:update', 'dash', earnCrumb(this.state.selected, changes.variant), false)
+        this.setState({ selectedVariant: changes.variant })
+      }
       return
+    }
+    if (changes.variant) {
+      link.send('nav:update', 'dash', earnCrumb(this.state.selected, changes.variant), false)
     }
     this.setState(({ form }) => ({
       ...(changes.variant && { selectedVariant: changes.variant }),
@@ -1254,7 +1282,6 @@ export class Earn extends React.Component {
             viewRef={(element) => {
               this.earnActivity = element
             }}
-            onBack={() => this.closeActivity()}
             onResume={(id) => this.runWorkflow(resumeYearnWorkflow, id)}
             onCancel={(id) => this.runWorkflow(cancelYearnWorkflow, id)}
             onRevoke={(id) => this.runWorkflow(revokeYearnWorkflow, id)}
@@ -1278,7 +1305,6 @@ export class Earn extends React.Component {
           formRef={(element) => {
             this.earnActionForm = element
           }}
-          onBack={() => this.closeDetails()}
           onOpenAction={(action, variant) => this.openAction(action, variant)}
           onFormChange={(changes) => this.changeForm(changes)}
           onSubmit={() => this.submitForm()}
