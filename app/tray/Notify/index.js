@@ -306,21 +306,19 @@ export class Notify extends React.Component {
       >
         <div className='notifyBox'>
           <div className='notifyTitle'>
-            <div>Contract Data</div>
-            <div>Not Allowed</div>
+            <div>Blind Signing</div>
+            <div>Disabled</div>
           </div>
           <div className='notifyBody'>
             <div className='notifyBodyLine'>
-              Your Ledger currently doesn&apos;t allow signing of contract data.
+              Your Ledger rejected data that it could not fully verify on-device.
             </div>
             <div className='notifyBodyLine'>
-              <span>To change this settings go to</span>
+              <span>If this request requires blind signing, open the Ethereum app and go to</span>
               <br />
-              <span style={{ fontWeight: 'bold' }}>{'Settings > Contract Data'}</span>
+              <span style={{ fontWeight: 'bold' }}>{'Settings > Blind signing'}</span>
               <br />
-              <span>on your Ledger and select</span>
-              <br />
-              <span style={{ fontWeight: 'bold' }}>Yes</span>
+              <span>Only enable it when you understand and trust the request.</span>
             </div>
           </div>
           <div className='notifyInput'>
@@ -512,15 +510,6 @@ export class Notify extends React.Component {
       )
     } else if (notify === 'betaDisclosure') {
       return <div className='notify cardShow'>{this.betaDisclosure()}</div>
-    } else if (notify === 'updateOriginChain') {
-      return (
-        <div className='notify cardShow' onMouseDown={() => this.store.notify()}>
-          {/* <div className='notifyCloseButton' onMouseDown={() => this.store.notify()}>
-            {'close'}
-          </div> */}
-          {this.updateOriginChain(this.store('view.notifyData'))}
-        </div>
-      )
     } else if (notify === 'gasFeeWarning') {
       return (
         <div className='notify cardShow' onMouseDown={() => this.store.notify()}>

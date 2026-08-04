@@ -28,7 +28,7 @@ export function isNoSignerError(error) {
   return error === 'No signer' || error === WATCH_ONLY_SIGNING_ERROR
 }
 
-class RequestCommand extends React.Component {
+export class RequestCommand extends React.Component {
   constructor(props, context) {
     super(props, context)
     this.state = {
@@ -38,9 +38,28 @@ class RequestCommand extends React.Component {
       infoPane: ''
     }
 
-    setTimeout(() => {
-      this.setState({ allowInput: true })
-    }, props.signingDelay || 0)
+    this.scheduleTimer(
+      'allowInputTimer',
+      () => {
+        this.setState({ allowInput: true })
+      },
+      props.signingDelay || 0
+    )
+  }
+
+  scheduleTimer(name, callback, delay) {
+    clearTimeout(this[name])
+    this[name] = setTimeout(() => {
+      this[name] = undefined
+      callback()
+    }, delay)
+  }
+
+  componentWillUnmount() {
+    ;['allowInputTimer', 'txHashCopiedTimer', 'signerLockedTimer'].forEach((name) => {
+      clearTimeout(this[name])
+      this[name] = undefined
+    })
   }
 
   approve(reqId, req) {
@@ -129,9 +148,13 @@ class RequestCommand extends React.Component {
                       if (req && req.tx && req.tx.hash) {
                         link.send('tray:copyTxHash', req.tx.hash)
                         this.setState({ txHashCopied: true, showHashDetails: false })
-                        setTimeout(() => {
-                          this.setState({ txHashCopied: false })
-                        }, 3000)
+                        this.scheduleTimer(
+                          'txHashCopiedTimer',
+                          () => {
+                            this.setState({ txHashCopied: false })
+                          },
+                          3000
+                        )
                       }
                     }}
                   >
@@ -268,9 +291,13 @@ class RequestCommand extends React.Component {
                     this.store.notify('noSignerWarning', { req })
                   } else if (e === 'Signer unavailable') {
                     this.setState({ signerLocked: true })
-                    setTimeout(() => {
-                      this.setState({ signerLocked: false })
-                    }, 3000)
+                    this.scheduleTimer(
+                      'signerLockedTimer',
+                      () => {
+                        this.setState({ signerLocked: false })
+                      },
+                      3000
+                    )
                   } else if (
                     !compatibility.compatible &&
                     !this.store('main.mute.signerCompatibilityWarning')
@@ -447,9 +474,13 @@ class RequestCommand extends React.Component {
                       this.store.notify('noSignerWarning', { req })
                     } else if (e === 'Signer unavailable') {
                       this.setState({ signerLocked: true })
-                      setTimeout(() => {
-                        this.setState({ signerLocked: false })
-                      }, 3000)
+                      this.scheduleTimer(
+                        'signerLockedTimer',
+                        () => {
+                          this.setState({ signerLocked: false })
+                        },
+                        3000
+                      )
                     } else {
                       this.approve(req.handlerId, req)
                     }

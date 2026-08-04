@@ -13,8 +13,6 @@ const measure = (ref) => {
   return { height: clientHeight, width: clientWidth }
 }
 
-let lastHeight
-
 export const canApproveWalletCalls = (req, actionRequestId, accountSignerType) =>
   req?.type === 'walletCalls' &&
   !isWatchOnlyAccountType(accountSignerType) &&
@@ -34,19 +32,24 @@ export class Footer extends React.Component {
       walletCallsActionId: undefined
     }
     this.footerRef = React.createRef()
+    this.lastHeight = undefined
   }
   componentDidMount() {
     this.observer = new ResizeObserver(() => {
       const size = measure(this.footerRef)
-      if (size.height !== lastHeight) {
+      if (size.height !== this.lastHeight) {
+        this.lastHeight = size.height
         link.send('tray:action', 'setFooterHeight', 'panel', size.height)
       }
     })
     if (this.observer) this.observer.observe(this.footerRef.current)
   }
   componentWillUnmount() {
-    if (this.footerRef && this.footerRef.current && this.observer)
+    if (this.observer?.disconnect) {
+      this.observer.disconnect()
+    } else if (this.footerRef.current && this.observer) {
       this.observer.unobserve(this.footerRef.current)
+    }
   }
   approve(reqId, req) {
     link.rpc('approveRequest', req, () => {}) // Move to link.send
@@ -70,7 +73,11 @@ export class Footer extends React.Component {
       if (req) {
         if (req.type === 'transaction' && crumb.data.step === 'confirm') {
           return (
-            <RequestCommand req={req} signingDelay={isHardwareSigner(account.lastSignerType) ? 0 : 1500} />
+            <RequestCommand
+              key={req.handlerId}
+              req={req}
+              signingDelay={isHardwareSigner(account.lastSignerType) ? 0 : 1500}
+            />
           )
         } else if (req.type === 'walletCalls' && crumb.data.step === 'confirm') {
           const actionPending = this.state.walletCallsActionId === req.handlerId
@@ -141,7 +148,11 @@ export class Footer extends React.Component {
           )
         } else if (isSignatureRequest(req) && crumb.data.step === 'confirm') {
           return (
-            <RequestCommand req={req} signingDelay={isHardwareSigner(account.lastSignerType) ? 0 : 1500} />
+            <RequestCommand
+              key={req.handlerId}
+              req={req}
+              signingDelay={isHardwareSigner(account.lastSignerType) ? 0 : 1500}
+            />
           )
         } else if (req.type === 'addChain' || req.type === 'switchChain') {
           return req.type === 'switchChain' ? (

@@ -1215,6 +1215,22 @@ describe('account-bound request transitions', () => {
       notice: 'Signature Declined'
     })
   })
+
+  it('does not misdiagnose a generic Ledger invalid-data response', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const explicit = targetRequest('ledger-invalid-data')
+    targetAccount.addRequest(explicit)
+
+    Accounts.setRequestError(
+      explicit.handlerId,
+      new Error('Ledger device: Invalid data received (0x6a80)'),
+      account2.address
+    )
+
+    expect(targetAccount.requests[explicit.handlerId].notice).toBe(
+      'Ledger rejected transaction data (0x6a80)'
+    )
+  })
 })
 
 describe('#cancelUnapprovedRequestForAccount', () => {

@@ -1154,7 +1154,7 @@ export class Accounts extends EventEmitter {
       const errorMessage = (err.message || '').toLowerCase()
 
       if (errorMessage === 'ledger device: invalid data received (0x6a80)') {
-        currentAccount.requests[handlerId].notice = 'Ledger Contract Data = No'
+        currentAccount.requests[handlerId].notice = 'Ledger rejected transaction data (0x6a80)'
       } else if (
         err.message === 'ledger device: condition of use not satisfied (denied by the user?) (0x6985)'
       ) {

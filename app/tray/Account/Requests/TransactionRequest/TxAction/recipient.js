@@ -1,19 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import svg from '../../../../../../resources/svg'
 import { getAddress } from '../../../../../../resources/utils'
 
-let copyTimeout = null
-
 const Recipient = ({ address, ens, copyAddress, textSize = 16 }) => {
   const [copied, setCopied] = useState(false)
+  const copyTimeout = useRef()
 
   useEffect(() => {
-    return function () {
-      if (copyTimeout) {
-        clearTimeout(copyTimeout)
-      }
-    }
+    return () => clearTimeout(copyTimeout.current)
   }, [])
 
   const checkSummedAddress = getAddress(address)
@@ -42,7 +37,8 @@ const Recipient = ({ address, ens, copyAddress, textSize = 16 }) => {
           onClick={() => {
             copyAddress(checkSummedAddress)
             setCopied(true)
-            setTimeout(() => setCopied(false), 1000)
+            clearTimeout(copyTimeout.current)
+            copyTimeout.current = setTimeout(() => setCopied(false), 1000)
           }}
         >
           {copied ? (

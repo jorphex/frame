@@ -6,10 +6,19 @@ import link from '../../../../resources/link'
 
 jest.mock('../../../../resources/link', () => ({ rpc: jest.fn(), send: jest.fn() }))
 
+let resizeCallback
+const disconnectResizeObserver = jest.fn()
+
 beforeAll(() => {
   global.ResizeObserver = class {
+    constructor(callback) {
+      resizeCallback = callback
+    }
     observe() {}
     unobserve() {}
+    disconnect() {
+      disconnectResizeObserver()
+    }
   }
 })
 
@@ -134,4 +143,38 @@ describe('asset suggestion lifecycle', () => {
     })
     expect(link.send).not.toHaveBeenCalledWith('tray:resolveRequest', expect.anything(), null)
   })
+
+  it('reports each footer height once and disconnects its observer', () => {
+    const view = renderFooter()
+    link.send.mockClear()
+
+    resizeCallback()
+    resizeCallback()
+
+    expect(
+      link.send.mock.calls.filter(
+        ([channel, action]) => channel === 'tray:action' && action === 'setFooterHeight'
+      )
+    ).toEqual([['tray:action', 'setFooterHeight', 'panel', 0]])
+
+    view.unmount()
+    expect(disconnectResizeObserver).toHaveBeenCalled()
+  })
+})
+
+it('keys request commands by request identity', () => {
+  const account = '0x0000000000000000000000000000000000000001'
+  const handlerId = '22222222-2222-4222-8222-222222222222'
+  const req = { type: 'sign', account, handlerId }
+  const footer = new Footer({})
+  footer.store = (...path) => {
+    if (path[0] === 'windows.panel.nav') {
+      return [{ view: 'requestView', data: { accountId: account, requestId: handlerId, step: 'confirm' } }]
+    }
+    if (path[0] === 'main.accounts' && path.length === 2) return { lastSignerType: 'seed' }
+    if (path[0] === 'main.accounts' && path.length === 4) return req
+    return undefined
+  }
+
+  expect(footer.renderFooter().key).toBe(handlerId)
 })

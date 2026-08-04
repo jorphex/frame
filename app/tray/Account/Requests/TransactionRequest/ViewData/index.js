@@ -111,8 +111,13 @@ export class ViewData extends React.Component {
     if (data) {
       link.send('tray:clipboardData', data)
       this.setState({ copiedData: true })
-      setTimeout((_) => this.setState({ copiedData: false }), 1000)
+      clearTimeout(this.copyTimer)
+      this.copyTimer = setTimeout(() => this.setState({ copiedData: false }), 1000)
     }
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.copyTimer)
   }
 
   renderDecodedData() {

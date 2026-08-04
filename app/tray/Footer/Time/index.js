@@ -12,15 +12,22 @@ import Restore from 'react-restore'
 
 // const FEE_WARNING_THRESHOLD_USD = 50
 
-class Time extends React.Component {
+export class Time extends React.Component {
   constructor(...args) {
     super(...args)
     this.state = {
       time: Date.now()
     }
-    setInterval(() => {
+  }
+
+  componentDidMount() {
+    this.clock = setInterval(() => {
       this.setState({ time: Date.now() })
     }, 1000)
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.clock)
   }
 
   msToTime(duration) {

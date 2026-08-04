@@ -20,7 +20,12 @@ class TxSending extends React.Component {
   copyAddress(data) {
     link.send('tray:clipboardData', data)
     this.setState({ copied: true })
-    setTimeout(() => this.setState({ copied: false }), 1000)
+    clearTimeout(this.copyTimer)
+    this.copyTimer = setTimeout(() => this.setState({ copied: false }), 1000)
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.copyTimer)
   }
 
   render() {
