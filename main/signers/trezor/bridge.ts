@@ -1,6 +1,7 @@
 import log from 'electron-log'
 import { EventEmitter } from 'events'
 import type { ThpPairingMethod } from '@trezor/protocol'
+import type { ConnectSettingsTransport } from '@trezor/connect/lib/types/settings'
 import TrezorConnect, {
   CommonParams,
   Device,
@@ -12,6 +13,7 @@ import TrezorConnect, {
   UI,
   UI_EVENT
 } from '@trezor/connect'
+import { FrameNodeUsbTransport } from './nodeUsbTransport'
 
 export class DeviceError extends Error {
   readonly code
@@ -37,7 +39,9 @@ const config = {
   popup: false,
   debug: false,
   lazyLoad: false,
-  transports: ['NodeUsbTransport' as const]
+  // Trezor's NodeUsb constructor currently conflicts with its own public
+  // transport type when exactOptionalPropertyTypes is enabled.
+  transports: [FrameNodeUsbTransport as unknown as ConnectSettingsTransport]
 }
 
 function deviceSelector(device: DeviceReference): NonNullable<CommonParams['device']> {

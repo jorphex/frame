@@ -3,6 +3,7 @@ import { EventEmitter } from 'stream'
 import log from 'electron-log'
 
 import TrezorBridge from '../../../../main/signers/trezor/bridge'
+import { FrameNodeUsbTransport } from '../../../../main/signers/trezor/nodeUsbTransport'
 
 jest.mock('@trezor/connect')
 
@@ -31,6 +32,12 @@ afterEach(() => {
 })
 
 describe('connect events', () => {
+  it("initializes Trezor Connect with Frame's guarded NodeUsb transport", () => {
+    expect(TrezorConnect.init).toHaveBeenCalledWith(
+      expect.objectContaining({ transports: [FrameNodeUsbTransport] })
+    )
+  })
+
   it('emits a detected event on device changed event with type unacquired', (done) => {
     TrezorBridge.once('trezor:detected', (path) => {
       try {
