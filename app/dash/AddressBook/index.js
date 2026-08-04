@@ -183,7 +183,9 @@ export class AddressBook extends React.Component {
         working: false,
         status:
           operation === 'import'
-            ? `Imported ${result.imported}; skipped ${result.skipped} duplicate${result.skipped === 1 ? '' : 's'}.`
+            ? `Imported ${result.imported}; skipped ${result.skipped} existing or excess entr${
+                result.skipped === 1 ? 'y' : 'ies'
+              }.`
             : `Exported ${result.exported} contact${result.exported === 1 ? '' : 's'}.`
       })
     } catch (error) {

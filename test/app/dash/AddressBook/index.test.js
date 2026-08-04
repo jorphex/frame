@@ -91,7 +91,7 @@ test('requires confirmation before deletion and reports import duplicate counts'
   expect(await screen.findByText('Contact removed.')).toBeTruthy()
 
   await user.click(screen.getByRole('button', { name: 'Import JSON' }))
-  expect(await screen.findByText('Imported 2; skipped 1 duplicate.')).toBeTruthy()
+  expect(await screen.findByText('Imported 2; skipped 1 existing or excess entry.')).toBeTruthy()
 })
 
 test('surfaces validation and service errors without navigating away', async () => {

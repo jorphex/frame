@@ -17,6 +17,9 @@ describe('persisted state schema compatibility', () => {
     }
     expect(AddressBookSchema.parse({ [entry.address]: entry })).toEqual({ [entry.address]: entry })
     expect(() => AddressBookSchema.parse({ [entry.address]: { ...entry, updatedAt: 0 } })).toThrow()
+    expect(() =>
+      AddressBookSchema.parse({ [entry.address]: { ...entry, name: 'Spoofed\u202e treasury' } })
+    ).toThrow()
   })
 
   it('accepts notification records from before every notification key existed', () => {

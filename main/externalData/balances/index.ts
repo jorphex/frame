@@ -2,7 +2,7 @@ import log from 'electron-log'
 
 import { NATIVE_CURRENCY } from '../../../resources/constants'
 import { toTokenId } from '../../../resources/domain/balance'
-import { YEARN_SYSTEM_TOKENS } from '../../yearn/catalog'
+import { isYearnSystemTokenId, YEARN_SYSTEM_TOKENS } from '../../yearn/catalog'
 import BalancesWorkerController from './controller'
 import { CurrencyBalance, TokenBalance } from './scan'
 
@@ -276,21 +276,22 @@ export default function (store: Store) {
   }
 
   function handleTokenBlacklistUpdate(tokensToRemove: Set<string>) {
+    const removableTokens = new Set([...tokensToRemove].filter((tokenId) => !isYearnSystemTokenId(tokenId)))
     const includesBlacklistedTokens = (arr: WithTokenId[]) =>
-      arr.some((val) => tokensToRemove.has(toTokenId(val)))
+      arr.some((val) => removableTokens.has(toTokenId(val)))
 
     const balances: Record<string, Balance[]> = store('main.balances')
     const knownTokens: Record<string, Token[]> = store('main.tokens.known')
 
     Object.entries(balances).forEach(([accountAddress, balances]) => {
       if (includesBlacklistedTokens(balances)) {
-        requireStoreActionFrom(store, 'removeBalances')(accountAddress, tokensToRemove)
+        requireStoreActionFrom(store, 'removeBalances')(accountAddress, removableTokens)
       }
     })
 
     Object.entries(knownTokens).forEach(([accountAddress, tokens]) => {
       if (includesBlacklistedTokens(tokens)) {
-        requireStoreActionFrom(store, 'removeKnownTokens')(accountAddress, tokensToRemove)
+        requireStoreActionFrom(store, 'removeKnownTokens')(accountAddress, removableTokens)
       }
     })
   }

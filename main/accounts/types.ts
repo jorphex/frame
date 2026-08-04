@@ -119,7 +119,7 @@ export interface TransactionRequest extends AccountRequest<'transaction'> {
   automaticFeeUpdateNotice?: {
     previousFee: PreviousFee
   }
-  recipient?: string // local address-book label or ENS name
+  recipient?: string // resolved ENS name; local labels are applied by the renderer
   updatedFees?: boolean
   feeAtTime?: string
   completed?: number

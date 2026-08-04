@@ -12,6 +12,7 @@ import balancesLoader, { BalanceLoader } from './scan'
 import TokenLoader from '../inventory/tokens'
 import { toTokenId } from '../../../resources/domain/balance'
 import { BalancesWorkerEvent, parseBalancesWorkerCommand } from './protocol'
+import { isYearnSystemToken } from '../../yearn/catalog'
 
 import type { Token } from '../../store/state'
 
@@ -85,7 +86,9 @@ async function tokenBalanceScan(address: Address, tokensToOmit: Token[] = [], ch
 async function fetchTokenBalances(address: Address, tokens: Token[]) {
   try {
     const blacklistSet = new Set(tokenLoader.getBlacklist().map(toTokenId))
-    const filteredTokens = tokens.filter((token) => !blacklistSet.has(toTokenId(token)))
+    const filteredTokens = tokens.filter(
+      (token) => isYearnSystemToken(token) || !blacklistSet.has(toTokenId(token))
+    )
     const tokenBalances = await balances.getTokenBalances(address, filteredTokens)
 
     sendToMainProcess({ type: 'tokenBalances', address, balances: tokenBalances })

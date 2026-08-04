@@ -6,6 +6,7 @@ import {
   lookupAddressBookEntry,
   removeAddressBookEntry,
   resolveLocalAddressIdentity,
+  sanitizeAddressBook,
   saveAddressBookEntry
 } from '../../../../resources/domain/addressBook'
 
@@ -52,6 +53,41 @@ test('ignores malformed account identity state', () => {
   expect(resolveLocalAddressIdentity({}, { [alice]: { name: '   ' } }, alice)).toBeUndefined()
   expect(resolveLocalAddressIdentity({}, { [alice]: { name: 42 } }, alice)).toBeUndefined()
   expect(resolveLocalAddressIdentity({}, { [alice]: { name: 'Alice' } }, 'invalid')).toBeUndefined()
+  expect(
+    resolveLocalAddressIdentity({}, { [alice]: { name: 'Alice\u202e Treasury' } }, alice)
+  ).toBeUndefined()
+})
+
+test('rejects invisible and directional control characters in trusted text', () => {
+  expect(() =>
+    saveAddressBookEntry({}, { mode: 'add', address: alice, name: 'Alice\u202e Treasury', note: '' })
+  ).toThrow(/unsupported characters/i)
+  expect(() =>
+    saveAddressBookEntry({}, { mode: 'add', address: alice, name: 'Alice', note: 'Safe\u200b note' })
+  ).toThrow(/unsupported characters/i)
+})
+
+test('sanitizes invalid persisted entries without discarding valid contacts', () => {
+  const valid = {
+    address: alice,
+    name: 'Alice',
+    note: '',
+    createdAt: 1,
+    updatedAt: 1
+  }
+  const unsafe = {
+    address: bob,
+    name: 'Bob\u202e Treasury',
+    note: '',
+    createdAt: 1,
+    updatedAt: 1
+  }
+
+  expect(sanitizeAddressBook({ [alice]: valid, [bob]: unsafe })).toEqual({
+    addressBook: { [alice]: valid },
+    removed: 1
+  })
+  expect(sanitizeAddressBook([])).toEqual({ addressBook: {}, removed: 0 })
 })
 
 test('rejects wrong mixed-case checksums and duplicate addresses or names', () => {

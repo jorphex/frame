@@ -1,9 +1,13 @@
+import fs from 'fs/promises'
+import os from 'os'
+import path from 'path'
+
 import {
   ADDRESS_BOOK_FORMAT,
   ADDRESS_BOOK_VERSION,
   MAX_ADDRESS_BOOK_FILE_BYTES
 } from '../../../resources/domain/addressBook'
-import { createAddressBookFileService } from '../../../main/addressBook/files'
+import { createAddressBookFileService, readAddressBookFile } from '../../../main/addressBook/files'
 
 jest.mock('electron', () => ({ app: { on: jest.fn(), getPath: jest.fn(() => '/tmp') } }))
 
@@ -46,6 +50,21 @@ test('rejects oversized and malformed imports before mutation', async () => {
   const malformed = dependencies({ readFile: jest.fn(async () => '{') })
   await expect(createAddressBookFileService(malformed).importFile()).rejects.toThrow(/valid JSON/)
   expect(malformed.importEntries).not.toHaveBeenCalled()
+})
+
+test('bounds the production file read even if a selected file grows', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'frame-address-book-'))
+  const file = path.join(directory, 'contacts.json')
+
+  try {
+    await fs.writeFile(file, Buffer.alloc(MAX_ADDRESS_BOOK_FILE_BYTES + 1, 1))
+    await expect(readAddressBookFile(file)).rejects.toThrow(/exceeds 1 MiB/)
+
+    await fs.writeFile(file, JSON.stringify(document))
+    await expect(readAddressBookFile(file)).resolves.toBe(JSON.stringify(document))
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
 })
 
 test('treats canceled import and export dialogs as non-errors', async () => {

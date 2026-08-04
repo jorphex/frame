@@ -212,6 +212,15 @@ export const YEARN_SYSTEM_TOKENS = YEARN_CATALOG.flatMap((vault) => [
 
 export const yearnVaultKey = (chainId: number, address: string) => `${chainId}:${address.toLowerCase()}`
 
+const YEARN_SYSTEM_TOKEN_IDS = new Set(
+  YEARN_SYSTEM_TOKENS.map(({ chainId, address }) => yearnVaultKey(chainId, address))
+)
+
+export const isYearnSystemTokenId = (tokenId: string) => YEARN_SYSTEM_TOKEN_IDS.has(tokenId.toLowerCase())
+
+export const isYearnSystemToken = (token: { chainId: number; address: string }) =>
+  isYearnSystemTokenId(yearnVaultKey(token.chainId, token.address))
+
 export const YEARN_ALLOWED_TARGETS = new Set(
   YEARN_CATALOG.flatMap((vault) => [
     yearnVaultKey(vault.chainId, vault.address),

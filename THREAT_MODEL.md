@@ -116,7 +116,9 @@ without returning their filesystem path to the renderer. A contact name is an
 unverified user alias, never an authorization or destination source. Transaction
 review derives aliases from current local state while retaining the full address,
 and aliases never modify calldata, transaction recipients, signing, simulation,
-or broadcast.
+or broadcast. Trusted labels reject Unicode control and formatting characters;
+the corresponding migration removes only invalid legacy entries and preserves
+the rest of the address book.
 
 Users should prefer hardware signers and maintain independent backups. Encryption
 migrations must remain versioned, address-verified, atomic, tested without real
@@ -211,7 +213,7 @@ counts, require exact address/key widths, retain order and duplicates, and are
 shown in full during review. Signer adapters must preserve those exact bytes;
 unsupported hardware transaction types fail instead of being silently converted.
 
-The development-branch Earn module has two separate Yearn trust boundaries. A
+The Earn module has two separate Yearn trust boundaries. A
 versioned local `(chainId, vaultAddress)` catalog is the only promotion boundary;
 Kong metadata cannot add a vault or transaction target. Frame locally pins asset
 addresses and decimal scales; Kong supplies display names, estimated APY, TVL,
@@ -226,7 +228,8 @@ The same local catalog supplies a hidden balance-scanner allowlist for curated
 underlying assets, vault shares, and companion shares. These entries do not
 become custom tokens and do not create balances by themselves; only a nonzero
 configured-RPC `balanceOf` result enters the account's known-token state. A zero
-balance is removed as usual. Product state such as a yvUSD cooldown may represent
+balance is removed as usual. Remote token-list omit metadata cannot suppress
+these locally pinned entries. Product state such as a yvUSD cooldown may represent
 non-transferable accounting without a wallet-held ERC-20 balance and remains
 visible only through Earn.
 

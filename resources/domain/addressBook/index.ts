@@ -9,11 +9,7 @@ export const MAX_ADDRESS_BOOK_FILE_BYTES = 1024 * 1024
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
 const KEY = /^0x[0-9a-f]{40}$/
 const normalizedText = (value: string) => value.trim().replace(/\s+/g, ' ')
-const hasControlCharacters = (value: string) =>
-  Array.from(value).some((character) => {
-    const code = character.charCodeAt(0)
-    return code < 32 || code === 127
-  })
+const hasControlCharacters = (value: string) => /[\p{Cc}\p{Cf}]/u.test(value)
 
 export const AddressBookAddressInputSchema = z
   .string()
@@ -50,11 +46,13 @@ export const AddressBookEntrySchema = z
       .string()
       .min(1)
       .max(80)
-      .refine((value) => value === normalizedText(value)),
+      .refine((value) => value === normalizedText(value))
+      .refine((value) => !hasControlCharacters(value), 'Name contains unsupported characters'),
     note: z
       .string()
       .max(280)
-      .refine((value) => value === normalizedText(value)),
+      .refine((value) => value === normalizedText(value))
+      .refine((value) => !hasControlCharacters(value), 'Note contains unsupported characters'),
     createdAt: z.number().int().nonnegative(),
     updatedAt: z.number().int().nonnegative()
   })
@@ -195,8 +193,34 @@ export function resolveLocalAddressIdentity(
   if (!account || typeof account !== 'object' || Array.isArray(account)) return
 
   const name = (account as { name?: unknown }).name
-  if (typeof name !== 'string' || !normalizedText(name)) return
+  if (typeof name !== 'string' || !normalizedText(name) || hasControlCharacters(name)) return
   return { label: normalizedText(name), source: 'Frame account' }
+}
+
+export function sanitizeAddressBook(current: unknown): { addressBook: AddressBook; removed: number } {
+  if (!current || typeof current !== 'object' || Array.isArray(current)) {
+    return { addressBook: {}, removed: 0 }
+  }
+
+  const addressBook: AddressBook = {}
+  let removed = 0
+
+  Object.entries(current).forEach(([key, candidate]) => {
+    const parsed = AddressBookEntrySchema.safeParse(candidate)
+    if (
+      !KEY.test(key) ||
+      !parsed.success ||
+      key !== parsed.data.address.toLowerCase() ||
+      Object.keys(addressBook).length >= MAX_ADDRESS_BOOK_ENTRIES
+    ) {
+      removed += 1
+      return
+    }
+
+    addressBook[key] = parsed.data
+  })
+
+  return { addressBook, removed }
 }
 
 export function createAddressBookExport(current: unknown, now = Date.now()): AddressBookExport {

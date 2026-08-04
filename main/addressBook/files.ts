@@ -22,6 +22,25 @@ type AddressBookFileDependencies = {
   now(): number
 }
 
+export async function readAddressBookFile(path: string): Promise<string> {
+  const file = await fs.open(path, 'r')
+  const buffer = Buffer.alloc(MAX_ADDRESS_BOOK_FILE_BYTES + 1)
+
+  try {
+    let offset = 0
+    while (offset < buffer.length) {
+      const { bytesRead } = await file.read(buffer, offset, buffer.length - offset, null)
+      if (bytesRead === 0) break
+      offset += bytesRead
+    }
+
+    if (offset > MAX_ADDRESS_BOOK_FILE_BYTES) throw new Error('Address-book file exceeds 1 MiB')
+    return buffer.subarray(0, offset).toString('utf8')
+  } finally {
+    await file.close()
+  }
+}
+
 export type AddressBookFileResult =
   | { success: true; imported: number; skipped: number }
   | { success: true; exported: number }
@@ -32,7 +51,7 @@ const defaults: AddressBookFileDependencies = {
   importEntries: (value) => requireStoreAction('importAddressBook')(value),
   openImport: openAddressBookDialog,
   openExport: saveAddressBookDialog,
-  readFile: (path) => fs.readFile(path, 'utf8'),
+  readFile: readAddressBookFile,
   stat: (path) => fs.stat(path),
   writeFile: async (path, value) => {
     await fs.writeFile(path, value, { encoding: 'utf8', mode: 0o600 })
