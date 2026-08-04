@@ -2,6 +2,7 @@ import log from 'electron-log'
 
 import { NATIVE_CURRENCY } from '../../../resources/constants'
 import { toTokenId } from '../../../resources/domain/balance'
+import { YEARN_SYSTEM_TOKENS } from '../../yearn/catalog'
 import BalancesWorkerController from './controller'
 import { CurrencyBalance, TokenBalance } from './scan'
 
@@ -183,13 +184,14 @@ export default function (store: Store) {
 
   function updateBalances(address: Address, chains: number[]) {
     const customTokens = storeApi.getCustomTokens()
-    const knownTokens = storeApi
-      .getKnownTokens(address)
-      .filter(
-        (token) => !customTokens.some((t) => t.address === token.address && t.chainId === token.chainId)
-      )
-
-    const trackedTokens = [...customTokens, ...knownTokens].filter((t) => chains.includes(t.chainId))
+    const knownTokens = storeApi.getKnownTokens(address)
+    const seenTokens = new Set<string>()
+    const trackedTokens = [...customTokens, ...knownTokens, ...YEARN_SYSTEM_TOKENS].filter((token) => {
+      const tokenId = toTokenId(token)
+      if (!chains.includes(token.chainId) || seenTokens.has(tokenId)) return false
+      seenTokens.add(tokenId)
+      return true
+    })
 
     if (trackedTokens.length > 0) {
       workerController?.updateKnownTokenBalances(address, trackedTokens)

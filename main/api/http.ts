@@ -7,7 +7,7 @@ import type { Chain } from '../chains'
 
 import { createSessionOrigin, isTrusted, parseOrigin, requiresSessionOrigin, updateOrigin } from './origins'
 import parsePayload, { JsonRpcError, MAX_REQUEST_BYTES } from './validPayload'
-import protectedMethods from './protectedMethods'
+import { shouldRequestOriginAccess } from './protectedMethods'
 import { parseChainId } from '../provider/chainRequests'
 import originSessions from './originSessions'
 import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
@@ -266,7 +266,7 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
         }, controller.signal)
 
         const trusted =
-          protectedMethods.indexOf(payload.method) === -1 || (await isTrusted(payload, controller.signal))
+          !shouldRequestOriginAccess(payload.method) || (await isTrusted(payload, controller.signal))
         if (controller.signal.aborted) return
 
         if (!trusted) {

@@ -147,6 +147,7 @@ beforeEach(() => {
     resolveRequest: jest.fn()
   }
   accounts.current = jest.fn(() => currentAccount)
+  accounts.getSelectedAddresses = jest.fn(() => [address])
   accounts.get = jest.fn((addr) =>
     addr === address ? { id: address, address, lastSignerType: 'ring' } : undefined
   )
@@ -713,6 +714,37 @@ describe('#send', () => {
 
   const send = (request, cb = jest.fn()) =>
     provider.send({ ...request, _origin: '8073729a-5e59-53b7-9e69-5d9bcff94087' }, cb)
+
+  it.each([
+    ['eth_accounts', []],
+    ['eth_coinbase', null]
+  ])('does not expose an account through passive %s before permission', (method, expected) => {
+    const response = jest.fn()
+
+    send({ method }, response)
+
+    expect(response).toHaveBeenCalledWith(expect.objectContaining({ result: expected }))
+  })
+
+  it.each([
+    ['eth_accounts', [address]],
+    ['eth_coinbase', address]
+  ])('returns the selected account through %s after permission', (method, expected) => {
+    store.set('main.permissions', address, {
+      granted: { origin: 'example.test', provider: true }
+    })
+    const response = jest.fn()
+
+    send({ method }, response)
+
+    expect(response).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: Array.isArray(expected)
+          ? expected.map((entry) => entry.toLowerCase())
+          : expected.toLowerCase()
+      })
+    )
+  })
 
   it('passes the given target chain to the connection', () => {
     connection.connections.ethereum[10] = {
@@ -1980,16 +2012,19 @@ describe('#send', () => {
     beforeEach(() => {
       store.set('main.accounts', address, { balances: { lastUpdated: new Date() } })
       store.set('main.balances', address, balances)
+      store.set('main.permissions', address, {
+        assets: { origin: 'example.test', provider: true }
+      })
     })
 
-    it('returns an error if no account is selected', (done) => {
-      accounts.current.mockReturnValueOnce(undefined)
+    it('returns an authorization error without origin permission', (done) => {
+      store.set('main.permissions', {})
 
       send({ method: 'wallet_getAssets', id: 21, jsonrpc: '2.0' }, (response) => {
         expect(response.id).toBe(21)
         expect(response.jsonrpc).toBe('2.0')
         expect(response.result).toBe(undefined)
-        expect(response.error.message.toLowerCase()).toMatch(/no account selected/)
+        expect(response.error).toMatchObject({ code: 4100 })
         done()
       })
     })

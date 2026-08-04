@@ -19,6 +19,8 @@ const extract = (l: string): Extract => {
   return { session, ens }
 }
 
+export const embeddedDappOrigin = (ens: string) => `http://${ens}.localhost:8421`
+
 export default {
   // Create a view instance on a frame
   create: (frameInstance: FrameInstance, view: ViewMetadata) => {
@@ -55,7 +57,7 @@ export default {
         if (ens !== view.ens || !server.sessions.verify(ens, session)) {
           return cb({ cancel: true })
         } else {
-          details.requestHeaders['Origin'] = view.ens
+          details.requestHeaders['Origin'] = embeddedDappOrigin(view.ens)
           return cb({ requestHeaders: details.requestHeaders })
         }
       } else {

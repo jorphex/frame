@@ -103,6 +103,11 @@ export type AddressBook = z.infer<typeof AddressBookSchema>
 export type AddressBookSaveRequest = z.infer<typeof AddressBookSaveRequestSchema>
 export type AddressBookExport = z.infer<typeof AddressBookExportSchema>
 
+export interface LocalAddressIdentity {
+  label: string
+  source: 'Saved contact' | 'Frame account'
+}
+
 const normalizeAddress = (address: string) => getAddress(address.trim())
 const entryKey = (address: string) => normalizeAddress(address).toLowerCase()
 const normalizedNameKey = (name: string) => normalizedText(name).toLowerCase()
@@ -170,6 +175,28 @@ export function lookupAddressBookEntry(current: unknown, address: unknown): Addr
   const parsedAddress = AddressBookAddressInputSchema.safeParse(address)
   if (!parsedBook.success || !parsedAddress.success) return
   return parsedBook.data[entryKey(parsedAddress.data)]
+}
+
+export function resolveLocalAddressIdentity(
+  addressBook: unknown,
+  accounts: unknown,
+  address: unknown
+): LocalAddressIdentity | undefined {
+  const saved = lookupAddressBookEntry(addressBook, address)
+  if (saved) return { label: saved.name, source: 'Saved contact' }
+
+  const parsedAddress = AddressBookAddressInputSchema.safeParse(address)
+  if (!parsedAddress.success || !accounts || typeof accounts !== 'object' || Array.isArray(accounts)) return
+
+  const accountMap = accounts as Record<string, unknown>
+  const key = entryKey(parsedAddress.data)
+  const account =
+    accountMap[key] || Object.entries(accountMap).find(([candidate]) => candidate.toLowerCase() === key)?.[1]
+  if (!account || typeof account !== 'object' || Array.isArray(account)) return
+
+  const name = (account as { name?: unknown }).name
+  if (typeof name !== 'string' || !normalizedText(name)) return
+  return { label: normalizedText(name), source: 'Frame account' }
 }
 
 export function createAddressBookExport(current: unknown, now = Date.now()): AddressBookExport {

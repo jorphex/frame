@@ -28,7 +28,7 @@ import {
   unregisterAuthenticatedExtension
 } from './extensionConnections'
 import parsePayload, { MAX_REQUEST_BYTES } from './validPayload'
-import protectedMethods from './protectedMethods'
+import { shouldRequestOriginAccess } from './protectedMethods'
 import { parseChainId } from '../provider/chainRequests'
 import originSessions from './originSessions'
 import { FixedWindowRateLimiter, RateLimitOptions } from './requestLimiter'
@@ -318,7 +318,7 @@ const handler = (
     }
 
     const trusted =
-      protectedMethods.indexOf(payload.method) === -1 || (await isTrusted(payload, controller.signal))
+      !shouldRequestOriginAccess(payload.method) || (await isTrusted(payload, controller.signal))
     if (controller.signal.aborted) return
 
     if (!trusted) {

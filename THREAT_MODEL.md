@@ -50,8 +50,10 @@ clients receive server-generated identities scoped to one transport connection,
 so separate connections cannot silently inherit legacy host-only or shared
 `Unknown` permissions. Those identities and permissions are session-only and are
 removed during startup recovery. Protected RPC methods require an account
-permission. The current model does not fully isolate permissions by authenticated
-native-process identity, account, chain, method, or expiry. Request bodies, HTTP
+permission. Passive account, asset, and capability probes do not open consent UI
+and fail closed without a grant: account methods return no identity, while asset
+and capability methods return `4100`. The current model does not fully isolate
+permissions by authenticated native-process identity, account, chain, method, or expiry. Request bodies, HTTP
 connections, WebSocket clients, and request rates have explicit ceilings. Header
 and request-body receive times are bounded; HTTP subscription polls complete
 within 15 seconds. Subscription IDs exposed to clients are opaque aliases bound
@@ -219,6 +221,14 @@ and exits but cannot enable a new deposit. The configured RPC supplies balances,
 allowances, ERC-4626 quotes, product relationships, token decimals, cooldown
 state, simulation, and receipts. A malicious or stale RPC can misreport those
 values, and simulation cannot prove later execution.
+
+The same local catalog supplies a hidden balance-scanner allowlist for curated
+underlying assets, vault shares, and companion shares. These entries do not
+become custom tokens and do not create balances by themselves; only a nonzero
+configured-RPC `balanceOf` result enters the account's known-token state. A zero
+balance is removed as usual. Product state such as a yvUSD cooldown may represent
+non-transferable accounting without a wallet-held ERC-20 balance and remains
+visible only through Earn.
 
 Earn transactions are restricted to the allowlisted vault, companion, and
 first-party periphery contracts documented in [`YEARN_EARN.md`](YEARN_EARN.md).

@@ -1,4 +1,4 @@
-export default [
+const protectedMethods = [
   'caip_request',
   'wallet_request',
   'eth_coinbase',
@@ -23,3 +23,15 @@ export default [
   'wallet_showCallsStatus',
   'wallet_getCapabilities'
 ]
+
+export const passivePermissionMethods = new Set([
+  'eth_accounts',
+  'eth_coinbase',
+  'wallet_getAssets',
+  'wallet_getCapabilities'
+])
+
+export const shouldRequestOriginAccess = (method: string) =>
+  protectedMethods.includes(method) && !passivePermissionMethods.has(method)
+
+export default protectedMethods

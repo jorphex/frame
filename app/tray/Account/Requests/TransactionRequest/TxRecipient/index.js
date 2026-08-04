@@ -6,6 +6,7 @@ import link from '../../../../../../resources/link'
 
 import { ClusterBox, Cluster, ClusterRow, ClusterValue } from '../../../../../../resources/Components/Cluster'
 import AddressIdentity from '../../../../../../resources/Components/AddressIdentity'
+import { resolveLocalAddressIdentity } from '../../../../../../resources/domain/addressBook'
 import { getAddress } from '../../../../../../resources/utils'
 
 const YEARN_ACTION_LABELS = {
@@ -35,7 +36,9 @@ class TxRecipient extends React.Component {
     const req = this.props.req
     const address = req.data.to ? getAddress(req.data.to) : ''
     const ensName = req.recipient && req.recipient.length < 25 ? req.recipient : ''
-    const localName = address ? this.store('main.addressBook', address.toLowerCase(), 'name') : ''
+    const localIdentity = address
+      ? resolveLocalAddressIdentity(this.store('main.addressBook'), this.store('main.accounts'), address)
+      : undefined
     const value = req.data.value || '0x'
     const isZeroValue = value === '0x' || new BigNumber(value).isZero()
     if (req.recipientType !== 'contract' && !isZeroValue) return null
@@ -61,8 +64,8 @@ class TxRecipient extends React.Component {
                 <AddressIdentity
                   address={address}
                   copied={this.state.copied}
-                  label={localName || ensName}
-                  source={localName ? 'Saved contact' : ensName ? 'ENS' : ''}
+                  label={localIdentity?.label || ensName}
+                  source={localIdentity?.source || (ensName ? 'ENS' : '')}
                 />
               </div>
             </ClusterValue>

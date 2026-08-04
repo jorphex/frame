@@ -53,10 +53,12 @@ qualified Safe 7 USB flow.
 - **Software and watch accounts:** Seed, private-key, keystore, and watch-only
   accounts coexist behind clear signing boundaries.
 - **Local address book:** Save, search, back up, and restore trusted EVM
-  destinations. Contact names appear beside the full address during transfer
-  and approval review without changing the signed payload.
+  destinations. Saved contacts and existing Frame account names appear beside
+  the full address during transfer and approval review without changing the
+  signed payload; saved contacts take precedence.
 - **Origin permissions:** Account access and wallet-owned RPC methods are
-  permission-gated for each requesting origin and selected account.
+  permission-gated for each requesting origin and selected account. Passive
+  discovery calls fail closed without opening an approval prompt.
 - **Transaction review:** Calldata decoding, approval-risk detection,
   configured-RPC simulation, native balance effects, logs, and bounded traces
   provide evidence before approval. Simulation is evidence, not a guarantee.
@@ -68,8 +70,9 @@ qualified Safe 7 USB flow.
 - **Curated Yearn Earn (development):** The current `main` branch adds locally
   allowlisted Ethereum, Base, and Katana Yearn products with positions, direct
   and product-specific workflows, exact approvals, configured-RPC simulation,
-  and ordinary Frame signer review. This feature is not part of the `0.7.0`
-  release and has not completed live-funds qualification.
+  ordinary Frame signer review, and hidden balance tracking for curated assets
+  and vault shares. This feature is not part of the `0.7.0` release and has not
+  completed live-funds qualification.
 - **Modern wallet methods:** Hardened EIP-1193 behavior, chain add/switch flows,
   paired-companion EIP-6963 discovery, and non-atomic EIP-5792 wallet calls.
 - **User-controlled infrastructure:** Custom Ethereum RPC and Kubo IPFS

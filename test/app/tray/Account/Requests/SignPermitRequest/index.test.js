@@ -88,6 +88,22 @@ it('shows a live local label without hiding the permit spender address', () => {
   expect(screen.getAllByText(spender)).not.toHaveLength(0)
 })
 
+it('recognizes a Frame account as the permit spender', () => {
+  const spender = req.permit.spender.address
+  render(
+    <SignPermitRequest
+      accounts={{ [spender]: { name: 'Frame Deployer' } }}
+      chainData={chainData}
+      originName='example.test'
+      req={req}
+    />
+  )
+
+  expect(screen.getByText('Frame Deployer')).toBeTruthy()
+  expect(screen.getByText('Frame account')).toBeTruthy()
+  expect(screen.getAllByText(spender)).not.toHaveLength(0)
+})
+
 it('labels the raw permit view with the resolved request chain', () => {
   render(<SignPermitRequest chainData={chainData} originName='example.test' req={req} step='viewRaw' />)
 

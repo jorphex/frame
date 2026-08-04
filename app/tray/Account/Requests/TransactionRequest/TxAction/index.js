@@ -5,6 +5,7 @@ import BigNumber from 'bignumber.js'
 import link from '../../../../../../resources/link'
 import { ClusterBox, Cluster, ClusterRow, ClusterValue } from '../../../../../../resources/Components/Cluster'
 import AddressIdentity from '../../../../../../resources/Components/AddressIdentity'
+import { resolveLocalAddressIdentity } from '../../../../../../resources/domain/addressBook'
 import { formatDisplayDecimal, isUnlimited } from '../../../../../../resources/utils/numbers'
 import { DisplayValue, DisplayCoinBalance } from '../../../../../../resources/Components/DisplayValue'
 import { getAddress } from '../../../../../../resources/utils'
@@ -218,8 +219,11 @@ class TxSending extends React.Component {
           symbol
         } = action.data || {}
         const address = getAddress(recipientAddress)
-        const localName = this.store('main.addressBook', address.toLowerCase(), 'name')
-        const identityName = localName || recipientEns
+        const localIdentity = resolveLocalAddressIdentity(
+          this.store('main.addressBook'),
+          this.store('main.accounts'),
+          address
+        )
 
         const isTestnet = this.store('main.networks', this.props.chain.type, this.props.chain.id, 'isTestnet')
         const rate = this.store('main.rates', contract)
@@ -269,8 +273,8 @@ class TxSending extends React.Component {
                       <AddressIdentity
                         address={address}
                         copied={this.state.copied}
-                        label={identityName}
-                        source={localName ? 'Saved contact' : recipientEns ? 'ENS' : ''}
+                        label={localIdentity?.label || recipientEns}
+                        source={localIdentity?.source || (recipientEns ? 'ENS' : '')}
                       />
                     </div>
                   </ClusterValue>
@@ -287,8 +291,11 @@ class TxSending extends React.Component {
           symbol
         } = action.data || {}
         const address = recipientAddress
-        const localName = this.store('main.addressBook', address.toLowerCase(), 'name')
-        const identityName = localName || spenderEns
+        const localIdentity = resolveLocalAddressIdentity(
+          this.store('main.addressBook'),
+          this.store('main.accounts'),
+          address
+        )
         const value = new BigNumber(amount)
         const revoke = value.eq(0)
         const displayAmount = isUnlimited(this.state.amount)
@@ -348,8 +355,8 @@ class TxSending extends React.Component {
                       <AddressIdentity
                         address={address}
                         copied={this.state.copied}
-                        label={identityName}
-                        source={localName ? 'Saved contact' : spenderEns ? 'ENS' : ''}
+                        label={localIdentity?.label || spenderEns}
+                        source={localIdentity?.source || (spenderEns ? 'ENS' : '')}
                       />
                     </div>
                   </ClusterValue>

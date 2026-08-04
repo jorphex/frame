@@ -1,10 +1,12 @@
 import store from '../../../../main/store'
 import server from '../../../../main/dapps/server'
-import viewInstances from '../../../../main/windows/frames/viewInstances'
+import viewInstances, { embeddedDappOrigin } from '../../../../main/windows/frames/viewInstances'
 import { createViewInstance } from '../../../../main/windows/window'
 
 jest.mock('../../../../main/store', () => jest.fn())
-jest.mock('../../../../main/dapps/server', () => ({ sessions: { remove: jest.fn() } }))
+jest.mock('../../../../main/dapps/server', () => ({
+  sessions: { remove: jest.fn(), verify: jest.fn() }
+}))
 jest.mock('../../../../main/windows/window', () => ({ createViewInstance: jest.fn() }))
 
 beforeEach(() => {
@@ -25,6 +27,57 @@ const createFrameWindow = () => {
 }
 
 describe('WebContentsView creation', () => {
+  it('uses the canonical local origin expected by embedded dapp permissions', () => {
+    expect(embeddedDappOrigin('send.frame.eth')).toBe('http://send.frame.eth.localhost:8421')
+  })
+
+  it('rewrites embedded Send requests to its canonical permission origin', () => {
+    const onBeforeSendHeaders = jest.fn()
+    const viewInstance = {
+      setBounds: jest.fn(),
+      webContents: {
+        session: {
+          webRequest: { onBeforeSendHeaders },
+          cookies: { set: jest.fn(() => new Promise(() => {})) }
+        },
+        setVisualZoomLevelLimits: jest.fn(),
+        on: jest.fn(),
+        loadURL: jest.fn()
+      }
+    }
+    const frame = {
+      contentView: { addChildView: jest.fn(), removeChildView: jest.fn() },
+      frameId: 'frame',
+      getBounds: () => ({ width: 800, height: 600 })
+    }
+    const view = {
+      id: 'send',
+      dappId: 'send',
+      ens: 'send.frame.eth',
+      url: 'http://send.frame.eth.localhost:8421/?session=session'
+    }
+    store.mockImplementation((...path) => (path[0] === 'main.frames' ? { fullscreen: false } : undefined))
+    createViewInstance.mockReturnValue(viewInstance)
+    server.sessions.verify.mockReturnValue(true)
+
+    viewInstances.create(frame, view)
+    const rewrite = onBeforeSendHeaders.mock.calls[0][0]
+    const respond = jest.fn()
+    rewrite(
+      {
+        frame: { url: view.url },
+        resourceType: 'xmlhttprequest',
+        url: 'http://127.0.0.1:1248',
+        requestHeaders: { Origin: 'send.frame.eth' }
+      },
+      respond
+    )
+
+    expect(respond).toHaveBeenCalledWith({
+      requestHeaders: { Origin: 'http://send.frame.eth.localhost:8421' }
+    })
+  })
+
   it('rejects missing frame state before allocating a view', () => {
     store.mockReturnValue(undefined)
 

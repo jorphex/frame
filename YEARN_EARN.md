@@ -59,6 +59,11 @@ cannot change them.
   failed data is withdraw-only when Frame can identify an existing position.
 - Positions and underlying balances are read for the selected account. Watch-only
   accounts can inspect them but cannot create a transaction.
+- Curated underlying, vault-share, and companion-share contracts are also hidden
+  balance-scanner defaults. A real nonzero ERC-20 balance appears in Frame's
+  normal balances and Send token picker without becoming a custom token; zero
+  balances are not fabricated. Cooldown-only yvUSD accounting remains an Earn
+  position rather than a transferable token balance.
 - APY, TVL, risk labels, and simulations are third-party or configured-RPC
   evidence, not guarantees of return, liquidity, execution, or contract safety.
 

@@ -2,6 +2,7 @@ import BalancesScanner from '../../../../main/externalData/balances'
 import * as balancesController from '../../../../main/externalData/balances/controller'
 import store from '../../../../main/store'
 import log from 'electron-log'
+import { YEARN_SYSTEM_TOKENS } from '../../../../main/yearn/catalog'
 
 jest.mock('../../../../main/store')
 jest.mock('../../../../main/externalData/balances/controller')
@@ -64,4 +65,35 @@ it('scans for balances every 10 minutes when paused', () => {
   jest.advanceTimersByTime(10 * 60 * 1000)
 
   expect(balancesController.updateKnownTokenBalances).toHaveBeenCalledTimes(1)
+})
+
+it('tracks curated Yearn assets and shares without adding them as custom tokens', () => {
+  store.set('main.networks.ethereum.1', { id: 1, connection: { primary: { connected: true } } })
+  balancesController.isRunning.mockReturnValue(true)
+  balances.setAddress(address)
+
+  jest.advanceTimersByTime(0)
+
+  const tracked = balancesController.updateKnownTokenBalances.mock.calls.at(-1)[1]
+  const ethereumSystemTokens = YEARN_SYSTEM_TOKENS.filter(({ chainId }) => chainId === 1)
+  expect(tracked).toEqual(expect.arrayContaining(ethereumSystemTokens))
+  expect(store('main.tokens.custom')).toBeUndefined()
+})
+
+it('prefers explicit custom token metadata over hidden Yearn metadata', () => {
+  const systemToken = YEARN_SYSTEM_TOKENS.find(({ chainId }) => chainId === 1)
+  const customToken = { ...systemToken, name: 'My token', symbol: 'MINE' }
+  store.set('main.tokens.custom', [customToken])
+  store.set('main.networks.ethereum.1', { id: 1, connection: { primary: { connected: true } } })
+  balancesController.isRunning.mockReturnValue(true)
+  balances.setAddress(address)
+
+  jest.advanceTimersByTime(0)
+
+  const tracked = balancesController.updateKnownTokenBalances.mock.calls.at(-1)[1]
+  const matching = tracked.filter(
+    ({ chainId, address: tokenAddress }) =>
+      chainId === systemToken.chainId && tokenAddress.toLowerCase() === systemToken.address.toLowerCase()
+  )
+  expect(matching).toEqual([customToken])
 })

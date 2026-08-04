@@ -20,16 +20,16 @@ import {
 import { getSignatureRequestClass } from '../../../../../resources/domain/request'
 import useCopiedMessage from '../../../../../resources/Hooks/useCopiedMessage'
 import AddressIdentity from '../../../../../resources/Components/AddressIdentity'
-import { lookupAddressBookEntry } from '../../../../../resources/domain/addressBook'
+import { resolveLocalAddressIdentity } from '../../../../../resources/domain/addressBook'
 
-const PermitOverview = ({ req, chainData, deviceWarning, originName, addressBook }) => {
+const PermitOverview = ({ req, chainData, deviceWarning, originName, addressBook, accounts }) => {
   const { chainColor, chainName, icon } = chainData
   const {
     permit: { spender, value, deadline },
     tokenData,
     handlerId
   } = req
-  const localName = lookupAddressBookEntry(addressBook, spender.address)?.name
+  const localIdentity = resolveLocalAddressIdentity(addressBook, accounts, spender.address)
 
   const [showCopiedMessage, copySpender] = useCopiedMessage(spender.address)
 
@@ -101,8 +101,8 @@ const PermitOverview = ({ req, chainData, deviceWarning, originName, addressBook
                         <AddressIdentity
                           address={spender.address}
                           copied={showCopiedMessage}
-                          label={localName || spender.ens}
-                          source={localName ? 'Saved contact' : spender.ens ? 'ENS' : ''}
+                          label={localIdentity?.label || spender.ens}
+                          source={localIdentity?.source || (spender.ens ? 'ENS' : '')}
                         />
                       </div>
                     </ClusterValue>
@@ -191,7 +191,7 @@ const EditPermit = ({ req }) => {
   )
 }
 
-const PermitRequest = ({ req, originName, signer, step, chainData, addressBook = {} }) => {
+const PermitRequest = ({ req, originName, signer, step, chainData, addressBook = {}, accounts = {} }) => {
   const requestClass = getSignatureRequestClass(req)
   const deviceWarning = getTypedDataDeviceWarning(signer)
 
@@ -216,6 +216,7 @@ const PermitRequest = ({ req, originName, signer, step, chainData, addressBook =
             chainData={chainData}
             deviceWarning={deviceWarning}
             addressBook={addressBook}
+            accounts={accounts}
           />
         )
     }

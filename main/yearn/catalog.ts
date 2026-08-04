@@ -9,6 +9,7 @@ export interface YearnCatalogDefinition {
   address: Address
   kind: YearnProductKind
   name: string
+  symbol: string
   description: string
   asset: {
     address: Address
@@ -19,6 +20,8 @@ export interface YearnCatalogDefinition {
   companions?: ReadonlyArray<{
     id: 'locked' | 'staked'
     address: Address
+    name: string
+    symbol: string
     decimals: number
   }>
   periphery?: ReadonlyArray<Address>
@@ -39,6 +42,7 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
     address: '0x696d02Db93291651ED510704c9b286841d506987',
     kind: 'yvUSD',
     name: 'yvUSD',
+    symbol: 'yvUSD',
     description: 'A USDC-denominated Yearn vault with liquid and higher-yield locked variants.',
     asset: {
       address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
@@ -46,7 +50,15 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
       decimals: 6
     },
     decimals: 6,
-    companions: [{ id: 'locked', address: YEARN_YVUSD_LOCKED_ADDRESS, decimals: 6 }],
+    companions: [
+      {
+        id: 'locked',
+        address: YEARN_YVUSD_LOCKED_ADDRESS,
+        name: 'Locked yvUSD',
+        symbol: 'Locked yvUSD',
+        decimals: 6
+      }
+    ],
     periphery: [YEARN_YVUSD_ZAP_ADDRESS]
   },
   {
@@ -56,6 +68,7 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
     address: '0x182863131F9a4630fF9E27830d945B1413e347E8',
     kind: 'direct',
     name: 'USDS-1 yVault',
+    symbol: 'yvUSDS-1',
     description: 'A multi-strategy Yearn vault for USDS.',
     asset: {
       address: '0xdC035D45d973E3EC169d2276DDab16f1e407384F',
@@ -71,6 +84,7 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
     address: '0xc56413869c6CDf96496f2b1eF801fEDBdFA7dDB0',
     kind: 'direct',
     name: 'WETH-1 yVault',
+    symbol: 'yvWETH-1',
     description: 'A multi-strategy Yearn vault for wrapped Ether.',
     asset: {
       address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
@@ -86,6 +100,7 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
     address: '0x9F4330700a36B29952869fac9b33f45EEdd8A3d8',
     kind: 'yBOLD',
     name: 'Staked yBOLD',
+    symbol: 'yBOLD',
     description: 'A Yearn BOLD position deposited into yBOLD and staked as ysyBOLD.',
     asset: {
       address: '0x6440f144b7e50D6a8439336510312d2F54beB01D',
@@ -93,7 +108,15 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
       decimals: 18
     },
     decimals: 18,
-    companions: [{ id: 'staked', address: YEARN_YBOLD_STAKED_ADDRESS, decimals: 18 }],
+    companions: [
+      {
+        id: 'staked',
+        address: YEARN_YBOLD_STAKED_ADDRESS,
+        name: 'Staked yBOLD',
+        symbol: 'ysyBOLD',
+        decimals: 18
+      }
+    ],
     periphery: [YEARN_YBOLD_ZAP_ADDRESS]
   },
   {
@@ -103,6 +126,7 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
     address: '0xc3BD0A2193c8F027B82ddE3611D18589ef3f62a9',
     kind: 'direct',
     name: 'USDC Horizon yVault',
+    symbol: 'yvUSDC-H',
     description:
       'A higher-risk Horizon multi-strategy vault for native Base USDC using less-proven yield venues.',
     asset: {
@@ -119,6 +143,7 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
     address: '0x80c34BD3A3569E126e7055831036aa7b212cB159',
     kind: 'direct',
     name: 'vbUSDC yVault',
+    symbol: 'yvvbUSDC',
     description: 'A direct multi-strategy Yearn vault for Katana Vault Bridge USDC.',
     asset: {
       address: '0x203A662b0BD271A6ed5a60EdFbd04bFce608FD36',
@@ -134,6 +159,7 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
     address: '0xE007CA01894c863d7898045ed5A3B4Abf0b18f37',
     kind: 'direct',
     name: 'vbETH yVault',
+    symbol: 'yvvbETH',
     description: 'A direct multi-strategy Yearn vault for Katana Vault Bridge ETH.',
     asset: {
       address: '0xEE7D8BCFb72bC1880D0Cf19822eB0A2e6577aB62',
@@ -149,6 +175,7 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
     address: '0x9A6bd7B6Fd5C4F87eb66356441502fc7dCdd185B',
     kind: 'direct',
     name: 'vbUSDT yVault',
+    symbol: 'yvvbUSDT',
     description: 'A direct multi-strategy Yearn vault for Katana Vault Bridge USDT.',
     asset: {
       address: '0x2DCa96907fde857dd3D816880A0df407eeB2D2F2',
@@ -158,6 +185,30 @@ export const YEARN_CATALOG: readonly YearnCatalogDefinition[] = [
     decimals: 6
   }
 ]
+
+export const YEARN_SYSTEM_TOKENS = YEARN_CATALOG.flatMap((vault) => [
+  {
+    chainId: vault.chainId,
+    address: vault.asset.address,
+    name: vault.asset.symbol,
+    symbol: vault.asset.symbol,
+    decimals: vault.asset.decimals
+  },
+  {
+    chainId: vault.chainId,
+    address: vault.address,
+    name: vault.name,
+    symbol: vault.symbol,
+    decimals: vault.decimals
+  },
+  ...(vault.companions || []).map((companion) => ({
+    chainId: vault.chainId,
+    address: companion.address,
+    name: companion.name,
+    symbol: companion.symbol,
+    decimals: companion.decimals
+  }))
+])
 
 export const yearnVaultKey = (chainId: number, address: string) => `${chainId}:${address.toLowerCase()}`
 

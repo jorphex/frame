@@ -5,6 +5,7 @@ import {
   importAddressBookExport,
   lookupAddressBookEntry,
   removeAddressBookEntry,
+  resolveLocalAddressIdentity,
   saveAddressBookEntry
 } from '../../../../resources/domain/addressBook'
 
@@ -26,6 +27,31 @@ test('normalizes addresses and bounded contact text', () => {
     updatedAt: 10
   })
   expect(lookupAddressBookEntry(addressBook, alice)).toEqual(entry)
+})
+
+test('resolves saved contacts before existing Frame account names', () => {
+  const accounts = { [alice]: { name: 'Frame Savings' } }
+
+  expect(resolveLocalAddressIdentity({}, accounts, alice)).toEqual({
+    label: 'Frame Savings',
+    source: 'Frame account'
+  })
+
+  const addressBook = saveAddressBookEntry(
+    {},
+    { mode: 'add', address: alice, name: 'Treasury Contact', note: '' },
+    10
+  ).addressBook
+  expect(resolveLocalAddressIdentity(addressBook, accounts, alice)).toEqual({
+    label: 'Treasury Contact',
+    source: 'Saved contact'
+  })
+})
+
+test('ignores malformed account identity state', () => {
+  expect(resolveLocalAddressIdentity({}, { [alice]: { name: '   ' } }, alice)).toBeUndefined()
+  expect(resolveLocalAddressIdentity({}, { [alice]: { name: 42 } }, alice)).toBeUndefined()
+  expect(resolveLocalAddressIdentity({}, { [alice]: { name: 'Alice' } }, 'invalid')).toBeUndefined()
 })
 
 test('rejects wrong mixed-case checksums and duplicate addresses or names', () => {

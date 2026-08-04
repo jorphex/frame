@@ -1590,6 +1590,10 @@ export class Provider extends EventEmitter {
     currentAccount: FrameAccount | null | undefined,
     cb: RPCCallback<RPC.GetAssets.Response>
   ) {
+    const access = getOriginAccess(payload)
+    if (!access?.permission?.provider) {
+      return resError({ code: 4100, message: 'Origin is not authorized to read wallet assets' }, payload, cb)
+    }
     if (!currentAccount) return resError('no account selected', payload, cb)
 
     try {
@@ -1652,19 +1656,19 @@ export class Provider extends EventEmitter {
       return resError({ message: `unknown chain: ${payload.chainId}`, code: 4901 }, payload, res)
     }
 
-    function getAccounts(payload: JSONRPCRequestPayload, res: RPCRequestCallback) {
+    function getAccounts(payload: RPCRequestPayload, res: RPCRequestCallback) {
+      const authorized = !!getOriginAccess(payload)?.permission?.provider
       res({
         id: payload.id,
         jsonrpc: payload.jsonrpc,
-        result: accounts.getSelectedAddresses().map((a) => a.toLowerCase())
+        result: authorized ? accounts.getSelectedAddresses().map((a) => a.toLowerCase()) : []
       })
     }
 
     function getCoinbase(payload: RPCRequestPayload, res: RPCRequestCallback) {
-      accounts.getAccounts((err, accounts) => {
-        if (err) return resError(`signTransaction Error: ${JSON.stringify(err)}`, payload, res)
-        res({ id: payload.id, jsonrpc: payload.jsonrpc, result: (accounts || [])[0] })
-      })
+      const authorized = !!getOriginAccess(payload)?.permission?.provider
+      const selected = authorized ? accounts.getSelectedAddresses()[0] : undefined
+      res({ id: payload.id, jsonrpc: payload.jsonrpc, result: selected?.toLowerCase() || null })
     }
 
     if (method === 'eth_coinbase') return getCoinbase(payload, res)

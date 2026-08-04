@@ -322,24 +322,33 @@ it('rejects a non-canonical target chain before provider forwarding', async () =
   expect(updateOrigin).not.toHaveBeenCalled()
 })
 
-it.each(['eth_accounts', 'wallet_switchEthereumChain'])(
-  'uses unauthorized rather than user-rejected when %s lacks permission',
-  async (method) => {
-    accounts.getSelectedAddresses.mockReturnValue(['0xc93452A74e596e81E4f73Ca1AcFF532089AD4c62'])
-    const payload = {
-      id: 7,
-      jsonrpc: '2.0',
-      method,
-      params: method === 'wallet_switchEthereumChain' ? [{ chainId: '0x1' }] : []
-    }
+it('forwards passive account probes without opening origin access', async () => {
+  accounts.getSelectedAddresses.mockReturnValue(['0xc93452A74e596e81E4f73Ca1AcFF532089AD4c62'])
+  const payload = { id: 7, jsonrpc: '2.0', method: 'eth_accounts', params: [] }
 
-    await expect(send({ body: JSON.stringify(payload) })).resolves.toMatchObject({
-      status: 200,
-      body: { id: 7, jsonrpc: '2.0', error: { code: 4100 } }
-    })
-    expect(provider.send).not.toHaveBeenCalled()
+  await expect(send({ body: JSON.stringify(payload) })).resolves.toMatchObject({
+    status: 200,
+    body: { id: 7, jsonrpc: '2.0', result: 'forwarded' }
+  })
+  expect(isTrusted).not.toHaveBeenCalled()
+  expect(provider.send).toHaveBeenCalled()
+})
+
+it('uses unauthorized rather than user-rejected when a chain switch lacks permission', async () => {
+  accounts.getSelectedAddresses.mockReturnValue(['0xc93452A74e596e81E4f73Ca1AcFF532089AD4c62'])
+  const payload = {
+    id: 7,
+    jsonrpc: '2.0',
+    method: 'wallet_switchEthereumChain',
+    params: [{ chainId: '0x1' }]
   }
-)
+
+  await expect(send({ body: JSON.stringify(payload) })).resolves.toMatchObject({
+    status: 200,
+    body: { id: 7, jsonrpc: '2.0', error: { code: 4100 } }
+  })
+  expect(provider.send).not.toHaveBeenCalled()
+})
 
 it.each(['caip_request', 'wallet_request'])(
   'rejects unauthorized %s envelopes before nested method mapping',

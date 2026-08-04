@@ -557,6 +557,31 @@ it('preserves an exact canonical companion-proxied page origin', async () => {
   )
 })
 
+it('forwards a passive companion account probe without opening access UI', async () => {
+  provider.send.mockImplementationOnce((payload, callback) =>
+    callback({ id: payload.id, jsonrpc: payload.jsonrpc, result: [] })
+  )
+
+  mockSocket.emit(
+    'message',
+    JSON.stringify({
+      id: 10,
+      jsonrpc: '2.0',
+      method: 'eth_accounts',
+      params: [],
+      __frameOrigin: 'https://example.test'
+    })
+  )
+  await flushPromises()
+
+  expect(provider.send).toHaveBeenCalledWith(
+    expect.objectContaining({ method: 'eth_accounts' }),
+    expect.any(Function)
+  )
+  expect(store.notify).not.toHaveBeenCalled()
+  expect(JSON.parse(mockSocket.send.mock.calls[0][0])).toMatchObject({ result: [] })
+})
+
 it('rejects non-canonical companion origins and extension metadata from local clients', async () => {
   mockSocket.send = jest.fn()
   mockSocket.emit(

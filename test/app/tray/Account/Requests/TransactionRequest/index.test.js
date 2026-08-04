@@ -96,6 +96,26 @@ describe('confirm', () => {
     store.removeAddressBookEntry(recipient)
   })
 
+  it('recognizes an existing Frame account without hiding the recipient address', () => {
+    const recipient = '0x1111111111111111111111111111111111111111'
+    store.updateAccount({ id: recipient, name: 'Frame Savings' })
+
+    render(
+      <TxRecipient
+        i={0}
+        req={{
+          data: { to: recipient, value: '0x0' },
+          recipientType: 'external'
+        }}
+      />
+    )
+
+    expect(screen.getByText('Frame Savings')).toBeTruthy()
+    expect(screen.getByText('Frame account')).toBeTruthy()
+    expect(screen.getAllByText(recipient)).toHaveLength(2)
+    store.removeAccount(recipient)
+  })
+
   it('identifies an allowlisted Yearn recipient without an external ABI', () => {
     const recipient = '0x1111111111111111111111111111111111111111'
 

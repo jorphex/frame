@@ -6,6 +6,7 @@ import link from '../../../../../../resources/link'
 import { DisplayValue } from '../../../../../../resources/Components/DisplayValue'
 import { Cluster, ClusterRow, ClusterValue } from '../../../../../../resources/Components/Cluster'
 import AddressIdentity from '../../../../../../resources/Components/AddressIdentity'
+import { resolveLocalAddressIdentity } from '../../../../../../resources/domain/addressBook'
 import { getAddress } from '../../../../../../resources/utils'
 
 class TxSending extends React.Component {
@@ -31,7 +32,9 @@ class TxSending extends React.Component {
 
     const address = req.data.to ? getAddress(req.data.to) : ''
     const ensName = req.recipient && req.recipient.length < 25 ? req.recipient : ''
-    const localName = address ? this.store('main.addressBook', address.toLowerCase(), 'name') : ''
+    const localIdentity = address
+      ? resolveLocalAddressIdentity(this.store('main.addressBook'), this.store('main.accounts'), address)
+      : undefined
     const isTestnet = this.store('main.networks', this.props.chain.type, this.props.chain.id, 'isTestnet')
     const {
       nativeCurrency,
@@ -89,8 +92,8 @@ class TxSending extends React.Component {
                     <AddressIdentity
                       address={address}
                       copied={this.state.copied}
-                      label={localName || ensName}
-                      source={localName ? 'Saved contact' : ensName ? 'ENS' : ''}
+                      label={localIdentity?.label || ensName}
+                      source={localIdentity?.source || (ensName ? 'ENS' : '')}
                     />
                   </div>
                 </ClusterValue>
