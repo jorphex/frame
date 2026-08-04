@@ -58,6 +58,21 @@ test('ignores malformed account identity state', () => {
   ).toBeUndefined()
 })
 
+test('fails closed when persisted contact state is malformed', () => {
+  const valid = saveAddressBookEntry(
+    {},
+    { mode: 'add', address: alice, name: 'Alice', note: '' },
+    10
+  ).addressBook
+
+  expect(
+    lookupAddressBookEntry(
+      { ...valid, [bob]: { ...valid[alice], address: bob, name: 'Bob', unexpected: true } },
+      alice
+    )
+  ).toBeUndefined()
+})
+
 test('rejects invisible and directional control characters in trusted text', () => {
   expect(() =>
     saveAddressBookEntry({}, { mode: 'add', address: alice, name: 'Alice\u202e Treasury', note: '' })

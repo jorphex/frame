@@ -6,7 +6,7 @@ import link from '../../../../../../resources/link'
 import { DisplayValue } from '../../../../../../resources/Components/DisplayValue'
 import { Cluster, ClusterRow, ClusterValue } from '../../../../../../resources/Components/Cluster'
 import AddressIdentity from '../../../../../../resources/Components/AddressIdentity'
-import { resolveLocalAddressIdentity } from '../../../../../../resources/domain/addressBook'
+import { resolveLocalAddressIdentity } from '../../../../../../resources/domain/addressBook/identity'
 import { getAddress } from '../../../../../../resources/utils'
 
 class TxSending extends React.Component {

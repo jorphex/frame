@@ -6,7 +6,7 @@ import link from '../../../../../../resources/link'
 
 import { ClusterBox, Cluster, ClusterRow, ClusterValue } from '../../../../../../resources/Components/Cluster'
 import AddressIdentity from '../../../../../../resources/Components/AddressIdentity'
-import { resolveLocalAddressIdentity } from '../../../../../../resources/domain/addressBook'
+import { resolveLocalAddressIdentity } from '../../../../../../resources/domain/addressBook/identity'
 import { getAddress } from '../../../../../../resources/utils'
 
 const YEARN_ACTION_LABELS = {

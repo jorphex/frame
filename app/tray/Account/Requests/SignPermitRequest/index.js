@@ -20,7 +20,7 @@ import {
 import { getSignatureRequestClass } from '../../../../../resources/domain/request'
 import useCopiedMessage from '../../../../../resources/Hooks/useCopiedMessage'
 import AddressIdentity from '../../../../../resources/Components/AddressIdentity'
-import { resolveLocalAddressIdentity } from '../../../../../resources/domain/addressBook'
+import { resolveLocalAddressIdentity } from '../../../../../resources/domain/addressBook/identity'
 
 const PermitOverview = ({ req, chainData, deviceWarning, originName, addressBook, accounts }) => {
   const { chainColor, chainName, icon } = chainData

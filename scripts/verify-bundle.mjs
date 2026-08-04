@@ -2,6 +2,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import bundleSymbols from './bundle-symbols.cjs'
+
+const { findUnresolvedParcelImports } = bundleSymbols
+
 const root = fileURLToPath(new URL('../bundle', import.meta.url))
 const renderers = ['tray', 'dash', 'dapp', 'onboard', 'notify']
 
@@ -48,6 +52,13 @@ for (const renderer of renderers) {
     throw new Error(
       `${renderer}.html must reference one JavaScript and two CSS assets; found ${expectedJavaScript.length} and ${expectedStyles.length}`
     )
+  }
+
+  for (const asset of expectedJavaScript) {
+    const unresolvedImports = findUnresolvedParcelImports(readFileSync(join(root, asset), 'utf8'))
+    if (unresolvedImports.length > 0) {
+      throw new Error(`${renderer} contains unresolved Parcel imports: ${unresolvedImports.join(', ')}`)
+    }
   }
 
   if (

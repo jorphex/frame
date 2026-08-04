@@ -3,7 +3,6 @@ import Restore from 'react-restore'
 
 import link from '../../../resources/link'
 import svg from '../../../resources/svg'
-import { AddressBookSaveRequestSchema } from '../../../resources/domain/addressBook'
 import { exportAddressBook, importAddressBook, removeAddressBookEntry, saveAddressBookEntry } from './api'
 
 const shortAddress = (address) => `${address.slice(0, 8)}...${address.slice(-6)}`
@@ -56,10 +55,7 @@ export class AddressBookEditor extends React.Component {
         name: this.state.name,
         note: this.state.note
       }
-      const parsed = AddressBookSaveRequestSchema.safeParse(request)
-      if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || 'Contact is invalid')
-
-      await saveAddressBookEntry(parsed.data)
+      await saveAddressBookEntry(request)
       link.send('tray:action', 'backDash')
     } catch (error) {
       this.setState({

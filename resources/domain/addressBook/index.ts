@@ -1,15 +1,25 @@
 import { getAddress } from 'ethers'
 import { z } from 'zod'
 
+import {
+  hasAddressBookControlCharacters as hasControlCharacters,
+  MAX_ADDRESS_BOOK_ENTRIES,
+  normalizeAddressBookText as normalizedText
+} from './identity'
+
+export {
+  lookupAddressBookEntry,
+  MAX_ADDRESS_BOOK_ENTRIES,
+  resolveLocalAddressIdentity,
+  type LocalAddressIdentity
+} from './identity'
+
 export const ADDRESS_BOOK_FORMAT = 'frame-address-book'
 export const ADDRESS_BOOK_VERSION = 1
-export const MAX_ADDRESS_BOOK_ENTRIES = 1_000
 export const MAX_ADDRESS_BOOK_FILE_BYTES = 1024 * 1024
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
 const KEY = /^0x[0-9a-f]{40}$/
-const normalizedText = (value: string) => value.trim().replace(/\s+/g, ' ')
-const hasControlCharacters = (value: string) => /[\p{Cc}\p{Cf}]/u.test(value)
 
 export const AddressBookAddressInputSchema = z
   .string()
@@ -101,11 +111,6 @@ export type AddressBook = z.infer<typeof AddressBookSchema>
 export type AddressBookSaveRequest = z.infer<typeof AddressBookSaveRequestSchema>
 export type AddressBookExport = z.infer<typeof AddressBookExportSchema>
 
-export interface LocalAddressIdentity {
-  label: string
-  source: 'Saved contact' | 'Frame account'
-}
-
 const normalizeAddress = (address: string) => getAddress(address.trim())
 const entryKey = (address: string) => normalizeAddress(address).toLowerCase()
 const normalizedNameKey = (name: string) => normalizedText(name).toLowerCase()
@@ -166,35 +171,6 @@ export function removeAddressBookEntry(current: unknown, address: unknown): Addr
   const next = { ...addressBook }
   delete next[key]
   return next
-}
-
-export function lookupAddressBookEntry(current: unknown, address: unknown): AddressBookEntry | undefined {
-  const parsedBook = AddressBookSchema.safeParse(current)
-  const parsedAddress = AddressBookAddressInputSchema.safeParse(address)
-  if (!parsedBook.success || !parsedAddress.success) return
-  return parsedBook.data[entryKey(parsedAddress.data)]
-}
-
-export function resolveLocalAddressIdentity(
-  addressBook: unknown,
-  accounts: unknown,
-  address: unknown
-): LocalAddressIdentity | undefined {
-  const saved = lookupAddressBookEntry(addressBook, address)
-  if (saved) return { label: saved.name, source: 'Saved contact' }
-
-  const parsedAddress = AddressBookAddressInputSchema.safeParse(address)
-  if (!parsedAddress.success || !accounts || typeof accounts !== 'object' || Array.isArray(accounts)) return
-
-  const accountMap = accounts as Record<string, unknown>
-  const key = entryKey(parsedAddress.data)
-  const account =
-    accountMap[key] || Object.entries(accountMap).find(([candidate]) => candidate.toLowerCase() === key)?.[1]
-  if (!account || typeof account !== 'object' || Array.isArray(account)) return
-
-  const name = (account as { name?: unknown }).name
-  if (typeof name !== 'string' || !normalizedText(name) || hasControlCharacters(name)) return
-  return { label: normalizedText(name), source: 'Frame account' }
 }
 
 export function sanitizeAddressBook(current: unknown): { addressBook: AddressBook; removed: number } {
