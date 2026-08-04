@@ -238,10 +238,13 @@ export class Provider extends EventEmitter {
     this.getNonce = this.getNonce.bind(this)
   }
 
-  accountsChanged(accounts: string[]) {
+  accountsChanged(accounts: string[], originIds?: readonly string[]) {
     const address = accounts[0]
+    const targetedOrigins = originIds ? new Set(originIds) : undefined
 
     this.subscriptions.accountsChanged.forEach((subscription) => {
+      if (targetedOrigins && !targetedOrigins.has(subscription.originId)) return
+
       const visibleAccounts = hasSubscriptionPermission(
         SubscriptionType.ACCOUNTS,
         address,

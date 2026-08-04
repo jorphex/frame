@@ -2,7 +2,7 @@ import { applyPermissionAction } from '../../../main/provider/permissionEvents'
 
 const selected = '0x1111111111111111111111111111111111111111'
 
-it('refreshes account subscriptions after changing the selected account permission', () => {
+it('refreshes only affected origin subscriptions after changing the selected account permission', () => {
   let applied = false
   const accounts = {
     getSelectedAddresses: jest.fn(() => {
@@ -12,16 +12,27 @@ it('refreshes account subscriptions after changing the selected account permissi
   }
   const provider = { accountsChanged: jest.fn() }
 
+  const affectedOrigins = ['origin-id']
   applyPermissionAction(
     selected.toUpperCase(),
     () => {
       applied = true
     },
     accounts,
-    provider
+    provider,
+    affectedOrigins
   )
 
-  expect(provider.accountsChanged).toHaveBeenCalledWith([selected])
+  expect(provider.accountsChanged).toHaveBeenCalledWith([selected], affectedOrigins)
+})
+
+it('refreshes every origin after an account-wide permission action', () => {
+  const accounts = { getSelectedAddresses: jest.fn(() => [selected]) }
+  const provider = { accountsChanged: jest.fn() }
+
+  applyPermissionAction(selected, jest.fn(), accounts, provider)
+
+  expect(provider.accountsChanged).toHaveBeenCalledWith([selected], undefined)
 })
 
 it('does not emit account events for a different account permission', () => {

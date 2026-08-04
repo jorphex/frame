@@ -3454,6 +3454,28 @@ describe('#send', () => {
         }
       ])
     })
+
+    it('publishes a permission change only to the affected origin', () => {
+      provider.subscriptions.accountsChanged = [
+        { id: 'affected-subscription', originId: 'affected-origin' },
+        { id: 'unrelated-subscription', originId: 'unrelated-origin' }
+      ]
+      hasSubscriptionPermission.mockReturnValue(true)
+      const payloads = []
+      const listener = (payload) => payloads.push(payload)
+      provider.on('data:subscription', listener)
+
+      provider.accountsChanged([address], ['affected-origin'])
+
+      provider.off('data:subscription', listener)
+      expect(payloads).toEqual([
+        {
+          jsonrpc: '2.0',
+          method: 'eth_subscription',
+          params: { subscription: 'affected-subscription', result: [address] }
+        }
+      ])
+    })
   })
 })
 

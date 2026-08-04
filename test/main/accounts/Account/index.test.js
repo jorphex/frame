@@ -228,7 +228,10 @@ it('publishes account visibility after resolving access for the selected account
     origin: 'https://example.test',
     provider: true
   })
-  expect(provider.accountsChanged).toHaveBeenCalledWith([accountState.address.toLowerCase()])
+  expect(provider.accountsChanged).toHaveBeenCalledWith(
+    [accountState.address.toLowerCase()],
+    [request.origin]
+  )
 })
 
 it('does not publish account visibility when resolving access for a non-selected account', () => {

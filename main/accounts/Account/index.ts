@@ -264,7 +264,8 @@ class FrameAccount {
             provider: access
           }),
         this.accounts,
-        provider
+        provider,
+        [origin]
       )
     }
 

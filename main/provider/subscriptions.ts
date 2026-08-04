@@ -3,7 +3,9 @@ import store from '../store'
 
 import type { Permission } from '../store/state'
 
-const trustedOriginIds = ['frame-extension', 'frame-internal'].map((origin) => uuid(origin, uuid.DNS))
+export const originIdForName = (origin: string) => uuid(origin, uuid.DNS)
+
+const trustedOriginIds = ['frame-extension', 'frame-internal'].map(originIdForName)
 const isTrustedOrigin = (originId: string) => trustedOriginIds.includes(originId)
 
 export const enum SubscriptionType {
@@ -42,7 +44,7 @@ export function hasSubscriptionPermission(subType: string, address: string | und
 
   const permissions = (store('main.permissions', address) || {}) as Record<string, Permission>
   const permission = Object.values(permissions).find(({ origin }) => {
-    return uuid(origin, uuid.DNS) === originId
+    return originIdForName(origin) === originId
   })
 
   return !!permission?.provider
