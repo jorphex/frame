@@ -73,8 +73,7 @@ const modules = ['node-hid', 'usb']
 const ledgerPackages = [
   '@ledgerhq/hw-app-eth',
   '@ledgerhq/hw-transport',
-  '@ledgerhq/hw-transport-node-hid-noevents',
-  '@ledgerhq/hw-transport-node-hid-singleton'
+  '@ledgerhq/hw-transport-node-hid-noevents'
 ]
 const appRoot = path.join(process.resourcesPath, 'app.asar')
 const appModules = path.join(appRoot, 'node_modules')
@@ -325,9 +324,7 @@ assert.deepEqual(probeResult.ledgerVersions, {
   '@ledgerhq/hw-app-eth': packageJson.dependencies['@ledgerhq/hw-app-eth'],
   '@ledgerhq/hw-transport': packageJson.dependencies['@ledgerhq/hw-transport'],
   '@ledgerhq/hw-transport-node-hid-noevents':
-    packageJson.dependencies['@ledgerhq/hw-transport-node-hid-noevents'],
-  '@ledgerhq/hw-transport-node-hid-singleton':
-    packageJson.dependencies['@ledgerhq/hw-transport-node-hid-singleton']
+    packageJson.dependencies['@ledgerhq/hw-transport-node-hid-noevents']
 })
 assert.equal(probeResult.siweDomain, 'example.com')
 assert.equal(probeResult.reactVersion, packageJson.dependencies.react)
