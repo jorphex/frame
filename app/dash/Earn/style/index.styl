@@ -355,26 +355,16 @@
   button
     flex none
     border 0
-    color var(--outerspace)
     background transparent
     font-family 'MainFont'
-    font-size 12px
-    font-weight 500
     cursor pointer
-    text-decoration underline
 
 .earnTextButton, .earnYearnLink
   margin 8px 8px 12px
   border 0
-  color var(--outerspace07)
   background transparent
   font-family 'MainFont'
-  font-size 12px
   cursor pointer
-
-.earnTextButton:hover, .earnYearnLink:hover
-  color var(--outerspace)
-  text-decoration underline
 
 .earnDetailsHero
   padding 22px
@@ -742,12 +732,9 @@
       margin 0
       padding 0
       border 0
-      color var(--outerspace07)
       background transparent
       font-family 'MainFont'
-      font-size 11px
       text-align left
-      text-decoration underline
       cursor pointer
 
     .earnReceiptTransfers
@@ -794,8 +781,6 @@
 .earnYearnLink
   display block
   margin 18px auto 10px
-  color var(--outerspace)
-  text-decoration underline
 
 .earnDisclosure
   padding 7px 16px 16px
@@ -803,6 +788,23 @@
   font-size 11px
   line-height 16px
   text-align center
+
+.earnTextButton,
+.earnYearnLink,
+.earnNotice button,
+.earnWorkflow li .earnReceiptLink
+  color var(--outerspace06)
+  font-size 11px
+  font-weight 400
+  letter-spacing 1px
+  text-decoration none
+  text-transform uppercase
+
+.earnTextButton:hover,
+.earnYearnLink:hover,
+.earnNotice button:hover,
+.earnWorkflow li .earnReceiptLink:hover
+  color var(--outerspace08)
 
 .earnState
   display flex
