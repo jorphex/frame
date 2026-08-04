@@ -13,6 +13,13 @@ import store from '../store'
 
 import type { ChainId } from '../store/state'
 import { rendererRoleForWindow } from '../../resources/bridge/roles'
+import {
+  FRAME_COMPANION_RELEASES_URL,
+  FRAME_LICENSE_URL,
+  FRAME_SUPPORT_URL,
+  LEDGER_SHOP_URL,
+  TREZOR_SHOP_URL
+} from '../../resources/constants'
 import { registerRendererRole } from '../ipc/renderer'
 
 const hardenedSessions = new WeakSet<Session>()
@@ -126,17 +133,12 @@ export function createViewInstance(
 }
 
 const externalWhitelist = [
-  'https://frame.sh',
   'https://yearn.fi',
-  'https://github.com/jorphex/frame-extension/releases',
-  'https://github.com/floating/frame/issues/new',
-  'https://github.com/floating/frame/blob/master/LICENSE',
-  'https://github.com/floating/frame/blob/0.5/LICENSE',
-  'https://shop.ledger.com/pages/ledger-nano-x?r=1fb484cde64f',
-  'https://shop.trezor.io/?offer_id=10&aff_id=3270',
-  'https://discord.gg/UH7NGqY',
-  'https://frame.canny.io',
-  'https://feedback.frame.sh',
+  FRAME_COMPANION_RELEASES_URL,
+  FRAME_LICENSE_URL,
+  FRAME_SUPPORT_URL,
+  LEDGER_SHOP_URL,
+  TREZOR_SHOP_URL,
   'https://opensea.io'
 ]
 

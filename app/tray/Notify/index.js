@@ -8,6 +8,7 @@ import { usesBaseFee } from '../../../resources/domain/transaction'
 import { capitalize } from '../../../resources/utils'
 import frameIcon from '../../../asset/FrameIcon.png'
 import ExtensionConnectNotification from './ExtensionConnect'
+import { FRAME_LICENSE_URL, FRAME_SUPPORT_URL } from '../../../resources/constants'
 
 const FEE_WARNING_THRESHOLD_USD = 50
 
@@ -26,7 +27,7 @@ export class Notify extends React.Component {
               Please read{' '}
               <span
                 onMouseDown={() => {
-                  link.send('tray:openExternal', 'https://github.com/floating/frame/blob/master/LICENSE')
+                  link.send('tray:openExternal', FRAME_LICENSE_URL)
                 }}
               >
                 our license
@@ -59,7 +60,7 @@ export class Notify extends React.Component {
             <div className='notifyFrameIcon'>
               <img src={frameIcon} />
             </div>
-            <div className='notifyTitle'>Frame v0.5</div>
+            <div className='notifyTitle'>Frame Community Preview</div>
             <div className='notifyBody'>
               <div className='notifyBodyBlock'>
                 <div className='notifySection'>Use hardware signers for high value accounts</div>
@@ -68,7 +69,7 @@ export class Notify extends React.Component {
                   <span
                     className='notifyBodyLink'
                     onMouseDown={() => {
-                      link.send('tray:openExternal', 'https://github.com/floating/frame/blob/0.5/LICENSE')
+                      link.send('tray:openExternal', FRAME_LICENSE_URL)
                     }}
                   >
                     our license
@@ -76,14 +77,14 @@ export class Notify extends React.Component {
                   <span>and use Frame at your own risk</span>
                 </div>
                 <div className='notifySection'>
-                  <span>Please give us your feedback! </span>
+                  <span>Report problems through </span>
                   <span
                     className='notifyBodyLink'
                     onMouseDown={() => {
-                      link.send('tray:openExternal', 'https://frame.canny.io')
+                      link.send('tray:openExternal', FRAME_SUPPORT_URL)
                     }}
                   >
-                    feedback.frame.sh
+                    community support
                   </span>
                 </div>
               </div>
@@ -688,12 +689,6 @@ export class Notify extends React.Component {
 //   {
 //     name: 'contractData',
 //     data: {}
-//   },
-//   {
-//     name: 'openExternal',
-//     data: {
-//       url: 'https://frame.sh'
-//     }
 //   },
 //   {
 //     name: 'openExplorer',

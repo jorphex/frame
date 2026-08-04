@@ -3,6 +3,7 @@ import Restore from 'react-restore'
 
 import Chain from './Chain'
 import link from '../../../resources/link'
+import { FRAME_SUPPORT_URL } from '../../../resources/constants'
 
 class Settings extends React.Component {
   constructor(props, context) {
@@ -40,12 +41,9 @@ class Settings extends React.Component {
 
   discord() {
     return (
-      <div
-        className='discordInvite'
-        onClick={() => link.send('tray:openExternal', 'https://discord.gg/UH7NGqY')}
-      >
+      <div className='discordInvite' onClick={() => link.send('tray:openExternal', FRAME_SUPPORT_URL)}>
         <div>Need help?</div>
-        <div className='discordLink'>Join our Discord!</div>
+        <div className='discordLink'>Open a community support issue</div>
       </div>
     )
   }

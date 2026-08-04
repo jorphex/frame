@@ -3,6 +3,11 @@ import Restore from 'react-restore'
 import { okPort, okProtocol } from '../../../resources/connections'
 import link from '../../../resources/link'
 import svg from '../../../resources/svg'
+import {
+  FRAME_COMPANION_RELEASES_URL,
+  FRAME_LICENSE_URL,
+  FRAME_SUPPORT_URL
+} from '../../../resources/constants'
 
 class Settings extends React.Component {
   constructor(props, context) {
@@ -59,12 +64,7 @@ class Settings extends React.Component {
           )}
         </div>
         <div className='appInfoLine appInfoLineVersion'>{`v${appVersion}`}</div>
-        <div
-          className='appInfoViewLicense'
-          onClick={() =>
-            link.send('tray:openExternal', 'https://github.com/floating/frame/blob/master/LICENSE')
-          }
-        >
+        <div className='appInfoViewLicense' onClick={() => link.send('tray:openExternal', FRAME_LICENSE_URL)}>
           View License
         </div>
         <div className='appInfoLine appInfoLineReset'>
@@ -186,18 +186,6 @@ class Settings extends React.Component {
     )
   }
 
-  discord() {
-    return (
-      <div
-        className='discordInvite'
-        onClick={() => link.send('tray:openExternal', 'https://discord.gg/UH7NGqY')}
-      >
-        <div>Need help?</div>
-        <div className='discordLink'>Join our Discord!</div>
-      </div>
-    )
-  }
-
   quit() {
     return (
       <div className='addCustomTokenButtonWrap quitFrame' style={{ zIndex: 215 }}>
@@ -305,17 +293,13 @@ class Settings extends React.Component {
             <div className='snipItBrowserExtensionIcons'>
               <div
                 className='snipItBrowserExtensionIcon snipItBrowserExtensionIconChrome'
-                onClick={() =>
-                  link.send('tray:openExternal', 'https://github.com/jorphex/frame-extension/releases')
-                }
+                onClick={() => link.send('tray:openExternal', FRAME_COMPANION_RELEASES_URL)}
               >
                 {svg.chrome(28)}
               </div>
               <div
                 className='snipItBrowserExtensionIcon snipItBrowserExtensionIconFirefox'
-                onClick={() =>
-                  link.send('tray:openExternal', 'https://github.com/jorphex/frame-extension/releases')
-                }
+                onClick={() => link.send('tray:openExternal', FRAME_COMPANION_RELEASES_URL)}
               >
                 {svg.firefox(28)}
               </div>
@@ -331,20 +315,20 @@ class Settings extends React.Component {
             <div
               className='requestFeatureButton'
               onClick={() => {
-                link.send('tray:openExternal', 'https://feedback.frame.sh')
+                link.send('tray:openExternal', FRAME_SUPPORT_URL)
               }}
             >
-              Request a Feature
+              Request a Feature or Report an Issue
             </div>
           </div>
           <div className='requestFeature'>
             <div
               className='requestFeatureButton'
               onClick={() => {
-                link.send('tray:openExternal', 'https://discord.gg/UH7NGqY')
+                link.send('tray:openExternal', FRAME_SUPPORT_URL)
               }}
             >
-              Need help? Join our Discord!
+              Get Community Support
             </div>
           </div>
           <div className='requestFeature'>

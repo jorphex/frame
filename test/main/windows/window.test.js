@@ -207,6 +207,28 @@ describe('openExternal', () => {
       'https://github.com/jorphex/frame/releases/tag/v0.7.0-rc.1'
     )
   })
+
+  it('allows current community support links and rejects abandoned upstream channels', () => {
+    openExternal('https://github.com/jorphex/frame/blob/main/LICENSE')
+    openExternal('https://github.com/jorphex/frame/issues/new')
+    openExternal('https://github.com/floating/frame/blob/master/LICENSE')
+    openExternal('https://feedback.frame.sh')
+    openExternal('https://discord.gg/UH7NGqY')
+
+    expect(shell.openExternal.mock.calls).toEqual([
+      ['https://github.com/jorphex/frame/blob/main/LICENSE'],
+      ['https://github.com/jorphex/frame/issues/new']
+    ])
+  })
+
+  it('allows official hardware shops without retaining legacy affiliate links', () => {
+    openExternal('https://shop.ledger.com/')
+    openExternal('https://shop.trezor.io/')
+    openExternal('https://shop.ledger.com/pages/ledger-nano-x?r=1fb484cde64f')
+    openExternal('https://shop.trezor.io/?offer_id=10&aff_id=3270')
+
+    expect(shell.openExternal.mock.calls).toEqual([['https://shop.ledger.com/'], ['https://shop.trezor.io/']])
+  })
 })
 
 describe('openBlockExplorer', () => {

@@ -34,7 +34,14 @@ afterEach(() => {
 describe('connect events', () => {
   it("initializes Trezor Connect with Frame's guarded NodeUsb transport", () => {
     expect(TrezorConnect.init).toHaveBeenCalledWith(
-      expect.objectContaining({ transports: [FrameNodeUsbTransport] })
+      expect.objectContaining({
+        manifest: {
+          appName: 'Frame',
+          appUrl: 'https://github.com/jorphex/frame',
+          email: 'jorphex@users.noreply.github.com'
+        },
+        transports: [FrameNodeUsbTransport]
+      })
     )
   })
 

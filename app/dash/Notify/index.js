@@ -9,6 +9,7 @@ import { usesBaseFee } from '../../../resources/domain/transaction'
 import Confirm from '../../../resources/Components/Confirm'
 import AddToken from './AddToken'
 import frameIcon from '../../../asset/FrameIcon.png'
+import { FRAME_LICENSE_URL, FRAME_SUPPORT_URL } from '../../../resources/constants'
 
 const FEE_WARNING_THRESHOLD_USD = 50
 const capitalize = (s) => s[0].toUpperCase() + s.slice(1)
@@ -22,14 +23,14 @@ class Notify extends React.Component {
             <div className='notifyFrameIcon'>
               <img src={frameIcon} />
             </div>
-            <div className='notifyTitle'>Frame v0.5-beta</div>
+            <div className='notifyTitle'>Frame Community Preview</div>
             <div className='notifyBody'>
               <div className='notifyBodyBlock notifyBodyBlockBig'>
-                We are excited to welcome you to the next iteration of Frame!
+                This community-maintained release is independent from the original Frame maintainers.
               </div>
               <div className='notifyBodyBlock'>
-                Be advised, this version of Frame is currently in &quot;beta&quot; and will update on a beta
-                track
+                Back up your profile, verify release checksums, and test with accounts that do not hold
+                valuable assets before relying on it.
               </div>
               <div className='notifyBodyBlock'>
                 Use hardware signers for high value accounts and verify all transaction and account details on
@@ -40,7 +41,7 @@ class Notify extends React.Component {
                 <span
                   className='notifyBodyLink'
                   onMouseDown={() => {
-                    link.send('tray:openExternal', 'https://github.com/floating/frame/blob/0.5/LICENSE')
+                    link.send('tray:openExternal', FRAME_LICENSE_URL)
                   }}
                 >
                   our license
@@ -48,15 +49,15 @@ class Notify extends React.Component {
                 <span>and use Frame at your own risk</span>
               </div>
               <div className='notifyBodyBlock notifyBodyBlockBig'>
-                <div>Please give us your feedback!</div>
+                <div>Report problems through community support.</div>
                 <div
                   className='notifyBodyLink'
                   style={{ marginTop: '20px' }}
                   onMouseDown={() => {
-                    link.send('tray:openExternal', 'https://frame.canny.io')
+                    link.send('tray:openExternal', FRAME_SUPPORT_URL)
                   }}
                 >
-                  feedback.frame.sh
+                  Open GitHub issue
                 </div>
               </div>
             </div>

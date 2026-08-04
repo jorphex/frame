@@ -14,6 +14,7 @@ import TrezorConnect, {
   UI_EVENT
 } from '@trezor/connect'
 import { closeFrameNodeUsbTransports, FrameNodeUsbTransport } from './nodeUsbTransport'
+import { FRAME_REPOSITORY_URL } from '../../../resources/constants'
 
 export class DeviceError extends Error {
   readonly code
@@ -32,7 +33,11 @@ type DeviceReference = {
   state?: Device['state'] | undefined
 }
 
-const manifest = { email: 'dev@frame.sh', appName: 'Frame', appUrl: 'https://frame.sh' }
+const manifest = {
+  email: 'jorphex@users.noreply.github.com',
+  appName: 'Frame',
+  appUrl: FRAME_REPOSITORY_URL
+}
 
 const config = {
   manifest,

@@ -10,6 +10,13 @@ export enum ApprovalType {
   SignatureRisk = 'approveDangerousSignature'
 }
 
+export const FRAME_REPOSITORY_URL = 'https://github.com/jorphex/frame'
+export const FRAME_LICENSE_URL = `${FRAME_REPOSITORY_URL}/blob/main/LICENSE`
+export const FRAME_SUPPORT_URL = `${FRAME_REPOSITORY_URL}/issues/new`
+export const FRAME_COMPANION_RELEASES_URL = 'https://github.com/jorphex/frame-extension/releases'
+export const LEDGER_SHOP_URL = 'https://shop.ledger.com/'
+export const TREZOR_SHOP_URL = 'https://shop.trezor.io/'
+
 const NETWORK_PRESETS = {
   ethereum: {
     default: {

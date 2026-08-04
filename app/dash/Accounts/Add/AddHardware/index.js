@@ -3,6 +3,7 @@ import Restore from 'react-restore'
 
 import link from '../../../../../resources/link'
 import RingIcon from '../../../../../resources/Components/RingIcon'
+import { LEDGER_SHOP_URL, TREZOR_SHOP_URL } from '../../../../../resources/constants'
 
 import Signer from '../../../Signer'
 
@@ -70,9 +71,8 @@ class AddHardware extends React.Component {
             className='addAccountItemFooter'
             onClick={() => {
               const open = (url) => link.send('tray:openExternal', url)
-              if (this.deviceName === 'ledger')
-                return open('https://shop.ledger.com/pages/ledger-nano-x?r=1fb484cde64f')
-              if (this.deviceName === 'trezor') return open('https://shop.trezor.io/?offer_id=10&aff_id=3270')
+              if (this.deviceName === 'ledger') return open(LEDGER_SHOP_URL)
+              if (this.deviceName === 'trezor') return open(TREZOR_SHOP_URL)
             }}
           >
             {``}
