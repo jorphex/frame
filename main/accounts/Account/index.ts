@@ -66,6 +66,7 @@ import type { TransactionSimulation, WalletCallsSimulationResult } from '../../t
 import type Signer from '../../signers/Signer'
 import { parseErc20ApprovalIntent } from '../../../resources/domain/transaction/allowance'
 import { getRequestSignal } from '../../provider/requestSignal'
+import { applyPermissionAction } from '../../provider/permissionEvents'
 import { FRAME_SEND_ORIGIN } from '../../../resources/domain/origin'
 
 const nebula = nebulaApi()
@@ -254,7 +255,17 @@ class FrameAccount {
     if (account.toLowerCase() === this.address) {
       // Permissions do no live inside the account summary
       const { name } = store('main.origins', origin)
-      requireStoreAction('setPermission')(this.address, { handlerId, origin: name, provider: access })
+      applyPermissionAction(
+        this.address,
+        () =>
+          requireStoreAction('setPermission')(this.address, {
+            handlerId,
+            origin: name,
+            provider: access
+          }),
+        this.accounts,
+        provider
+      )
     }
 
     this.resolveRequest(req)

@@ -26,7 +26,8 @@ jest.mock('../../../../main/contracts', () => {
 jest.mock('../../../../main/provider', () => ({
   on: jest.fn(),
   getNonce: jest.fn(),
-  fillTransaction: jest.fn()
+  fillTransaction: jest.fn(),
+  accountsChanged: jest.fn()
 }))
 jest.mock('../../../../main/accounts', () => ({ RequestMode: { Normal: 'normal' } }))
 jest.mock('../../../../main/signers', () => ({ get: jest.fn() }))
@@ -55,7 +56,7 @@ jest.mock('../../../../main/store', () => {
 
 let account
 
-const accounts = { update: jest.fn() }
+const accounts = { update: jest.fn(), getSelectedAddresses: jest.fn() }
 
 const accountState = {
   address: '0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990',
@@ -188,6 +189,8 @@ beforeEach(() => {
   jest.clearAllTimers()
   store.mockImplementation(() => undefined)
   store.setPermission.mockClear()
+  provider.accountsChanged.mockClear()
+  accounts.getSelectedAddresses.mockReturnValue([accountState.address.toLowerCase()])
   simulateTransaction.mockImplementation(() => new Promise(() => {}))
   simulateWalletCalls.mockImplementation(() => new Promise(() => {}))
   provider.getNonce.mockImplementation((_transaction, callback) => callback({ result: '0x5' }))
@@ -206,6 +209,42 @@ beforeEach(() => {
   )
   account = new Account(accountState, accounts)
   fetchContract.mockResolvedValueOnce(undefined)
+})
+
+it('publishes account visibility after resolving access for the selected account', () => {
+  const request = {
+    handlerId: 'access-request',
+    origin: 'origin-id',
+    account: accountState.address,
+    type: 'access'
+  }
+  store.mockImplementation((path) => (path === 'main.origins' ? { name: 'https://example.test' } : undefined))
+  account.requests[request.handlerId] = request
+
+  account.setAccess(request, true)
+
+  expect(store.setPermission).toHaveBeenCalledWith(accountState.address.toLowerCase(), {
+    handlerId: request.handlerId,
+    origin: 'https://example.test',
+    provider: true
+  })
+  expect(provider.accountsChanged).toHaveBeenCalledWith([accountState.address.toLowerCase()])
+})
+
+it('does not publish account visibility when resolving access for a non-selected account', () => {
+  const request = {
+    handlerId: 'background-access-request',
+    origin: 'origin-id',
+    account: accountState.address,
+    type: 'access'
+  }
+  store.mockImplementation((path) => (path === 'main.origins' ? { name: 'https://example.test' } : undefined))
+  accounts.getSelectedAddresses.mockReturnValue(['0x1111111111111111111111111111111111111111'])
+  account.requests[request.handlerId] = request
+
+  account.setAccess(request, true)
+
+  expect(provider.accountsChanged).not.toHaveBeenCalled()
 })
 
 it('grants the built-in Send dapp only at its concrete local origin', () => {
