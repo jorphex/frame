@@ -70,6 +70,27 @@ export class RequestCommand extends React.Component {
     link.rpc('declineRequest', req, () => {}) // Move to link.send
   }
 
+  handleSignerCompatibilityFailure(error, compatibility, req) {
+    if (!error && compatibility) return false
+
+    if (isNoSignerError(error)) {
+      this.store.notify('noSignerWarning', { req })
+    } else if (error === 'Signer unavailable') {
+      this.setState({ signerLocked: true })
+      this.scheduleTimer(
+        'signerLockedTimer',
+        () => {
+          this.setState({ signerLocked: false })
+        },
+        3000
+      )
+    } else {
+      this.store.notify('signerUnavailableWarning', { req })
+    }
+
+    return true
+  }
+
   toDisplayUSD(bn) {
     return bn.toFixed(2, BigNumber.ROUND_UP).toString()
   }
@@ -287,21 +308,9 @@ export class RequestCommand extends React.Component {
             onClick={() => {
               if (allowApproval) {
                 link.rpc('signerCompatibility', req.account, req.handlerId, (e, compatibility) => {
-                  if (isNoSignerError(e)) {
-                    this.store.notify('noSignerWarning', { req })
-                  } else if (e === 'Signer unavailable') {
-                    this.setState({ signerLocked: true })
-                    this.scheduleTimer(
-                      'signerLockedTimer',
-                      () => {
-                        this.setState({ signerLocked: false })
-                      },
-                      3000
-                    )
-                  } else if (
-                    !compatibility.compatible &&
-                    !this.store('main.mute.signerCompatibilityWarning')
-                  ) {
+                  if (this.handleSignerCompatibilityFailure(e, compatibility, req)) return
+
+                  if (!compatibility.compatible && !this.store('main.mute.signerCompatibilityWarning')) {
                     this.store.notify('signerCompatibilityWarning', { req, compatibility, chain: chain })
                   } else if (
                     (maxFeeUSD.toNumber() > FEE_WARNING_THRESHOLD_USD ||
@@ -469,21 +478,9 @@ export class RequestCommand extends React.Component {
               style={{ pointerEvents: this.state.allowInput ? 'auto' : 'none' }}
               onClick={() => {
                 if (this.state.allowInput) {
-                  link.rpc('signerCompatibility', req.account, req.handlerId, (e) => {
-                    if (isNoSignerError(e)) {
-                      this.store.notify('noSignerWarning', { req })
-                    } else if (e === 'Signer unavailable') {
-                      this.setState({ signerLocked: true })
-                      this.scheduleTimer(
-                        'signerLockedTimer',
-                        () => {
-                          this.setState({ signerLocked: false })
-                        },
-                        3000
-                      )
-                    } else {
-                      this.approve(req.handlerId, req)
-                    }
+                  link.rpc('signerCompatibility', req.account, req.handlerId, (e, compatibility) => {
+                    if (this.handleSignerCompatibilityFailure(e, compatibility, req)) return
+                    this.approve(req.handlerId, req)
                   })
                 }
               }}
