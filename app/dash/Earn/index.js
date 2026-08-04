@@ -448,7 +448,7 @@ const ActionForm = ({ vault, position, form, disabled, onChange, onSubmit, formR
               autoComplete='off'
               aria-describedby={form.error ? 'earn-action-error' : undefined}
               aria-invalid={Boolean(form.error)}
-              value={form.max ? 'Max' : form.amount}
+              value={form.amount}
               disabled={form.max || form.busy || disabled}
               onChange={(event) => onChange({ amount: event.target.value, max: false, error: '' })}
               placeholder='0.0'
@@ -460,7 +460,7 @@ const ActionForm = ({ vault, position, form, disabled, onChange, onSubmit, formR
               disabled={form.busy || disabled || (!form.max && !maxAvailable)}
               onClick={() =>
                 onChange({
-                  amount: form.max ? '' : '0',
+                  amount: form.max ? '' : String(available?.amount || ''),
                   max: !form.max,
                   error: ''
                 })

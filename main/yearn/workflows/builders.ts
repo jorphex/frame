@@ -227,7 +227,7 @@ function operationFor(input: BuildYearnWorkflowInput): Operation {
         target: variantAddress,
         data: erc4626.encodeFunctionData('redeem', [amountRaw, account, account]),
         amountRaw,
-        symbol: requestedVariant.symbol
+        symbol: requestedVariant.asset.symbol
       }
     : {
         kind: 'withdraw',

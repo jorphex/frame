@@ -1,4 +1,4 @@
-import { Interface, getAddress, parseUnits } from 'ethers'
+import { Interface, formatUnits, getAddress, parseUnits } from 'ethers'
 
 import {
   YearnWorkflowListResultSchema,
@@ -295,6 +295,13 @@ export function createYearnWorkflowService({
     return parsed
   }
 
+  const discard = (id: string) => {
+    const workflows = load()
+    if (!workflows[id]) return
+    const { [id]: _discarded, ...remaining } = workflows
+    persist(remaining)
+  }
+
   const requireWorkflow = (id: string) => {
     const workflow = load()[id]
     if (!workflow) throw new Error('Yearn workflow was not found')
@@ -427,7 +434,7 @@ export function createYearnWorkflowService({
             amount: underlyingAssets,
             operationAmount: lockedShares,
             secondaryAmount: unlockedShares,
-            displayAmount: 'Max'
+            displayAmount: formatUnits(underlyingAssets, vault.asset.decimals)
           }
         }
         let underlyingAssets: bigint
@@ -462,7 +469,7 @@ export function createYearnWorkflowService({
           return {
             amount: lockedBalance,
             operationAmount: lockedBalance,
-            displayAmount: 'Max'
+            displayAmount: formatUnits(lockedBalance, variant.decimals)
           }
         }
         let underlyingAssets: bigint
@@ -487,6 +494,17 @@ export function createYearnWorkflowService({
         }
       }
     }
+    if (request.action === 'withdraw' && request.max && ['direct', 'unlocked'].includes(request.variant)) {
+      const shares = await readUint(vault.chainId, variant.address, 'maxRedeem', [account])
+      if (shares <= 0n) throw new Error(`No ${variant.symbol} is currently available to withdraw`)
+      const assets = await readUint(vault.chainId, variant.address, 'previewRedeem', [shares])
+      if (assets <= 0n) throw new Error(`${variant.asset.symbol} withdrawal quote is unavailable`)
+      return {
+        amount: shares,
+        displayAmount: formatUnits(assets, variant.asset.decimals)
+      }
+    }
+
     const token =
       request.action === 'deposit'
         ? vault.asset
@@ -517,7 +535,10 @@ export function createYearnWorkflowService({
       const shares = await readUint(vault.chainId, variant.address, 'balanceOf', [account])
       if (amount > shares) throw new Error(`Amount exceeds the available ${variant.symbol} balance`)
     }
-    return { amount, displayAmount: request.max ? 'Max' : request.amount }
+    return {
+      amount,
+      displayAmount: request.max ? formatUnits(amount, token.decimals) : request.amount
+    }
   }
 
   const prepare = async (request: YearnWorkflowRequest) => {
@@ -918,7 +939,18 @@ export function createYearnWorkflowService({
 
   const start = async (request: YearnWorkflowRequest) => {
     const workflow = save(await prepare(request))
-    return queue(workflow.id)
+    try {
+      return await queue(workflow.id)
+    } catch (error) {
+      const current = load()[workflow.id]
+      if (
+        current?.status === 'ready' &&
+        current.steps.every(({ status }) => ['pending', 'ready'].includes(status))
+      ) {
+        discard(workflow.id)
+      }
+      throw error
+    }
   }
 
   const resume = async ({ id }: YearnWorkflowIdRequest) => {

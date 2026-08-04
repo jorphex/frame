@@ -330,7 +330,7 @@ it('opens a persistent deposit form with available balance and visible Max behav
   expect(screen.queryByRole('button', { name: 'Close Earn action' })).toBeNull()
 
   await user.click(screen.getByRole('button', { name: 'Max' }))
-  expect(amount.value).toBe('Max')
+  expect(amount.value).toBe('5.0')
   expect(screen.getByRole('button', { name: 'Max' }).getAttribute('aria-pressed')).toBe('true')
 
   await user.click(screen.getByRole('button', { name: 'Max' }))
@@ -644,7 +644,7 @@ it('builds a locked yvUSD cooldown intent from the on-chain position state', asy
     vaultId: 'ethereum-yvusd',
     action: 'start-cooldown',
     variant: 'locked',
-    amount: '0',
+    amount: '1.9',
     max: true
   })
 })

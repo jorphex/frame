@@ -185,6 +185,8 @@ function setup(
   let allowance = 0n
   let tokenBalance = 100_000_000n
   let shareBalance = 50_000_000n
+  let maxRedeem: bigint | null = null
+  let maxRedeemSequence: bigint[] = []
   let maxDeposit = 100_000_000n
   let maxWithdraw = 45_000_000n
   let catalogStatus = options.catalogStatus || 'fresh'
@@ -213,10 +215,16 @@ function setup(
       return erc4626.encodeFunctionResult('maxWithdraw', [maxWithdraw])
     }
     if (data.startsWith(selector(erc4626, 'maxRedeem'))) {
-      return erc4626.encodeFunctionResult('maxRedeem', [shareBalance])
+      return erc4626.encodeFunctionResult('maxRedeem', [
+        maxRedeemSequence.shift() ?? maxRedeem ?? shareBalance
+      ])
     }
     if (data.startsWith(selector(erc4626, 'maxDeposit'))) {
       return erc4626.encodeFunctionResult('maxDeposit', [maxDeposit])
+    }
+    if (data.startsWith(selector(erc4626, 'previewRedeem'))) {
+      const [shares] = erc4626.decodeFunctionData('previewRedeem', data)
+      return erc4626.encodeFunctionResult('previewRedeem', [shares])
     }
     if (data.startsWith(selector(erc20, 'balanceOf'))) {
       const value = target.toLowerCase() === asset.address.toLowerCase() ? tokenBalance : shareBalance
@@ -266,6 +274,8 @@ function setup(
     setAllowance: (value: bigint) => (allowance = value),
     setTokenBalance: (value: bigint) => (tokenBalance = value),
     setShareBalance: (value: bigint) => (shareBalance = value),
+    setMaxRedeem: (value: bigint) => (maxRedeem = value),
+    setMaxRedeemSequence: (values: bigint[]) => (maxRedeemSequence = [...values]),
     setMaxDeposit: (value: bigint) => (maxDeposit = value),
     setMaxWithdraw: (value: bigint) => (maxWithdraw = value),
     setCatalogStatus: (value: YearnCatalogResult['status']) => (catalogStatus = value),
@@ -454,9 +464,10 @@ it('keeps an admitted current-process request attached while the provider callba
   expect(listed.steps[0].status).toBe('awaiting-review')
 })
 
-it('uses the on-chain share balance for a Max direct withdrawal', async () => {
+it('uses executable on-chain capacity for a Max direct withdrawal', async () => {
   const subject = setup()
   subject.setShareBalance(77n)
+  subject.setMaxRedeem(72n)
   const started = await subject.service.start({
     vaultId: vault.id,
     action: 'withdraw',
@@ -465,10 +476,30 @@ it('uses the on-chain share balance for a Max direct withdrawal', async () => {
     max: true
   })
 
-  expect(started.amountRaw).toBe('77')
-  expect(started.displayAmount).toBe('Max')
+  expect(started.amountRaw).toBe('72')
+  expect(started.displayAmount).toBe('0.000072')
+  expect(started.symbol).toBe('USDC')
   expect(started.steps).toHaveLength(1)
   expect(started.steps[0].kind).toBe('redeem')
+  expect(erc4626Writes.decodeFunctionData('redeem', started.steps[0].data)[0]).toBe(72n)
+})
+
+it('does not retain a workflow when initial withdrawal capacity changes before queueing', async () => {
+  const subject = setup()
+  subject.setMaxRedeemSequence([72n, 71n])
+
+  await expect(
+    subject.service.start({
+      vaultId: vault.id,
+      action: 'withdraw',
+      variant: 'direct',
+      amount: '0.000072',
+      max: true
+    })
+  ).rejects.toThrow('withdrawal capacity changed')
+
+  expect(subject.workflows()).toEqual({})
+  expect(subject.queued).toHaveLength(0)
 })
 
 it('quotes locked yvUSD exits across the locked and unlocked vaults', async () => {
