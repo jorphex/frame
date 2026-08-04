@@ -1,6 +1,6 @@
 {
   "name": "frame",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "desktopName": "frame.desktop",
   "packageManager": "npm@11.12.0",
   "description": "System-wide web3",
