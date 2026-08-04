@@ -59,16 +59,7 @@ const readDebFile = async (deb, member) => {
 const unpackedModules = path.join(dist, 'linux-unpacked', 'resources', 'app.asar.unpacked', 'node_modules')
 const nativeModules = [
   path.join(unpackedModules, 'node-hid', 'build', 'Release', 'HID_hidraw.node'),
-  path.join(
-    unpackedModules,
-    '@trezor',
-    'transport',
-    'node_modules',
-    'usb',
-    'prebuilds',
-    'linux-x64',
-    'node.napi.glibc.node'
-  )
+  path.join(unpackedModules, 'usb', 'prebuilds', 'linux-x64', 'node.napi.glibc.node')
 ]
 
 await Promise.all(nativeModules.map((modulePath) => access(modulePath)))
@@ -78,7 +69,7 @@ const packagedModuleProbe = `
 const { createRequire } = require('node:module')
 const fs = require('node:fs')
 const path = require('node:path')
-const modules = ['node-hid', 'usb', '@trezor/transport/node_modules/usb']
+const modules = ['node-hid', 'usb']
 const ledgerPackages = [
   '@ledgerhq/hw-app-eth',
   '@ledgerhq/hw-transport',
@@ -88,6 +79,8 @@ const ledgerPackages = [
 const appRoot = path.join(process.resourcesPath, 'app.asar')
 const appModules = path.join(appRoot, 'node_modules')
 for (const module of modules) require(path.join(appModules, module))
+const trezorTransportRequire = createRequire(path.join(appModules, '@trezor/transport/package.json'))
+trezorTransportRequire('usb')
 const ledgerModules = ledgerPackages.map((module) => require(path.join(appModules, module)))
 const ledgerVersions = Object.fromEntries(
   ledgerPackages.map((module) => [module, require(path.join(appModules, module, 'package.json')).version])
@@ -204,7 +197,7 @@ Promise.all([
       override: workerEnvironment.FRAME_PACKAGE_WORKER_PROBE,
       runAsNode: workerEnvironment.ELECTRON_RUN_AS_NODE
     },
-    modules,
+    modules: [...modules, 'usb via @trezor/transport'],
     ledgerApis: ledgerModules.map((module) => typeof module.default),
     ledgerVersions,
     siweDomain: siwe.domain,
@@ -326,7 +319,7 @@ assert.match(desktopEntry, /^Exec=\/opt\/Frame\/frame %U$/m)
 assert.match(desktopEntry, /^StartupWMClass=frame$/m)
 assert.match(desktopEntry, /^Categories=Office;Finance;$/m)
 assert.doesNotMatch(desktopEntry, /^Categories=Utility;$/m)
-assert.deepEqual(probeResult.modules, ['node-hid', 'usb', '@trezor/transport/node_modules/usb'])
+assert.deepEqual(probeResult.modules, ['node-hid', 'usb', 'usb via @trezor/transport'])
 assert.ok(probeResult.ledgerApis.every((api) => api === 'function'))
 assert.deepEqual(probeResult.ledgerVersions, {
   '@ledgerhq/hw-app-eth': packageJson.dependencies['@ledgerhq/hw-app-eth'],
