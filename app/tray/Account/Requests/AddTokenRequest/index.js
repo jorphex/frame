@@ -1,6 +1,7 @@
 import React from 'react'
 import Restore from 'react-restore'
 import svg from '../../../../../resources/svg'
+import { getOriginDisplayName } from '../../../../../resources/domain/origin'
 
 class AddTokenRequest extends React.Component {
   constructor(...args) {
@@ -21,7 +22,7 @@ class AddTokenRequest extends React.Component {
     if (status === 'pending') requestClass += ' signerRequestPending'
     if (status === 'error') requestClass += ' signerRequestError'
 
-    const originName = this.store('main.origins', this.props.req.origin, 'name')
+    const originName = getOriginDisplayName(this.store('main.origins', this.props.req.origin, 'name'))
     let originClass = 'requestTokenOrigin'
     if (originName.length > 28) originClass = 'requestTokenOrigin requestTokenOrigin18'
     if (originName.length > 36) originClass = 'requestTokenOrigin requestTokenOrigin12'
@@ -70,9 +71,7 @@ class AddTokenRequest extends React.Component {
               }
               <div className='requestToken scaleIn'>
                 <div className='requestTokenInner'>
-                  <div className={originClass}>
-                    {this.store('main.origins', this.props.req.origin, 'name')}
-                  </div>
+                  <div className={originClass}>{originName}</div>
                   <div className={'requestTokenOriginSub'}>{'wants to add a token'}</div>
                   <div className='requestTokenInfo'>
                     <div className='requestTokenSymbol'>{token.symbol.toUpperCase()}</div>

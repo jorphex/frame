@@ -6,6 +6,7 @@ import {
   SimpleTypedData as TypedSignatureOverview
 } from '../../../../../resources/Components/SimpleTypedData'
 import { getSignatureRequestClass } from '../../../../../resources/domain/request'
+import { getOriginDisplayName } from '../../../../../resources/domain/origin'
 
 export class SignTypedDataRequest extends React.Component {
   constructor(...args) {
@@ -21,7 +22,7 @@ export class SignTypedDataRequest extends React.Component {
 
   render() {
     const { req, signer } = this.props
-    const originName = this.store('main.origins', req.origin, 'name')
+    const originName = getOriginDisplayName(this.store('main.origins', req.origin, 'name'))
     const requestChainId = req.context?.requestChainId
     const chainName =
       requestChainId !== undefined ? this.store('main.networks.ethereum', requestChainId, 'name') : undefined

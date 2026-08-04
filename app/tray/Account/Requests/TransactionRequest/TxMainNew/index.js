@@ -3,6 +3,7 @@ import Restore from 'react-restore'
 
 import RequestItem from '../../../../../../resources/Components/RequestItem'
 import { getReplacementStatus } from '../../../../../../resources/domain/transaction/replacement'
+import { getOriginDisplayName } from '../../../../../../resources/domain/origin'
 import TxOverview from './overview'
 
 const replacementNotices = {
@@ -34,7 +35,7 @@ export class TxMain extends React.Component {
     const replacementStatus = this.getReplacementStatus(req, reqs)
 
     const { primaryColor, icon } = this.store('main.networksMeta.ethereum', chainId)
-    const originName = this.store('main.origins', req.origin, 'name')
+    const originName = getOriginDisplayName(this.store('main.origins', req.origin, 'name'))
     return (
       <div className='_txMain' style={{ animationDelay: 0.1 * this.props.i + 's' }}>
         <div className='_txMainInner'>

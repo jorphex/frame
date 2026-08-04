@@ -33,6 +33,7 @@ import {
 } from '../../../../../../app/tray/Footer/RequestCommand'
 import TxApproval from '../../../../../../app/tray/Footer/RequestCommand/TxApproval'
 import link from '../../../../../../resources/link'
+import { FRAME_SEND_DISPLAY_NAME, FRAME_SEND_ORIGIN } from '../../../../../../resources/domain/origin'
 import { TxClassification } from '../../../../../../main/accounts/types'
 
 jest.mock('../../../../../../main/store/persist')
@@ -158,6 +159,30 @@ describe('confirm', () => {
 
     const notice = screen.getByRole('status')
     expect(notice.textContent).toBe('confirming')
+  })
+
+  it('shows the friendly built-in Send source on transaction review', () => {
+    const originId = 'frame-send-origin'
+    const req = {
+      handlerId: 'frame-send-request',
+      type: 'transaction',
+      origin: originId,
+      data: { chainId: '0x89', value: '0x0' },
+      classification: TxClassification.NATIVE_TRANSFER
+    }
+
+    store.initOrigin(originId, {
+      name: FRAME_SEND_ORIGIN,
+      chain: { id: 137, type: 'ethereum' },
+      sessionOnly: false
+    })
+    addRequest(req)
+
+    render(<TxRequest req={req} step='confirm' />)
+
+    expect(screen.getByText(FRAME_SEND_DISPLAY_NAME)).toBeTruthy()
+    expect(screen.queryByText(FRAME_SEND_ORIGIN)).toBeNull()
+    store.removeOrigin(originId)
   })
 
   it('renders a transaction notice', () => {

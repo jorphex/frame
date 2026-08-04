@@ -17,6 +17,7 @@ import { ClusterBox, Cluster } from '../../../../resources/Components/Cluster'
 
 import link from '../../../../resources/link'
 import svg from '../../../../resources/svg'
+import { getOriginDisplayName } from '../../../../resources/domain/origin'
 
 class Requests extends React.Component {
   constructor(props, context) {
@@ -86,7 +87,7 @@ class Requests extends React.Component {
   }
 
   renderRequestGroup(origin, requests) {
-    const groupName = this.store('main.origins', origin, 'name')
+    const groupName = getOriginDisplayName(this.store('main.origins', origin, 'name'))
     // const favicon = `https://s2.googleusercontent.com/s2/favicons?sz=256&domain_url=https://` + groupName
     // const proxyFavicon = `https://proxy.pylon.link?type=icon&target=${encodeURIComponent(favicon)}`
 
@@ -233,7 +234,7 @@ class Requests extends React.Component {
                 icon,
                 nativeCurrency: { symbol: currentSymbol = '?' }
               } = this.store('main.networksMeta.ethereum', chainId)
-              const originName = this.store('main.origins', req.origin, 'name')
+              const originName = getOriginDisplayName(this.store('main.origins', req.origin, 'name'))
               return (
                 <RequestItem
                   key={req.type + i}

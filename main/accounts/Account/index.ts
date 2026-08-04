@@ -66,6 +66,7 @@ import type { TransactionSimulation, WalletCallsSimulationResult } from '../../t
 import type Signer from '../../signers/Signer'
 import { parseErc20ApprovalIntent } from '../../../resources/domain/transaction/allowance'
 import { getRequestSignal } from '../../provider/requestSignal'
+import { FRAME_SEND_ORIGIN } from '../../../resources/domain/origin'
 
 const nebula = nebulaApi()
 
@@ -81,7 +82,7 @@ const storeApi = {
 
 const SEND_DAPP_PERMISSION = {
   handlerId: 'send-dapp-native',
-  origin: 'http://send.frame.eth.localhost:8421'
+  origin: FRAME_SEND_ORIGIN
 } as const
 
 interface SignerOptions {

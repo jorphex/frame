@@ -28,6 +28,7 @@ import WalletCallsRequest from './Requests/WalletCallsRequest'
 import WalletCallsStatus from './WalletCallsStatus'
 import { isHardwareSigner } from '../../../resources/domain/signer'
 import { accountViewTitles } from '../../../resources/domain/request'
+import { getOriginDisplayName } from '../../../resources/domain/origin'
 
 const requests = {
   sign: SignatureRequest,
@@ -259,7 +260,7 @@ class _AccountBody extends React.Component {
 
     const activeAccount = this.store('main.accounts', this.props.id)
     const activeSigner = activeAccount.signer ? this.store('main.signers', activeAccount.signer) : undefined
-    const originName = this.store('main.origins', req.origin, 'name')
+    const originName = getOriginDisplayName(this.store('main.origins', req.origin, 'name'))
     const chainData = this.getChainData(req)
     const addressBook = this.store('main.addressBook') || {}
     const accounts = this.store('main.accounts') || {}
@@ -325,7 +326,7 @@ class _AccountBody extends React.Component {
           <WalletCallsStatus
             accountId={accountId}
             chainName={chainName}
-            originName={originName}
+            originName={getOriginDisplayName(originName)}
             status={status}
           />
         </AccountView>
