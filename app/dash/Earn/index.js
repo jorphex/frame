@@ -903,11 +903,34 @@ export class Earn extends React.Component {
       .find((position) => position.vaultId === vaultId)
   }
 
-  renderChain(chainId, vaults) {
-    const positionChain = this.currentPositions()?.chains.find((chain) => chain.chainId === chainId)
-    const positions = vaults
+  positionsFor(vaults) {
+    return vaults
       .map((vault) => ({ vault, position: this.positionFor(vault.id) }))
       .filter(({ position }) => position?.hasPosition)
+  }
+
+  renderPositions(positions) {
+    if (!positions.length) return null
+
+    return (
+      <section className='earnPositionsOverview' aria-labelledby='earn-positions-heading'>
+        <h2 id='earn-positions-heading'>Your positions</h2>
+        <div className='earnPositionList'>
+          {positions.map(({ vault, position }) => (
+            <PositionCard
+              key={vault.id}
+              vault={vault}
+              position={position}
+              onSelect={(selected, trigger) => this.selectVault(selected, trigger)}
+            />
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  renderChain(chainId, vaults) {
+    const positionChain = this.currentPositions()?.chains.find((chain) => chain.chainId === chainId)
     return (
       <section className='earnChain' key={chainId} aria-labelledby={`earn-chain-${chainId}`}>
         <div className='earnChainHeading'>
@@ -917,20 +940,7 @@ export class Earn extends React.Component {
           </span>
         </div>
         <ChainStatus chain={positionChain} />
-        {positions.length ? (
-          <div className='earnSection'>
-            <h3>Your positions</h3>
-            {positions.map(({ vault, position }) => (
-              <PositionCard
-                key={vault.id}
-                vault={vault}
-                position={position}
-                onSelect={(selected, trigger) => this.selectVault(selected, trigger)}
-              />
-            ))}
-          </div>
-        ) : null}
-        <div className='earnSection'>
+        <div className='earnVaultList'>
           {vaults.map((vault) => (
             <VaultCard
               key={vault.id}
@@ -998,6 +1008,9 @@ export class Earn extends React.Component {
       )
     }
     const visibleChains = CHAINS.slice(1).filter(({ id }) => filter === 'all' || id === filter)
+    const visibleChainIds = new Set(visibleChains.map(({ id }) => id))
+    const visibleVaults = catalog.vaults.filter(({ chainId }) => visibleChainIds.has(chainId))
+    const visiblePositions = this.positionsFor(visibleVaults)
     return (
       <div className='earn cardShow'>
         <header className='earnHero'>
@@ -1055,6 +1068,7 @@ export class Earn extends React.Component {
             {this.state.error}
           </div>
         ) : null}
+        {this.renderPositions(visiblePositions)}
         <div id='earn-chain-panels' role='tabpanel' aria-labelledby={`earn-tab-${filter}`}>
           {visibleChains.map(({ id }) =>
             this.renderChain(

@@ -11,7 +11,7 @@
   border-radius 27px
   overflow hidden
   color #fff
-  background radial-gradient(circle at 92% 18%, rgba(255, 255, 255, .2) 0, rgba(255, 255, 255, .2) 2px, transparent 3px), linear-gradient(145deg, #1265e8, #073b91)
+  background linear-gradient(145deg, #1265e8, #073b91)
   border-bottom 2px solid rgba(0, 0, 0, .22)
   box-shadow 0 6px 16px rgba(0, 33, 92, .28)
 
@@ -149,14 +149,25 @@
     color var(--outerspace06)
     font-size 12px
 
-.earnSection
-  h3
-    margin 14px 10px 7px
-    color var(--outerspace06)
-    font-size 11px
+.earnPositionsOverview
+  margin 0 7px 18px
+  padding 0 0 17px
+  border-bottom 1px solid var(--ghostC)
+
+  h2
+    margin 0 3px 9px
+    color var(--outerspace07)
+    font-size 12px
     font-weight 500
-    letter-spacing 1.4px
+    letter-spacing 1.2px
     text-transform uppercase
+
+.earnPositionList, .earnVaultList
+  display grid
+  gap 7px
+
+  .earnPosition, .earnVault
+    margin 0
 
 .earnVault, .earnPosition
   width 100%
@@ -171,6 +182,9 @@
   text-align left
   cursor pointer
   transition transform 120ms ease, background 120ms ease
+
+  *
+    cursor inherit
 
 .earnVault
   padding 17px 18px 16px

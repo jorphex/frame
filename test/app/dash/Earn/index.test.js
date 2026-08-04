@@ -270,17 +270,23 @@ it('fails closed while positions belong to the previously selected account', () 
   expect(positionsMatchAccount(positions, '')).toBe(false)
 })
 
-it('shows positions before the chain-separated vault list without a redundant section label', async () => {
+it('shows account positions in a distinct section before the chain-separated vault catalog', async () => {
   render(<ConnectedEarn />)
 
-  await screen.findByRole('heading', { name: 'Ethereum' })
+  const ethereumHeading = await screen.findByRole('heading', { name: 'Ethereum' })
   expect(screen.getByRole('heading', { name: 'Base' })).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Katana' })).toBeTruthy()
   const positionHeading = screen.getByRole('heading', { name: 'Your positions' })
+  const position = screen.getByRole('button', { name: 'Manage yvUSD position' })
   const firstVault = screen.getByRole('button', { name: 'View yvUSD on Ethereum' })
+  expect(positionHeading.closest('.earnPositionsOverview')).toBeTruthy()
+  expect(position.closest('.earnPositionsOverview')).toBeTruthy()
+  expect(position.closest('.earnChain')).toBeNull()
+  expect(
+    positionHeading.compareDocumentPosition(ethereumHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy()
   expect(positionHeading.compareDocumentPosition(firstVault) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(screen.queryByRole('heading', { name: 'Opportunities' })).toBeNull()
-  expect(screen.getByRole('button', { name: 'Manage yvUSD position' })).toBeTruthy()
   expect(document.querySelector('.earnVaultArtwork-ethereum-yvusd')).toBeTruthy()
 })
 
@@ -311,6 +317,7 @@ it('filters by chain without mixing vaults', async () => {
   expect(screen.getByRole('heading', { name: 'Base' })).toBeTruthy()
   expect(screen.queryByRole('heading', { name: 'Ethereum' })).toBeNull()
   expect(screen.queryByRole('heading', { name: 'Katana' })).toBeNull()
+  expect(screen.queryByRole('heading', { name: 'Your positions' })).toBeNull()
 })
 
 it('supports arrow-key navigation across chain tabs', async () => {
