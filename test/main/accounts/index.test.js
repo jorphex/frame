@@ -1178,6 +1178,16 @@ describe('account-bound request transitions', () => {
     })
   })
 
+  it('claims a request for approval only once', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const explicit = targetRequest('single-approval-claim')
+    targetAccount.addRequest(explicit)
+
+    expect(Accounts.setRequestPending(explicit)).toBe(true)
+    expect(() => Accounts.setRequestPending(explicit)).toThrow(/already pending or complete/i)
+    expect(targetAccount.requests[explicit.handlerId].status).toBe('pending')
+  })
+
   it('settles access on its originating account rather than the selected account', () => {
     const targetAccount = Accounts.accounts[account2.address]
     const response = jest.fn()
@@ -1214,6 +1224,42 @@ describe('account-bound request transitions', () => {
       status: 'declined',
       notice: 'Signature Declined'
     })
+  })
+
+  it('keeps a declined request terminal when signer callbacks arrive late', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const explicit = targetRequest('declined-is-terminal', 'sign')
+    targetAccount.addRequest(explicit)
+    Accounts.setRequestPending(explicit)
+
+    expect(Accounts.declineRequest(explicit.handlerId, account2.address)).toBe(true)
+    expect(Accounts.setRequestSuccess(explicit.handlerId, account2.address)).toBe(false)
+    expect(
+      Accounts.setRequestError(explicit.handlerId, new Error('Late device error'), account2.address)
+    ).toBe(false)
+    expect(Accounts.setTxSent(explicit.handlerId, `0x${'b'.repeat(64)}`, account2.address)).toBe(false)
+    expect(targetAccount.requests[explicit.handlerId]).toMatchObject({
+      status: 'declined',
+      notice: 'Signature Declined'
+    })
+  })
+
+  it('does not cancel or revive a request after signing', () => {
+    const targetAccount = Accounts.accounts[account2.address]
+    const explicit = targetRequest('signed-is-not-cancelable')
+    const monitor = jest.spyOn(Accounts, 'txMonitor').mockImplementation()
+    targetAccount.addRequest(explicit)
+    Accounts.setRequestPending(explicit)
+    targetAccount.requests[explicit.handlerId].status = 'sending'
+
+    try {
+      expect(Accounts.declineRequest(explicit.handlerId, account2.address)).toBe(false)
+      expect(Accounts.setTxSent(explicit.handlerId, `0x${'a'.repeat(64)}`, account2.address)).toBe(true)
+      expect(targetAccount.requests[explicit.handlerId].status).toBe('verifying')
+      expect(monitor).toHaveBeenCalledWith(targetAccount, explicit.handlerId, `0x${'a'.repeat(64)}`)
+    } finally {
+      monitor.mockRestore()
+    }
   })
 
   it('does not misdiagnose a generic Ledger invalid-data response', () => {

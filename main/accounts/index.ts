@@ -22,7 +22,7 @@ import {
   isSignerReady,
   isWatchOnlyAccountType
 } from '../../resources/domain/signer'
-import { isSignatureRequest } from '../../resources/domain/request'
+import { isCancelableRequest, isSignatureRequest } from '../../resources/domain/request'
 
 import {
   AccountRequest,
@@ -1106,6 +1106,7 @@ export class Accounts extends EventEmitter {
 
     if (currentAccount && currentAccount.requests[handlerId]) {
       const txRequest = this.getTransactionRequest(currentAccount, handlerId)
+      if (!isCancelableRequest(txRequest.status || '')) return false
 
       txRequest.status = RequestStatus.Declined
       txRequest.notice = 'Signature Declined'
@@ -1116,7 +1117,10 @@ export class Accounts extends EventEmitter {
         2000
       )
       currentAccount.update()
+      return true
     }
+
+    return false
   }
 
   setRequestPending(req: AccountRequest) {
@@ -1125,23 +1129,28 @@ export class Accounts extends EventEmitter {
 
     log.info('setRequestPending', handlerId)
 
-    if (currentAccount && currentAccount.requests[handlerId]) {
-      const storedRequest = currentAccount.requests[handlerId]
-      if (
-        isWatchOnlyAccountType(currentAccount.lastSignerType) &&
-        (storedRequest.type === 'transaction' || isSignatureRequest(storedRequest))
-      ) {
-        throw new Error(WATCH_ONLY_SIGNING_ERROR)
-      }
+    if (!currentAccount) throw new Error('Request is no longer pending')
 
-      currentAccount.requests[handlerId].status = RequestStatus.Pending
-
-      const signerType = currentAccount.lastSignerType
-      const hwSigner = signerType !== 'seed' && signerType !== 'ring'
-
-      currentAccount.requests[handlerId].notice = hwSigner ? 'See Signer' : ''
-      currentAccount.update()
+    const storedRequest = currentAccount.getRequest(handlerId)
+    if (!storedRequest) throw new Error('Request is no longer pending')
+    if (storedRequest.status !== undefined) {
+      throw new Error('Request is already pending or complete')
     }
+    if (
+      isWatchOnlyAccountType(currentAccount.lastSignerType) &&
+      (storedRequest.type === 'transaction' || isSignatureRequest(storedRequest))
+    ) {
+      throw new Error(WATCH_ONLY_SIGNING_ERROR)
+    }
+
+    storedRequest.status = RequestStatus.Pending
+
+    const signerType = currentAccount.lastSignerType
+    const hwSigner = signerType !== 'seed' && signerType !== 'ring'
+
+    storedRequest.notice = hwSigner ? 'See Signer' : ''
+    currentAccount.update()
+    return true
   }
 
   setRequestError(handlerId: string, err: Error, accountId?: string) {
@@ -1150,6 +1159,7 @@ export class Accounts extends EventEmitter {
     const currentAccount = this.requestAccount(handlerId, accountId)
 
     if (currentAccount && currentAccount.requests[handlerId]) {
+      if (currentAccount.requests[handlerId].status === RequestStatus.Declined) return false
       currentAccount.requests[handlerId].status = RequestStatus.Error
       const errorMessage = (err.message || '').toLowerCase()
 
@@ -1198,7 +1208,10 @@ export class Accounts extends EventEmitter {
       }
 
       currentAccount.update()
+      return true
     }
+
+    return false
   }
 
   setTxSigned(handlerId: string, cb: Callback<void>, accountId?: string) {
@@ -1228,14 +1241,17 @@ export class Accounts extends EventEmitter {
     log.info('setTxSent', handlerId, 'Hash', hash)
 
     const currentAccount = this.requestAccount(handlerId, accountId)
-    if (currentAccount && currentAccount.requests[handlerId]) {
+    if (currentAccount && currentAccount.requests[handlerId]?.status === RequestStatus.Sending) {
       currentAccount.requests[handlerId].status = RequestStatus.Verifying
       currentAccount.requests[handlerId].notice = 'Verifying'
       currentAccount.requests[handlerId].mode = RequestMode.Monitor
       currentAccount.update()
 
       this.txMonitor(currentAccount, handlerId, hash)
+      return true
     }
+
+    return false
   }
 
   setRequestSuccess(handlerId: string, accountId?: string) {
@@ -1243,6 +1259,7 @@ export class Accounts extends EventEmitter {
 
     const currentAccount = this.requestAccount(handlerId, accountId)
     if (currentAccount && currentAccount.requests[handlerId]) {
+      if (currentAccount.requests[handlerId].status !== RequestStatus.Pending) return false
       currentAccount.requests[handlerId].status = RequestStatus.Success
       currentAccount.requests[handlerId].notice = 'Successful'
       if (currentAccount.requests[handlerId].type === 'transaction') {
@@ -1255,7 +1272,10 @@ export class Accounts extends EventEmitter {
       }
 
       currentAccount.update()
+      return true
     }
+
+    return false
   }
 
   clearRequestsByOrigin(address: string, origin: string) {

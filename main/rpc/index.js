@@ -211,7 +211,9 @@ const rpc = {
     req = storedRequest
 
     if (req.type === 'transaction' || isSignatureRequest(req)) {
-      accounts.declineRequest(req.handlerId, req.account)
+      if (!accounts.declineRequest(req.handlerId, req.account)) {
+        return cb(new Error('Request can no longer be cancelled'))
+      }
       provider.declineRequest(req)
     }
     cb(null)
