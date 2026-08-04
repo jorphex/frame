@@ -107,6 +107,15 @@ Current limitations:
 - overwriting a file before deletion is not a secure-erasure guarantee on modern
   filesystems or solid-state storage.
 
+Address-book names, notes, addresses, and timestamps are local metadata in this
+same profile; they are not encrypted and may reveal relationships. JSON backups
+are explicitly user-created, validated and size-bounded on restore, and written
+without returning their filesystem path to the renderer. A contact name is an
+unverified user alias, never an authorization or destination source. Transaction
+review derives aliases from current local state while retaining the full address,
+and aliases never modify calldata, transaction recipients, signing, simulation,
+or broadcast.
+
 Users should prefer hardware signers and maintain independent backups. Encryption
 migrations must remain versioned, address-verified, atomic, tested without real
 wallet data, and recoverable without silently weakening encryption.

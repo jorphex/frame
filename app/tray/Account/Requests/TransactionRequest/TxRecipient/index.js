@@ -3,9 +3,9 @@ import Restore from 'react-restore'
 import BigNumber from 'bignumber.js'
 
 import link from '../../../../../../resources/link'
-import svg from '../../../../../../resources/svg'
 
 import { ClusterBox, Cluster, ClusterRow, ClusterValue } from '../../../../../../resources/Components/Cluster'
+import AddressIdentity from '../../../../../../resources/Components/AddressIdentity'
 import { getAddress } from '../../../../../../resources/utils'
 
 const YEARN_ACTION_LABELS = {
@@ -35,6 +35,7 @@ class TxRecipient extends React.Component {
     const req = this.props.req
     const address = req.data.to ? getAddress(req.data.to) : ''
     const ensName = req.recipient && req.recipient.length < 25 ? req.recipient : ''
+    const localName = address ? this.store('main.addressBook', address.toLowerCase(), 'name') : ''
     const value = req.data.value || '0x'
     const isZeroValue = value === '0x' || new BigNumber(value).isZero()
     if (req.recipientType !== 'contract' && !isZeroValue) return null
@@ -57,22 +58,12 @@ class TxRecipient extends React.Component {
               }}
             >
               <div className='clusterAddress'>
-                {ensName ? (
-                  <span className='clusterAddressRecipient'>{ensName}</span>
-                ) : (
-                  <span className='clusterAddressRecipient'>
-                    {address.substring(0, 8)}
-                    {svg.octicon('kebab-horizontal', { height: 15 })}
-                    {address.substring(address.length - 6)}
-                  </span>
-                )}
-                <div className='clusterAddressRecipientFull'>
-                  {this.state.copied ? (
-                    <span>{'Address Copied'}</span>
-                  ) : (
-                    <span className='clusterFira'>{address}</span>
-                  )}
-                </div>
+                <AddressIdentity
+                  address={address}
+                  copied={this.state.copied}
+                  label={localName || ensName}
+                  source={localName ? 'Saved contact' : ensName ? 'ENS' : ''}
+                />
               </div>
             </ClusterValue>
           </ClusterRow>

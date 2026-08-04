@@ -30,6 +30,7 @@ import { handleRenderer, onRenderer } from './ipc/renderer'
 import { isPathInsideRoot } from './security/fileAccess'
 import { assertSandboxEnabled } from './security/sandbox'
 import yearn from './yearn'
+import addressBookFiles from './addressBook/files'
 import { installShutdownHandlers } from './lifecycle/shutdown'
 
 const isDev = process.env.NODE_ENV === 'development'
@@ -231,6 +232,31 @@ handleRenderer('tray:getTokenDetails', async (e, contractAddress, chainId) => {
     return {}
   }
 })
+
+const addressBookMutation = async (operation: () => Promise<unknown> | unknown) => {
+  try {
+    return await operation()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Address-book operation failed'
+    log.warn('Address-book operation failed', { reason: message.slice(0, 240) })
+    return { success: false as const, error: message.trim().slice(0, 240) || 'Address-book operation failed' }
+  }
+}
+
+handleRenderer('addressBook:save', async (e, request) =>
+  addressBookMutation(() => ({
+    success: true as const,
+    entry: requireStoreAction('saveAddressBookEntry')(request)
+  }))
+)
+handleRenderer('addressBook:remove', async (e, address) =>
+  addressBookMutation(() => {
+    requireStoreAction('removeAddressBookEntry')(address)
+    return { success: true as const }
+  })
+)
+handleRenderer('addressBook:import', async () => addressBookMutation(() => addressBookFiles.importFile()))
+handleRenderer('addressBook:export', async () => addressBookMutation(() => addressBookFiles.exportFile()))
 
 handleRenderer('yearn:getCatalog', async (e, options) => yearn.getCatalog(options))
 handleRenderer('yearn:getPositions', async () => yearn.getPositions())

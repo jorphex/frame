@@ -2,9 +2,9 @@ import React from 'react'
 import Restore from 'react-restore'
 import BigNumber from 'bignumber.js'
 
-import svg from '../../../../../../resources/svg'
 import link from '../../../../../../resources/link'
 import { ClusterBox, Cluster, ClusterRow, ClusterValue } from '../../../../../../resources/Components/Cluster'
+import AddressIdentity from '../../../../../../resources/Components/AddressIdentity'
 import { formatDisplayDecimal, isUnlimited } from '../../../../../../resources/utils/numbers'
 import { DisplayValue, DisplayCoinBalance } from '../../../../../../resources/Components/DisplayValue'
 import { getAddress } from '../../../../../../resources/utils'
@@ -218,7 +218,8 @@ class TxSending extends React.Component {
           symbol
         } = action.data || {}
         const address = getAddress(recipientAddress)
-        const ensName = recipientEns
+        const localName = this.store('main.addressBook', address.toLowerCase(), 'name')
+        const identityName = localName || recipientEns
 
         const isTestnet = this.store('main.networks', this.props.chain.type, this.props.chain.id, 'isTestnet')
         const rate = this.store('main.rates', contract)
@@ -265,22 +266,12 @@ class TxSending extends React.Component {
                     }}
                   >
                     <div className='clusterAddress'>
-                      {ensName ? (
-                        <span className='clusterAddressRecipient'>{ensName}</span>
-                      ) : (
-                        <span className='clusterAddressRecipient'>
-                          {address.substring(0, 8)}
-                          {svg.octicon('kebab-horizontal', { height: 15 })}
-                          {address.substring(address.length - 6)}
-                        </span>
-                      )}
-                      <div className='clusterAddressRecipientFull'>
-                        {this.state.copied ? (
-                          <span>{'Address Copied'}</span>
-                        ) : (
-                          <span className='clusterFira'>{address}</span>
-                        )}
-                      </div>
+                      <AddressIdentity
+                        address={address}
+                        copied={this.state.copied}
+                        label={identityName}
+                        source={localName ? 'Saved contact' : recipientEns ? 'ENS' : ''}
+                      />
                     </div>
                   </ClusterValue>
                 </ClusterRow>
@@ -296,7 +287,8 @@ class TxSending extends React.Component {
           symbol
         } = action.data || {}
         const address = recipientAddress
-        const ensName = spenderEns
+        const localName = this.store('main.addressBook', address.toLowerCase(), 'name')
+        const identityName = localName || spenderEns
         const value = new BigNumber(amount)
         const revoke = value.eq(0)
         const displayAmount = isUnlimited(this.state.amount)
@@ -353,22 +345,12 @@ class TxSending extends React.Component {
                     }}
                   >
                     <div className='clusterAddress'>
-                      {ensName ? (
-                        <span className='clusterAddressRecipient'>{ensName}</span>
-                      ) : (
-                        <span className='clusterAddressRecipient'>
-                          {address.substring(0, 8)}
-                          {svg.octicon('kebab-horizontal', { height: 15 })}
-                          {address.substring(address.length - 6)}
-                        </span>
-                      )}
-                      <div className='clusterAddressRecipientFull'>
-                        {this.state.copied ? (
-                          <span>{'Address Copied'}</span>
-                        ) : (
-                          <span className='clusterFira'>{address}</span>
-                        )}
-                      </div>
+                      <AddressIdentity
+                        address={address}
+                        copied={this.state.copied}
+                        label={identityName}
+                        source={localName ? 'Saved contact' : spenderEns ? 'ENS' : ''}
+                      />
                     </div>
                   </ClusterValue>
                 </ClusterRow>

@@ -161,9 +161,7 @@ const surface = {
 
     const type = results[0].status === 'fulfilled' ? results[0].value : ''
     const ens = results[1].status === 'fulfilled' ? results[1].value : ''
-
     // TODO: Check the address against various scam dbs
-    // TODO: Check the address against user's contact list
     // TODO: Check the address against previously verified contracts
     return { type, ens }
   },

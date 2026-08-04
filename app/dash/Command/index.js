@@ -31,6 +31,7 @@ class Command extends React.Component {
   }
   render() {
     const { view } = this.store('windows.dash.nav')[0] || { view: '', data: {} }
+    const title = view === 'addressBook' ? 'Address Book' : view
     return (
       <div className='command'>
         {this.store('windows.dash.nav').length ? (
@@ -44,7 +45,7 @@ class Command extends React.Component {
           </div>
         ) : null}
         <div key={view} className='commandTitle cardShow'>
-          {view === 'expandedSigner' ? this.renderSignerTitle() : view}
+          {view === 'expandedSigner' ? this.renderSignerTitle() : title}
         </div>
         <div
           className='commandItem commandItemClose'

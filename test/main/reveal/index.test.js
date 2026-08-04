@@ -1,6 +1,7 @@
 import provider from '../../../main/provider'
 import reveal from '../../../main/reveal'
 import { erc20Interface } from '../../../resources/contracts'
+import store from '../../../main/store'
 
 jest.mock('ethereum-provider', () =>
   jest.fn(() => ({
@@ -23,6 +24,7 @@ const token = '0x1111111111111111111111111111111111111111'
 const counterparty = '0x2222222222222222222222222222222222222222'
 
 beforeEach(() => {
+  store.clear()
   const values = { decimals: 18n, name: 'Frame Token', symbol: 'FRAME', totalSupply: 1000n }
 
   provider.sendAsync.mockImplementation((payload, callback) => {

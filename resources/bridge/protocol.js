@@ -43,6 +43,10 @@ export const requestEventChannels = new Set([
 ])
 
 export const requestInvokeChannels = new Set([
+  'addressBook:export',
+  'addressBook:import',
+  'addressBook:remove',
+  'addressBook:save',
   'tray:addChain',
   'tray:getTokenDetails',
   'yearn:getCatalog',

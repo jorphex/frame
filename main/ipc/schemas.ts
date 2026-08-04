@@ -10,6 +10,11 @@ import {
   YearnWorkflowMutationResultSchema,
   YearnWorkflowRequestSchema
 } from '../../resources/domain/yearn'
+import {
+  AddressBookAddressInputSchema,
+  AddressBookEntrySchema,
+  AddressBookSaveRequestSchema
+} from '../../resources/domain/addressBook'
 
 const MAX_TEXT = 4096
 const MAX_URL = 8192
@@ -273,6 +278,10 @@ const eventSchemas: Record<string, z.ZodType> = {
 }
 
 const invokeSchemas = {
+  'addressBook:export': z.tuple([]),
+  'addressBook:import': z.tuple([]),
+  'addressBook:remove': z.tuple([AddressBookAddressInputSchema]),
+  'addressBook:save': z.tuple([AddressBookSaveRequestSchema]),
   'yearn:getCatalog': z.tuple([z.object({ force: z.boolean() }).strict()]),
   'yearn:getPositions': z.tuple([]),
   'yearn:getWorkflows': z.tuple([]),
@@ -285,6 +294,30 @@ const invokeSchemas = {
 } satisfies Record<string, z.ZodType>
 
 const invokeResultSchemas = {
+  'addressBook:export': z.union([
+    z.object({ success: z.literal(true), exported: z.number().int().nonnegative() }).strict(),
+    z.object({ success: z.literal(false), canceled: z.literal(true) }).strict(),
+    z.object({ success: z.literal(false), error: z.string().min(1).max(240) }).strict()
+  ]),
+  'addressBook:import': z.union([
+    z
+      .object({
+        success: z.literal(true),
+        imported: z.number().int().nonnegative(),
+        skipped: z.number().int().nonnegative()
+      })
+      .strict(),
+    z.object({ success: z.literal(false), canceled: z.literal(true) }).strict(),
+    z.object({ success: z.literal(false), error: z.string().min(1).max(240) }).strict()
+  ]),
+  'addressBook:remove': z.union([
+    z.object({ success: z.literal(true) }).strict(),
+    z.object({ success: z.literal(false), error: z.string().min(1).max(240) }).strict()
+  ]),
+  'addressBook:save': z.union([
+    z.object({ success: z.literal(true), entry: AddressBookEntrySchema }).strict(),
+    z.object({ success: z.literal(false), error: z.string().min(1).max(240) }).strict()
+  ]),
   'yearn:getCatalog': YearnCatalogResultSchema,
   'yearn:getPositions': YearnPositionsResultSchema,
   'yearn:getWorkflows': YearnWorkflowListResultSchema,

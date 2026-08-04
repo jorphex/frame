@@ -4,8 +4,21 @@ import { AccountMetadataSchema, AccountSchema } from '../../../../main/store/sta
 import { OriginSchema } from '../../../../main/store/state/types/origin'
 import { ConnectionSchema } from '../../../../main/store/state/types/connection'
 import { GasSchema } from '../../../../main/store/state/types/gas'
+import { AddressBookSchema } from '../../../../main/store/state/types/addressBook'
 
 describe('persisted state schema compatibility', () => {
+  it('validates normalized address-book records', () => {
+    const entry = {
+      address: '0x0000000000000000000000000000000000000001',
+      name: 'Treasury',
+      note: '',
+      createdAt: 1,
+      updatedAt: 2
+    }
+    expect(AddressBookSchema.parse({ [entry.address]: entry })).toEqual({ [entry.address]: entry })
+    expect(() => AddressBookSchema.parse({ [entry.address]: { ...entry, updatedAt: 0 } })).toThrow()
+  })
+
   it('accepts notification records from before every notification key existed', () => {
     expect(MainSchema.shape.mute.parse({ gasFeeWarning: true })).toStrictEqual({ gasFeeWarning: true })
   })

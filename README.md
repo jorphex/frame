@@ -52,6 +52,9 @@ qualified Safe 7 USB flow.
   signing behind explicit device and capability checks.
 - **Software and watch accounts:** Seed, private-key, keystore, and watch-only
   accounts coexist behind clear signing boundaries.
+- **Local address book:** Save, search, back up, and restore trusted EVM
+  destinations. Contact names appear beside the full address during transfer
+  and approval review without changing the signed payload.
 - **Origin permissions:** Account access and wallet-owned RPC methods are
   permission-gated for each requesting origin and selected account.
 - **Transaction review:** Calldata decoding, approval-risk detection,
@@ -194,12 +197,11 @@ community security fixes.
 ## Direction
 
 The current development branch contains the first headlessly qualified Yearn
-Earn milestone; its exact scope and deferred live qualification are documented
-in [Yearn Earn](YEARN_EARN.md). Near-term desktop work focuses on local
-address-book support and broader UI qualification. Smart-account support and a
-future mobile client with WalletConnect built
-around shared wallet-core logic remain later work. Roadmap items are directional
-and are not release support claims.
+Earn milestone and a local address book; the Earn scope and deferred live
+qualification are documented in [Yearn Earn](YEARN_EARN.md). Near-term desktop
+work focuses on broader UI qualification. Smart-account support and a future
+mobile client with WalletConnect built around shared wallet-core logic remain
+later work. Roadmap items are directional and are not release support claims.
 
 ## Documentation
 

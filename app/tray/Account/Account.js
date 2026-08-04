@@ -261,6 +261,7 @@ class _AccountBody extends React.Component {
     const activeSigner = activeAccount.signer ? this.store('main.signers', activeAccount.signer) : undefined
     const originName = this.store('main.origins', req.origin, 'name')
     const chainData = this.getChainData(req)
+    const addressBook = this.store('main.addressBook') || {}
 
     const signingDelay = isHardwareSigner(activeAccount.lastSignerType) ? 200 : 1500
 
@@ -273,6 +274,7 @@ class _AccountBody extends React.Component {
         chainId={chainData.chainId}
         originName={originName}
         chainData={chainData}
+        addressBook={addressBook}
         signer={activeSigner}
       />
     )

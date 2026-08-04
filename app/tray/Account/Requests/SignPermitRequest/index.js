@@ -19,14 +19,17 @@ import {
 } from '../../../../../resources/Components/SimpleTypedData'
 import { getSignatureRequestClass } from '../../../../../resources/domain/request'
 import useCopiedMessage from '../../../../../resources/Hooks/useCopiedMessage'
+import AddressIdentity from '../../../../../resources/Components/AddressIdentity'
+import { lookupAddressBookEntry } from '../../../../../resources/domain/addressBook'
 
-const PermitOverview = ({ req, chainData, deviceWarning, originName }) => {
+const PermitOverview = ({ req, chainData, deviceWarning, originName, addressBook }) => {
   const { chainColor, chainName, icon } = chainData
   const {
     permit: { spender, value, deadline },
     tokenData,
     handlerId
   } = req
+  const localName = lookupAddressBookEntry(addressBook, spender.address)?.name
 
   const [showCopiedMessage, copySpender] = useCopiedMessage(spender.address)
 
@@ -95,22 +98,12 @@ const PermitOverview = ({ req, chainData, deviceWarning, originName }) => {
                   <ClusterRow>
                     <ClusterValue pointerEvents={true} onClick={() => copySpender()}>
                       <div className='clusterAddress'>
-                        <span className='clusterAddressRecipient'>
-                          {spender.ens || (
-                            <>
-                              {spender.address.substring(0, 8)}
-                              {svg.octicon('kebab-horizontal', { height: 15 })}
-                              {spender.address.substring(spender.address.length - 6)}
-                            </>
-                          )}
-                        </span>
-                        <div className='clusterAddressRecipientFull'>
-                          {showCopiedMessage ? (
-                            <span>{'Address Copied'}</span>
-                          ) : (
-                            <span className='clusterFira'>{spender.address}</span>
-                          )}
-                        </div>
+                        <AddressIdentity
+                          address={spender.address}
+                          copied={showCopiedMessage}
+                          label={localName || spender.ens}
+                          source={localName ? 'Saved contact' : spender.ens ? 'ENS' : ''}
+                        />
                       </div>
                     </ClusterValue>
                   </ClusterRow>
@@ -198,7 +191,7 @@ const EditPermit = ({ req }) => {
   )
 }
 
-const PermitRequest = ({ req, originName, signer, step, chainData }) => {
+const PermitRequest = ({ req, originName, signer, step, chainData, addressBook = {} }) => {
   const requestClass = getSignatureRequestClass(req)
   const deviceWarning = getTypedDataDeviceWarning(signer)
 
@@ -222,6 +215,7 @@ const PermitRequest = ({ req, originName, signer, step, chainData }) => {
             req={req}
             chainData={chainData}
             deviceWarning={deviceWarning}
+            addressBook={addressBook}
           />
         )
     }

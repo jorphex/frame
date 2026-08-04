@@ -2,6 +2,11 @@ import log from 'electron-log'
 import { v5 as uuidv5 } from 'uuid'
 import { accountNS, isDefaultAccountName } from '../../../resources/domain/account'
 import { toTokenId } from '../../../resources/domain/balance'
+import {
+  importAddressBookExport,
+  removeAddressBookEntry,
+  saveAddressBookEntry
+} from '../../../resources/domain/addressBook'
 
 const panelActions = require('../../../resources/store/actions.panel')
 const supportedNetworkTypes = ['ethereum']
@@ -126,6 +131,27 @@ module.exports = {
   },
   setYearnWorkflows: (u, workflows) => {
     u('main.yearn.workflows', () => workflows)
+  },
+  saveAddressBookEntry: (u, request) => {
+    let saved
+    u('main.addressBook', (addressBook = {}) => {
+      const result = saveAddressBookEntry(addressBook, request)
+      saved = result.entry
+      return result.addressBook
+    })
+    return saved
+  },
+  removeAddressBookEntry: (u, address) => {
+    u('main.addressBook', (addressBook = {}) => removeAddressBookEntry(addressBook, address))
+  },
+  importAddressBook: (u, imported) => {
+    let summary
+    u('main.addressBook', (addressBook = {}) => {
+      const result = importAddressBookExport(addressBook, imported)
+      summary = { imported: result.imported, skipped: result.skipped }
+      return result.addressBook
+    })
+    return summary
   },
   setAccount: (u, account) => {
     u('selected.current', () => account.id)

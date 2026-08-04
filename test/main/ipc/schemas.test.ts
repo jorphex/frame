@@ -39,6 +39,24 @@ test('does not coerce chain or token identifiers', () => {
   expect(parseRendererIpcArgs('event', 'tray:removeToken', [{ address, chainId: '1' }]).success).toBe(false)
 })
 
+test('validates address-book mutations and bounded results', () => {
+  const request = { mode: 'add', address, name: 'Treasury', note: 'Operations' }
+  expect(parse('invoke', 'addressBook:save', [request])).toEqual([request])
+  expect(parseRendererIpcArgs('invoke', 'addressBook:save', [{ ...request, address: '0x1' }]).success).toBe(
+    false
+  )
+  expect(
+    parseRendererInvokeResult('addressBook:import', { success: true, imported: 2, skipped: 1 }).success
+  ).toBe(true)
+  expect(
+    parseRendererInvokeResult('addressBook:export', {
+      success: true,
+      exported: 1,
+      path: '/tmp/private.json'
+    }).success
+  ).toBe(false)
+})
+
 test('requires explicit Yearn catalog options and validates returned metadata', () => {
   expect(parse('invoke', 'yearn:getCatalog', [{ force: false }])).toEqual([{ force: false }])
   expect(parseRendererIpcArgs('invoke', 'yearn:getCatalog', [{}]).success).toBe(false)

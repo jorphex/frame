@@ -1,0 +1,326 @@
+.addressBook, .addressBookEditor
+  padding 24px 20px 32px
+  box-sizing border-box
+  min-height 100%
+  color var(--outerspace)
+
+.addressBookHeader, .addressBookEditorHeader
+  display flex
+  align-items flex-start
+  justify-content space-between
+  gap 16px
+  padding 8px 4px 20px
+
+  h2
+    margin 0 0 7px
+    font-size 20px
+    font-weight 500
+
+  p
+    margin 0
+    max-width 285px
+    color var(--outerspace05)
+    font-size 12px
+    line-height 18px
+
+.addressBookCount
+  min-width 38px
+  height 38px
+  border-radius 19px
+  display flex
+  align-items center
+  justify-content center
+  background var(--ghostB)
+  font-family 'FiraCode'
+  font-size 13px
+
+.addressBookToolbar
+  display grid
+  grid-template-columns 1fr 72px
+  gap 8px
+  margin-bottom 16px
+
+  input, button
+    height 44px
+    box-sizing border-box
+    border 0
+    border-radius 14px
+    color var(--outerspace)
+    font-family 'MainFont'
+
+  input
+    min-width 0
+    padding 0 15px
+    background var(--ghostB)
+    font-size 13px
+    outline none
+
+  input:focus
+    box-shadow 0 0 0 2px var(--moon)
+
+  button
+    background var(--moon)
+    color var(--ghostA)
+    cursor pointer
+    font-size 12px
+    font-weight 600
+    text-transform uppercase
+
+  button:hover
+    filter brightness(1.08)
+
+.addressBookList
+  display flex
+  flex-direction column
+  gap 8px
+
+.addressBookCard
+  display grid
+  grid-template-columns minmax(0, 1fr) 72px
+  min-height 78px
+  overflow hidden
+  border-radius 18px
+  background var(--ghostAZ)
+  box-shadow 0 2px 4px var(--ghostY)
+
+.addressBookCardMain, .addressBookRemove
+  border 0
+  color inherit
+  font-family 'MainFont'
+  cursor pointer
+
+.addressBookCardMain
+  min-width 0
+  display flex
+  align-items center
+  gap 13px
+  padding 12px
+  background transparent
+  text-align left
+
+.addressBookCardMain:hover
+  background var(--ghostA)
+
+.addressBookAvatar
+  flex 0 0 42px
+  width 42px
+  height 42px
+  border-radius 50%
+  display flex
+  align-items center
+  justify-content center
+  background var(--ghostC)
+  color var(--moon)
+  font-family 'FiraCode'
+  font-size 12px
+
+.addressBookIdentity
+  min-width 0
+  display flex
+  flex-direction column
+  gap 3px
+
+  strong
+    overflow hidden
+    text-overflow ellipsis
+    white-space nowrap
+    font-size 15px
+    font-weight 500
+
+.addressBookAddress
+  color var(--moon)
+  font-family 'FiraCode'
+  font-size 11px
+
+.addressBookNote
+  overflow hidden
+  text-overflow ellipsis
+  white-space nowrap
+  color var(--outerspace05)
+  font-size 11px
+
+.addressBookRemove
+  background transparent
+  color var(--outerspace05)
+  font-size 9px
+  font-weight 600
+  letter-spacing .5px
+  text-transform uppercase
+
+.addressBookRemove:hover
+  color var(--bad)
+  background var(--ghostB)
+
+.addressBookRemoveConfirm
+  color var(--bad)
+  background var(--ghostB)
+
+.addressBookEmpty
+  min-height 230px
+  display flex
+  flex-direction column
+  align-items center
+  justify-content center
+  gap 8px
+  color var(--outerspace05)
+  text-align center
+
+  strong
+    color var(--outerspace)
+    font-size 15px
+    font-weight 500
+
+  span
+    max-width 245px
+    font-size 12px
+    line-height 18px
+
+.addressBookTransfer
+  display flex
+  justify-content center
+  gap 18px
+  padding 24px 0 8px
+
+  button
+    border 0
+    background transparent
+    color var(--moon)
+    cursor pointer
+    font-family 'MainFont'
+    font-size 11px
+    text-decoration underline
+    text-underline-offset 3px
+
+  button:hover
+    color var(--outerspace)
+
+  button:disabled
+    opacity .45
+    cursor default
+
+.addressBookStatus, .addressBookError
+  margin 8px 0
+  padding 10px 12px
+  border-radius 12px
+  background var(--ghostB)
+  font-size 11px
+  line-height 16px
+  text-align center
+
+.addressBookError
+  color var(--bad)
+
+.addressBookEditor
+  display flex
+  flex-direction column
+  gap 14px
+
+.addressBookEditorHeader
+  justify-content flex-start
+
+.addressBookEditorIcon
+  width 44px
+  height 44px
+  flex 0 0 44px
+  border-radius 16px
+  display flex
+  align-items center
+  justify-content center
+  background var(--ghostB)
+  color var(--moon)
+
+.addressBookField
+  display flex
+  flex-direction column
+  gap 7px
+  font-size 11px
+  font-weight 500
+  letter-spacing .4px
+  text-transform uppercase
+
+  input, textarea
+    box-sizing border-box
+    width 100%
+    border 0
+    border-radius 14px
+    padding 13px 14px
+    background var(--ghostB)
+    color var(--outerspace)
+    font-family 'MainFont'
+    font-size 13px
+    font-weight 300
+    line-height 18px
+    outline none
+    resize none
+    text-transform none
+
+  input:focus, textarea:focus
+    box-shadow 0 0 0 2px var(--moon)
+
+  input:disabled, textarea:disabled
+    opacity .65
+
+  small
+    color var(--outerspace05)
+    font-size 9px
+    font-weight 300
+    letter-spacing 0
+    line-height 14px
+    text-transform none
+
+.addressBookPrimaryButton
+  height 48px
+  margin-top 4px
+  border 0
+  border-radius 16px
+  background var(--moon)
+  color var(--ghostA)
+  cursor pointer
+  font-family 'MainFont'
+  font-size 12px
+  font-weight 600
+  letter-spacing .6px
+  text-transform uppercase
+
+.addressBookPrimaryButton:hover
+  filter brightness(1.08)
+
+.addressBookPrimaryButton:disabled
+  cursor wait
+  opacity .65
+
+.addressBookMissing
+  min-height 100%
+  padding 28px
+  box-sizing border-box
+  display flex
+  flex-direction column
+  align-items center
+  justify-content center
+  gap 10px
+  color var(--outerspace05)
+  text-align center
+
+  strong
+    color var(--outerspace)
+    font-size 16px
+    font-weight 500
+
+  span
+    max-width 280px
+    font-size 12px
+    line-height 18px
+
+  button
+    margin-top 8px
+    border 0
+    background transparent
+    color var(--moon)
+    cursor pointer
+    font-family 'MainFont'
+    font-size 11px
+    text-decoration underline
+    text-underline-offset 3px
+
+  button:hover
+    color var(--outerspace)

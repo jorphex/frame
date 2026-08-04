@@ -37,3 +37,23 @@ export const openFileDialog = async () => {
   const file = await dialog.showOpenDialog(browserWindow, { properties: ['openFile'] })
   return file
 }
+
+export const openAddressBookDialog = async () => {
+  const browserWindow = BrowserWindow.getFocusedWindow() as BrowserWindow
+  const result = await dialog.showOpenDialog(browserWindow, {
+    title: 'Import Address Book',
+    properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  })
+  return result.canceled ? undefined : result.filePaths[0]
+}
+
+export const saveAddressBookDialog = async () => {
+  const browserWindow = BrowserWindow.getFocusedWindow() as BrowserWindow
+  const result = await dialog.showSaveDialog(browserWindow, {
+    title: 'Export Address Book',
+    defaultPath: 'frame-address-book.json',
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  })
+  return result.canceled ? undefined : result.filePath
+}

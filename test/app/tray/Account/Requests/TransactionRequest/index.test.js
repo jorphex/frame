@@ -71,6 +71,31 @@ describe('confirm', () => {
     expect(screen.getByText(recipient)).toBeTruthy()
   })
 
+  it('shows a saved contact label with full recipient evidence', () => {
+    const recipient = '0x1111111111111111111111111111111111111111'
+    store.saveAddressBookEntry({
+      mode: 'add',
+      address: recipient,
+      name: 'Yearn Treasury',
+      note: 'Operations'
+    })
+
+    render(
+      <TxRecipient
+        i={0}
+        req={{
+          data: { to: recipient, value: '0x0' },
+          recipientType: 'external'
+        }}
+      />
+    )
+
+    expect(screen.getByText('Yearn Treasury')).toBeTruthy()
+    expect(screen.getByText('Saved contact')).toBeTruthy()
+    expect(screen.getAllByText(recipient)).toHaveLength(2)
+    store.removeAddressBookEntry(recipient)
+  })
+
   it('identifies an allowlisted Yearn recipient without an external ABI', () => {
     const recipient = '0x1111111111111111111111111111111111111111'
 

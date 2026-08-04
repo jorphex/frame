@@ -64,6 +64,30 @@ it('shows domain mismatch warnings in the specialized permit overview', () => {
   expect(screen.getByRole('alert').textContent).toBe('Domain chain 1 does not match request chain 5.')
 })
 
+it('shows a live local label without hiding the permit spender address', () => {
+  const spender = req.permit.spender.address
+  render(
+    <SignPermitRequest
+      addressBook={{
+        [spender]: {
+          address: spender,
+          name: 'Yearn Router',
+          note: '',
+          createdAt: 1,
+          updatedAt: 1
+        }
+      }}
+      chainData={chainData}
+      originName='example.test'
+      req={req}
+    />
+  )
+
+  expect(screen.getByText('Yearn Router')).toBeTruthy()
+  expect(screen.getByText('Saved contact')).toBeTruthy()
+  expect(screen.getAllByText(spender)).not.toHaveLength(0)
+})
+
 it('labels the raw permit view with the resolved request chain', () => {
   render(<SignPermitRequest chainData={chainData} originName='example.test' req={req} step='viewRaw' />)
 
