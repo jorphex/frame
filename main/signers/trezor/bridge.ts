@@ -261,6 +261,10 @@ class TrezorBridge extends EventEmitter {
 
     if (e.type === UI.REQUEST_PIN) {
       this.emit('trezor:needPin', e.payload.device)
+    } else if (e.type === UI.INVALID_PIN) {
+      this.emit('trezor:invalidPin', e.payload.device)
+    } else if (e.type === UI.INVALID_PIN_ATTEMPTS_DEPLETED) {
+      this.emit('trezor:pinAttemptsDepleted', e.payload.device)
     } else if (e.type === UI.REQUEST_PASSPHRASE) {
       this.emit('trezor:needPhrase', e.payload.device)
     } else if (e.type === UI.REQUEST_THP_PAIRING) {

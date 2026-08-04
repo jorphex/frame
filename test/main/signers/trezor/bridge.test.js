@@ -132,6 +132,38 @@ describe('ui events', () => {
     TrezorConnect.emit(UI_EVENT, { type: UI.REQUEST_PIN, payload: { device } })
   })
 
+  it('emits an invalidPin event when a pin is rejected', (done) => {
+    const device = { type: 'acquired', id: 'someid1234' }
+
+    TrezorBridge.once('trezor:invalidPin', (reportedDevice) => {
+      try {
+        expect(reportedDevice).toEqual(device)
+        done()
+      } catch (e) {
+        done(e)
+      }
+    })
+
+    TrezorConnect.emit(UI_EVENT, { type: UI.INVALID_PIN, payload: { device } })
+  })
+
+  it('emits a pinAttemptsDepleted event when the current attempt sequence ends', (done) => {
+    const device = { type: 'acquired', id: 'someid1234' }
+
+    expect(UI.INVALID_PIN_ATTEMPTS_DEPLETED).toBe('ui-invalid_pin_attempts_depleted')
+
+    TrezorBridge.once('trezor:pinAttemptsDepleted', (reportedDevice) => {
+      try {
+        expect(reportedDevice).toEqual(device)
+        done()
+      } catch (e) {
+        done(e)
+      }
+    })
+
+    TrezorConnect.emit(UI_EVENT, { type: UI.INVALID_PIN_ATTEMPTS_DEPLETED, payload: { device } })
+  })
+
   it('emits a needPhrase event when a passphrase is requested and entry on the device is not supported', (done) => {
     const device = { type: 'acquired', id: 'someid1234' }
     const payload = { device, features: { capabilities: [] } }

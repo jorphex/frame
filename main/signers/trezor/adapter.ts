@@ -133,11 +133,32 @@ export default class TrezorSignerAdapter extends SignerAdapter {
         const currentStatus = signer.status
 
         this.addEventHandler(signer, 'trezor:entered:pin', () => {
+          signer.pinError = undefined
           signer.status = currentStatus
           this.emit('update', signer)
         })
 
         signer.status = Status.NEEDS_PIN
+        this.emit('update', signer)
+      })
+    })
+
+    TrezorBridge.on('trezor:invalidPin', (device: TrezorDevice) => {
+      this.withSigner(device, (signer) => {
+        log.warn(`Trezor ${signer.id} rejected the entered PIN`)
+
+        signer.pinError = 'Incorrect PIN. Try again.'
+        signer.status = Status.NEEDS_PIN
+        this.emit('update', signer)
+      })
+    })
+
+    TrezorBridge.on('trezor:pinAttemptsDepleted', (device: TrezorDevice) => {
+      this.withSigner(device, (signer) => {
+        log.warn(`Trezor ${signer.id} ended the current PIN attempt sequence`)
+
+        signer.pinError = undefined
+        signer.status = Status.NEEDS_RECONNECTION
         this.emit('update', signer)
       })
     })
@@ -272,19 +293,23 @@ export default class TrezorSignerAdapter extends SignerAdapter {
     }
   }
 
-  override reload(trezor: Trezor) {
+  override async reload(trezor: Trezor) {
     log.info(`reloading Trezor ${trezor.id}`)
 
     trezor.status = Status.INITIAL
     this.emit('update', trezor)
 
-    if (trezor.device) {
-      // this Trezor is already open, just reset and derive addresses again
-      trezor.open(trezor.device).then(() => trezor.deriveAddresses())
-    } else {
-      // this Trezor is not open because it was never connected,
-      // attempt to force a reload by calling this method
-      TrezorBridge.getFeatures({ path: trezor.path as DeviceUniquePath })
+    try {
+      if (trezor.device) {
+        await trezor.open(trezor.device)
+        await trezor.deriveAddresses()
+      } else {
+        await TrezorBridge.getFeatures({ path: trezor.path as DeviceUniquePath })
+      }
+    } catch (error) {
+      log.warn(`could not reload Trezor ${trezor.id}`, error)
+      trezor.status = Status.NEEDS_RECONNECTION
+      this.emit('update', trezor)
     }
   }
 

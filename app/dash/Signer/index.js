@@ -85,6 +85,7 @@ class Signer extends React.Component {
       <div className='trezorPinWrap' style={active ? {} : { height: '0px', padding: '0px 0px 0px 0px' }}>
         {active ? (
           <>
+            {this.props.pinError ? <div className='trezorPinError'>{this.props.pinError}</div> : null}
             <div className='trezorPhraseInput'>
               {this.state.tPin.split('').map((n, i) => {
                 return (

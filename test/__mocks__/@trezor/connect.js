@@ -30,6 +30,8 @@ module.exports = {
   },
   UI: {
     REQUEST_PIN: 'ui-request_pin',
+    INVALID_PIN: 'ui-invalid_pin',
+    INVALID_PIN_ATTEMPTS_DEPLETED: 'ui-invalid_pin_attempts_depleted',
     REQUEST_PASSPHRASE: 'ui-request_passphrase',
     REQUEST_THP_PAIRING: 'ui-request_thp_pairing',
     RECEIVE_PIN: 'ui-receive_pin',

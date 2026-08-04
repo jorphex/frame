@@ -58,6 +58,7 @@ export default class Trezor extends Signer {
   device: TrezorDevice | undefined
   derivation: Derivation | undefined
   pairing: TrezorPairing | undefined
+  pinError: string | undefined
 
   constructor(path: string) {
     super()
@@ -74,6 +75,7 @@ export default class Trezor extends Signer {
 
   override async open(device: TrezorDevice) {
     this.device = device
+    this.pinError = undefined
     this.status = Status.INITIAL
     this.emit('update')
 
@@ -125,7 +127,8 @@ export default class Trezor extends Signer {
     return {
       ...summary,
       capabilities: this.device?.features?.capabilities || [],
-      pairing: this.pairing
+      pairing: this.pairing,
+      pinError: this.pinError
     }
   }
 
