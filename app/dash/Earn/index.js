@@ -52,23 +52,6 @@ export const formatReceiptAmount = (raw, decimals) => {
   return `${fraction.length > visible.length ? '~' : ''}${whole}.${visible}`
 }
 
-export const formatUpdatedAt = (value, now = Date.now()) => {
-  if (!Number.isSafeInteger(value) || value <= 0) return 'Unavailable'
-  const elapsed = Math.max(0, now - value)
-  if (elapsed < 60_000) return 'just now'
-  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)}m ago`
-  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)}h ago`
-  return `${Math.floor(elapsed / 86_400_000)}d ago`
-}
-
-const formatFee = (basisPoints) =>
-  `${(basisPoints / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
-
-const formatInception = (value) =>
-  Number.isSafeInteger(value) && value > 0
-    ? new Date(value * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
-    : 'Unavailable'
-
 const formatTimestamp = (value) =>
   Number.isSafeInteger(value) && value > 0
     ? new Date(value * 1000).toLocaleString(undefined, {
@@ -87,6 +70,22 @@ export const positionsMatchAccount = (positions, selected) =>
   )
 
 const chainName = (chainId) => CHAINS.find(({ id }) => id === chainId)?.name || `Chain ${chainId}`
+
+const VaultArtwork = ({ vault, size = 'card' }) => (
+  <span
+    className={`earnVaultArtwork earnVaultArtwork-${size} earnVaultArtwork-${vault.id}`}
+    aria-hidden='true'
+  >
+    <span>{vault.asset.symbol.slice(0, 3)}</span>
+  </span>
+)
+
+const positionVariantLabel = (vault, variant, cooldown = false) => {
+  if (cooldown) return 'In cooldown'
+  if (vault.kind === 'yvUSD') return variant.id === 'locked' ? 'Locked' : 'Flexible'
+  if (vault.kind === 'yBOLD') return variant.id === 'staked' ? 'Staked' : 'Unstaked'
+  return ''
+}
 
 const ChainStatus = ({ chain }) => {
   if (!chain || ['ready', 'partial'].includes(chain.status)) {
@@ -111,11 +110,10 @@ const ChainStatus = ({ chain }) => {
   )
 }
 
-const Metric = ({ label, value, detail }) => (
+const Metric = ({ label, value }) => (
   <div className='earnMetric'>
     <div className='earnMetricLabel'>{label}</div>
     <div className='earnMetricValue'>{value}</div>
-    {detail ? <div className='earnMetricDetail'>{detail}</div> : null}
   </div>
 )
 
@@ -129,10 +127,13 @@ const VaultCard = ({ vault, position, onSelect }) => {
       aria-label={`View ${vault.name} on ${vault.chainName}`}
     >
       <div className='earnVaultTop'>
-        <div>
-          <div className='earnVaultName'>{vault.name}</div>
-          <div className='earnVaultAsset'>
-            {vault.asset.symbol} / {vault.chainName}
+        <div className='earnVaultIdentity'>
+          <VaultArtwork vault={vault} />
+          <div>
+            <div className='earnVaultName'>{vault.name}</div>
+            <div className='earnVaultAsset'>
+              {vault.asset.symbol} · {vault.chainName}
+            </div>
           </div>
         </div>
         <div className='earnApy'>
@@ -166,22 +167,33 @@ const PositionCard = ({ vault, position, onSelect }) => {
       onClick={(event) => onSelect(vault.id, event.currentTarget)}
       aria-label={`Manage ${vault.name} position`}
     >
-      <div>
-        <div className='earnPositionName'>{vault.name}</div>
-        <div className='earnPositionChain'>{vault.chainName}</div>
+      <div className='earnVaultIdentity'>
+        <VaultArtwork vault={vault} size='position' />
+        <div>
+          <div className='earnPositionName'>{vault.name}</div>
+          <div className='earnPositionChain'>{vault.chainName}</div>
+        </div>
       </div>
       <div className='earnPositionAmounts'>
         {owned.map((variant) => (
           <div key={variant.address}>
             {variant.sharesRaw !== '0' ? (
-              <div>
-                {variant.assets !== null ? formatAmount(variant.assets) : formatAmount(variant.shares)}{' '}
-                {variant.assets !== null ? variant.assetSymbol : variant.symbol}
+              <div className='earnPositionAmount'>
+                {positionVariantLabel(vault, variant) ? (
+                  <span>{positionVariantLabel(vault, variant)}</span>
+                ) : null}
+                <strong>
+                  {variant.assets !== null ? formatAmount(variant.assets) : formatAmount(variant.shares)}{' '}
+                  {variant.assets !== null ? variant.assetSymbol : variant.symbol}
+                </strong>
               </div>
             ) : null}
             {(variant.cooldown?.sharesRaw || '0') !== '0' ? (
-              <div>
-                {formatAmount(variant.cooldown.shares)} {variant.symbol} ({variant.cooldown.status})
+              <div className='earnPositionAmount'>
+                <span>{positionVariantLabel(vault, variant, true)}</span>
+                <strong>
+                  {formatAmount(variant.cooldown.shares)} {variant.symbol}
+                </strong>
               </div>
             ) : null}
           </div>
@@ -205,6 +217,52 @@ const durationDays = (seconds, fallback) => {
   if (!Number.isFinite(seconds) || seconds <= 0) return fallback
   const days = seconds / 86_400
   return Number.isInteger(days) ? `${days}-day` : `${days.toFixed(1)}-day`
+}
+
+const routeNeedsApproval = (action, variant) =>
+  action === 'deposit' ||
+  action === 'stake' ||
+  (action === 'withdraw' && ['locked', 'staked'].includes(variant))
+
+const actionDescription = (vault, form) => {
+  if (form.action === 'deposit') {
+    return `Deposit only ${vault.asset.symbol}; Frame will not swap or bridge assets.`
+  }
+  if (form.action === 'stake') return 'Stake existing yBOLD and receive ysyBOLD.'
+  if (form.action === 'start-cooldown') {
+    return 'Choose how much locked yvUSD to prepare for withdrawal.'
+  }
+  if (form.action === 'cancel-cooldown') {
+    return 'Return cooling-down shares to the liquid locked position.'
+  }
+  if (form.variant === 'locked') {
+    return `Exit locked yvUSD into ${vault.asset.symbol} during the active withdrawal window.`
+  }
+  if (form.variant === 'staked') return `Withdraw staked yBOLD directly to ${vault.asset.symbol}.`
+  return `Withdraw directly to ${vault.asset.symbol}.`
+}
+
+const CooldownNotice = ({ cooldown }) => {
+  const cooldownLength = durationDays(cooldown.cooldownDuration, '14-day')
+  const windowLength = durationDays(cooldown.withdrawalWindow, '5-day')
+  const messages = {
+    none: `Locked withdrawals use a ${cooldownLength} cooldown followed by a ${windowLength} withdrawal window. No cooldown is active.`,
+    'cooling-down': `Cooldown in progress. Your withdrawal window opens ${formatTimestamp(
+      cooldown.cooldownEnd
+    )} and closes ${formatTimestamp(cooldown.windowEnd)}.`,
+    'withdrawal-window': `Your withdrawal window is open now and closes ${formatTimestamp(
+      cooldown.windowEnd
+    )}.`,
+    expired: `The previous withdrawal window closed ${formatTimestamp(
+      cooldown.windowEnd
+    )}. Start a new cooldown to withdraw.`
+  }
+  return (
+    <div className='earnProductNote earnCooldownNotice'>
+      <strong>Locked withdrawal timing</strong>
+      <span>{messages[cooldown.status]}</span>
+    </div>
+  )
 }
 
 const WorkflowCard = ({ workflow, onResume, onCancel, onRevoke, busy, canTransact }) => {
@@ -306,6 +364,7 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose, formRe
   const variant = vault.variants.find(({ id }) => id === form.variant)
   const owned = position?.variants.find(({ id }) => id === form.variant)
   const isCancel = form.action === 'cancel-cooldown'
+  const needsApproval = routeNeedsApproval(form.action, form.variant)
   const symbol =
     form.action === 'deposit' ||
     (form.action === 'withdraw' && ['direct', 'unlocked', 'locked'].includes(form.variant)) ||
@@ -328,17 +387,7 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose, formRe
           x
         </button>
       </div>
-      <p>
-        {form.action === 'deposit'
-          ? `Deposit only ${vault.asset.symbol}; Frame will not swap or bridge assets.`
-          : form.action === 'start-cooldown'
-            ? 'Choose how much locked yvUSD to prepare for withdrawal.'
-            : form.action === 'cancel-cooldown'
-              ? 'Return cooling-down shares to the liquid locked position.'
-              : form.variant === 'locked'
-                ? `Exit locked yvUSD into ${vault.asset.symbol} during the active withdrawal window.`
-                : `Withdraw directly to ${vault.asset.symbol}.`}
-      </p>
+      <p>{actionDescription(vault, form)}</p>
       {!isCancel ? (
         <div className='earnAmountField'>
           <label htmlFor='earn-action-amount'>Amount in {symbol}</label>
@@ -388,8 +437,11 @@ const ActionForm = ({ vault, position, form, onChange, onSubmit, onClose, formRe
         </div>
       ) : null}
       <div className='earnActionSafety'>
-        Exact approvals only. Every step opens Frame&apos;s normal simulation and signer review. Vault loss
-        tolerance is 0%.
+        {needsApproval
+          ? 'This route may need a token approval. Frame requests only the exact amount.'
+          : 'This action does not request a token approval.'}{' '}
+        Every transaction opens Frame&apos;s normal simulation and signer review.
+        {form.action === 'withdraw' ? ' Withdrawal loss tolerance is fixed at 0%.' : ''}
       </div>
       <button
         type='button'
@@ -407,7 +459,6 @@ const VaultDetails = ({
   vault,
   position,
   catalogStatus,
-  catalogFetchedAt,
   account,
   chain,
   workflows,
@@ -455,10 +506,15 @@ const VaultDetails = ({
         {'<- All vaults'}
       </button>
       <div className='earnDetailsHero'>
-        <div className='earnEyebrow'>
-          {vault.chainName} / {vault.asset.symbol}
+        <div className='earnDetailsIdentity'>
+          <VaultArtwork vault={vault} size='hero' />
+          <div>
+            <div className='earnEyebrow'>
+              {vault.chainName} · {vault.asset.symbol}
+            </div>
+            <h1>{vault.name}</h1>
+          </div>
         </div>
-        <h1>{vault.name}</h1>
         <p>{vault.description}</p>
       </div>
       <div className='earnDetailsMetrics'>
@@ -470,14 +526,7 @@ const VaultDetails = ({
         <Metric
           label={selectedVariant === 'locked' ? 'Underlying vault risk' : 'Risk'}
           value={vault.riskLabel}
-          detail={vault.riskLevel ? `Yearn level ${vault.riskLevel}` : ''}
         />
-      </div>
-      <div className='earnVaultFacts'>
-        <span>Performance fee {formatFee(vault.performanceFeeBps)}</span>
-        <span>Management fee {formatFee(vault.managementFeeBps)}</span>
-        <span>Available since {formatInception(vault.inceptionTime)}</span>
-        <span>Yearn data updated {formatUpdatedAt(catalogFetchedAt)}</span>
       </div>
       {vault.kind === 'yvUSD' ? (
         <div className='earnVariants'>
@@ -522,7 +571,9 @@ const VaultDetails = ({
               <React.Fragment key={variant.address}>
                 {variant.sharesRaw !== '0' ? (
                   <div className='earnOwnedLine'>
-                    <span>{variant.id}</span>
+                    {positionVariantLabel(vault, variant) ? (
+                      <span>{positionVariantLabel(vault, variant)}</span>
+                    ) : null}
                     <strong>
                       {formatAmount(variant.assets ?? variant.shares)}{' '}
                       {variant.assets !== null ? variant.assetSymbol : variant.symbol}
@@ -531,7 +582,7 @@ const VaultDetails = ({
                 ) : null}
                 {(variant.cooldown?.sharesRaw || '0') !== '0' ? (
                   <div className='earnOwnedLine'>
-                    <span>{variant.id} cooldown</span>
+                    <span>In cooldown</span>
                     <strong>
                       {formatAmount(variant.cooldown.shares)} {variant.symbol}
                     </strong>
@@ -542,20 +593,7 @@ const VaultDetails = ({
             ))}
         </div>
       ) : null}
-      {cooldown ? (
-        <div className='earnProductNote'>
-          Locked yvUSD: {cooldown.status.replace('-', ' ')}.{' '}
-          {durationDays(cooldown.cooldownDuration, '14-day')} cooldown,{' '}
-          {durationDays(cooldown.withdrawalWindow, '5-day')} withdrawal window.
-          {cooldown.status !== 'none' ? (
-            <>
-              {' '}
-              Cooldown ends {formatTimestamp(cooldown.cooldownEnd)}; window ends{' '}
-              {formatTimestamp(cooldown.windowEnd)}.
-            </>
-          ) : null}
-        </div>
-      ) : null}
+      {cooldown ? <CooldownNotice cooldown={cooldown} /> : null}
       {!signingAccount ? (
         <div className='earnNotice earnDetailsNotice'>
           {account?.readOnly
@@ -893,7 +931,6 @@ export class Earn extends React.Component {
           </div>
         ) : null}
         <div className='earnSection'>
-          <h3>Opportunities</h3>
           {vaults.map((vault) => (
             <VaultCard
               key={vault.id}
@@ -933,7 +970,6 @@ export class Earn extends React.Component {
           vault={selectedVault}
           position={this.positionFor(selectedVault.id)}
           catalogStatus={catalog.status}
-          catalogFetchedAt={catalog.fetchedAt}
           account={currentPositions?.account}
           chain={currentPositions?.chains.find(({ chainId }) => chainId === selectedVault.chainId)}
           workflows={workflows.filter(
@@ -1027,9 +1063,6 @@ export class Earn extends React.Component {
             )
           )}
         </div>
-        <footer className='earnFooter'>
-          Curated locally. Vault data from Yearn · Updated {formatUpdatedAt(catalog.fetchedAt)}.
-        </footer>
       </div>
     )
   }

@@ -5,6 +5,7 @@ import { screen, render } from '../../../../../componentSetup'
 import TxRequestComponent from '../../../../../../app/tray/Account/Requests/TransactionRequest'
 import { TxMain } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxMainNew'
 import TxRecipientComponent from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxRecipient'
+import { getYearnIntentLines } from '../../../../../../app/tray/Account/Requests/TransactionRequest/TxAction'
 import {
   getAllowancePresentation,
   getAccessListPresentation,
@@ -68,6 +69,31 @@ describe('confirm', () => {
 
     expect(screen.getByText('Recipient Account')).toBeTruthy()
     expect(screen.getByText(recipient)).toBeTruthy()
+  })
+
+  it('identifies an allowlisted Yearn recipient without an external ABI', () => {
+    const recipient = '0x1111111111111111111111111111111111111111'
+
+    render(
+      <TxRecipient
+        i={0}
+        req={{
+          data: { to: recipient, value: '0x0' },
+          recipientType: 'contract',
+          recognizedActions: [
+            {
+              id: 'yearn:deposit',
+              data: { action: 'deposit', vaultName: 'USDC Horizon yVault' }
+            }
+          ]
+        }}
+      />
+    )
+
+    expect(screen.getByText('Calling Yearn Contract')).toBeTruthy()
+    expect(screen.getByText('Yearn vault deposit')).toBeTruthy()
+    expect(screen.getByText('Allowlisted vault: USDC Horizon yVault')).toBeTruthy()
+    expect(screen.queryByText(/unknown action/i)).toBeNull()
   })
 
   it('renders a confirming transaction', () => {
@@ -141,6 +167,25 @@ describe('simulation review', () => {
     expect(screen.getByText('Withdraw from Yearn')).toBeTruthy()
     expect(screen.getByText(/12.5/)).toBeTruthy()
     expect(screen.getByText(/USDC/)).toBeTruthy()
+  })
+
+  it('derives Yearn intent changes from recognized calldata without calling them simulation', () => {
+    expect(
+      getYearnIntentLines('deposit', {
+        amountRaw: '12500000',
+        decimals: 6,
+        symbol: 'USDC',
+        vaultName: 'USDC Horizon yVault'
+      })
+    ).toEqual(['Send 12.5 USDC', 'Receive USDC Horizon yVault shares at execution rate'])
+    expect(
+      getYearnIntentLines('withdraw', {
+        amountRaw: '2500000',
+        amountType: 'assets',
+        decimals: 6,
+        symbol: 'USDC'
+      })
+    ).toEqual(['Receive 2.5 USDC', 'Burn the shares required at execution'])
   })
 
   it('does not describe an unlimited Yearn approval as exact', () => {
@@ -385,6 +430,21 @@ describe('simulation review', () => {
     expect(screen.getByRole('note').textContent).toMatch(/could not derive/i)
     expect(screen.getByRole('note').textContent).toMatch(/does not support/i)
     expect(screen.queryByText(/Native Balance Increase/i)).toBeNull()
+    expect(
+      getNativeBalanceChangesPresentation({ nativeBalanceChanges: evidence }, { suppressUnavailable: true })
+    ).toBeNull()
+  })
+
+  it('does not suppress an actual native balance trace failure', () => {
+    const evidence = {
+      status: 'failed',
+      source: 'debug_traceCall',
+      reason: 'Malformed trace response'
+    }
+
+    expect(
+      getNativeBalanceChangesPresentation({ nativeBalanceChanges: evidence }, { suppressUnavailable: true })
+    ).toEqual({ className: '_txMainTagWarning', label: 'Native balance-change preview failed' })
   })
 
   it('renders a successful empty native balance diff without claiming a change', () => {
@@ -465,6 +525,9 @@ describe('simulation review', () => {
     expect(screen.getByText('ERC-1967 Implementation Slot Check')).toBeTruthy()
     expect(screen.getByRole('note').textContent).toMatch(/could not derive net/i)
     expect(screen.getByRole('note').textContent).toMatch(/does not support tracing/i)
+    expect(
+      getProxyImplementationChangesPresentation({ proxyImplementationCheck }, { suppressUnavailable: true })
+    ).toBeNull()
   })
 
   it('summarizes and renders bounded configured-RPC execution frames', () => {

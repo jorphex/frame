@@ -165,11 +165,18 @@ export function getSimulationEffectsPresentation(simulation, account) {
   }
 }
 
-export function getNativeBalanceChangesPresentation(simulation) {
+export function getNativeBalanceChangesPresentation(simulation, { suppressUnavailable = false } = {}) {
   const evidence = simulation?.nativeBalanceChanges
   if (!evidence) return null
   if (evidence.status !== 'succeeded') {
-    return { className: '_txMainTagWarning', label: 'Native balance-change preview unavailable' }
+    if (evidence.status === 'unavailable' && suppressUnavailable) return null
+    return {
+      className: '_txMainTagWarning',
+      label:
+        evidence.status === 'failed'
+          ? 'Native balance-change preview failed'
+          : 'Native balance-change preview unavailable'
+    }
   }
 
   const count = evidence.changes.length
@@ -201,11 +208,18 @@ export function getCallTracePresentation(simulation) {
   }
 }
 
-export function getProxyImplementationChangesPresentation(simulation) {
+export function getProxyImplementationChangesPresentation(simulation, { suppressUnavailable = false } = {}) {
   const evidence = simulation?.proxyImplementationCheck
   if (!evidence) return null
   if (evidence.status !== 'succeeded') {
-    return { className: '_txMainTagWarning', label: 'ERC-1967 implementation-slot check unavailable' }
+    if (evidence.status === 'unavailable' && suppressUnavailable) return null
+    return {
+      className: '_txMainTagWarning',
+      label:
+        evidence.status === 'failed'
+          ? 'ERC-1967 implementation-slot check failed'
+          : 'ERC-1967 implementation-slot check unavailable'
+    }
   }
   if (!evidence.changes.length) return null
 
@@ -278,11 +292,16 @@ const TxOverview = ({
 }) => {
   const { data: tx = {}, classification } = req
   const { data: calldata } = tx
+  const recognizedYearn = (req.recognizedActions || []).some(({ id }) => id?.startsWith('yearn:'))
   const simulation = getSimulationPresentation(req.simulation)
   const simulationEffects = getSimulationEffectsPresentation(req.simulation, req.account)
-  const nativeBalanceChanges = getNativeBalanceChangesPresentation(req.simulation)
+  const nativeBalanceChanges = getNativeBalanceChangesPresentation(req.simulation, {
+    suppressUnavailable: recognizedYearn && !isNonZeroHex(tx.value)
+  })
   const callTrace = getCallTracePresentation(req.simulation)
-  const proxyImplementationChanges = getProxyImplementationChangesPresentation(req.simulation)
+  const proxyImplementationChanges = getProxyImplementationChangesPresentation(req.simulation, {
+    suppressUnavailable: recognizedYearn
+  })
   const allowance = getAllowancePresentation(req.simulation)
   const delegation = getDelegationPresentation(req.simulation)
   const accessList = getAccessListPresentation(req.data)

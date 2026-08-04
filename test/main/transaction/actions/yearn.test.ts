@@ -59,11 +59,19 @@ it('recognizes an allowlisted direct vault deposit for the selected account', ()
       contractAddress: direct.address,
       chainId: direct.chainId,
       account,
-      value: '0x0'
+      value: '0x0',
+      vaults: [hydratedDirect]
     })
   ).toMatchObject({
     id: 'yearn:deposit',
-    data: { protocol: 'Yearn', vaultId: direct.id, amountRaw: '1000000', amountType: 'assets' }
+    data: {
+      protocol: 'Yearn',
+      vaultId: direct.id,
+      amountRaw: '1000000',
+      amountType: 'assets',
+      symbol: 'USDC',
+      outputSymbol: 'yvUSDC-H'
+    }
   })
 })
 

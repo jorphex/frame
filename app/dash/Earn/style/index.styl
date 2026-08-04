@@ -1,7 +1,7 @@
 .earn, .earnDetails
   min-height 100%
   box-sizing border-box
-  padding 8px 7px 42px
+  padding 10px 8px 44px
   color var(--outerspace)
 
 .earnHero, .earnDetailsHero
@@ -9,9 +9,22 @@
   margin 0 0 8px
   padding 26px 22px 22px
   border-radius 27px
-  background linear-gradient(145deg, var(--ghostA), var(--ghostB))
-  border-bottom 2px solid var(--ghostZ)
-  box-shadow 0 4px 10px var(--ghostY)
+  overflow hidden
+  color #fff
+  background radial-gradient(circle at 92% 18%, rgba(255, 255, 255, .2) 0, rgba(255, 255, 255, .2) 2px, transparent 3px), linear-gradient(145deg, #1265e8, #073b91)
+  border-bottom 2px solid rgba(0, 0, 0, .22)
+  box-shadow 0 6px 16px rgba(0, 33, 92, .28)
+
+  &:after
+    content ''
+    position absolute
+    width 150px
+    height 150px
+    right -84px
+    bottom -105px
+    border 22px solid rgba(255, 255, 255, .08)
+    border-radius 50%
+    pointer-events none
 
   h1
     margin 4px 0 7px
@@ -21,14 +34,19 @@
     letter-spacing -1px
 
   p
+    position relative
+    z-index 1
     max-width 300px
     margin 0
     font-size 13px
     line-height 19px
 
+  .earnEyebrow
+    color rgba(255, 255, 255, .72)
+
 .earnEyebrow
   color var(--outerspace06)
-  font-size 10px
+  font-size 11px
   font-weight 500
   letter-spacing 1.5px
   text-transform uppercase
@@ -40,16 +58,20 @@
   border 0
   border-radius 13px
   padding 8px 12px
-  color var(--outerspace)
-  background var(--ghostC)
+  z-index 2
+  color #fff
+  background rgba(255, 255, 255, .16)
   font-family 'MainFont'
-  font-size 10px
+  font-size 11px
   letter-spacing 1px
   text-transform uppercase
   cursor pointer
 
 .earnRefresh:disabled
   opacity .5
+
+.earnRefresh:not(:disabled):hover
+  background rgba(255, 255, 255, .26)
 
 .earnTabs
   display grid
@@ -67,7 +89,7 @@
     color var(--outerspace07)
     background transparent
     font-family 'MainFont'
-    font-size 10px
+    font-size 11px
     font-weight 500
     cursor pointer
 
@@ -75,6 +97,10 @@
     color var(--outerspace)
     background var(--ghostC)
     box-shadow 0 2px 5px var(--ghostY)
+
+  button:not(.earnTabActive):hover
+    color var(--outerspace)
+    background var(--ghostB)
 
   button:focus-visible
     box-shadow 0 0 0 2px var(--moon)
@@ -84,7 +110,7 @@
   align-items center
   gap 8px
   margin 10px 7px 0
-  font-size 11px
+  font-size 12px
 
   span
     color var(--outerspace06)
@@ -101,7 +127,7 @@
     padding 4px 7px
     border-radius 8px
     background var(--ghostB)
-    font-size 9px
+    font-size 11px
     font-style normal
     text-transform uppercase
 
@@ -121,13 +147,13 @@
 
   span
     color var(--outerspace06)
-    font-size 10px
+    font-size 12px
 
 .earnSection
   h3
     margin 14px 10px 7px
     color var(--outerspace06)
-    font-size 10px
+    font-size 11px
     font-weight 500
     letter-spacing 1.4px
     text-transform uppercase
@@ -147,7 +173,7 @@
   transition transform 120ms ease, background 120ms ease
 
 .earnVault
-  padding 17px 18px 15px
+  padding 17px 18px 16px
 
 .earnVault:hover, .earnPosition:hover
   transform translateY(-1px)
@@ -158,14 +184,85 @@
   justify-content space-between
   gap 12px
 
+.earnVaultIdentity
+  display flex
+  min-width 0
+  align-items center
+  gap 11px
+
+  > div
+    min-width 0
+
+.earnVaultArtwork
+  position relative
+  display flex
+  flex none
+  width 34px
+  height 34px
+  align-items center
+  justify-content center
+  overflow hidden
+  border-radius 50%
+  color #fff
+  background #1265e8
+  background-position center
+  background-size cover
+  box-shadow 0 2px 8px rgba(0, 0, 0, .22)
+  font-family 'FiraCode'
+  font-size 10px
+
+.earnVaultArtwork-ethereum-yvusd
+  background-image url('./Earn/assets/ethereum-yvusd.png')
+
+.earnVaultArtwork-ethereum-yvusds-1
+  background-image url('./Earn/assets/ethereum-yvusds-1.png')
+
+.earnVaultArtwork-ethereum-yvweth-1
+  background-image url('./Earn/assets/ethereum-yvweth-1.png')
+
+.earnVaultArtwork-ethereum-ybold
+  background-image url('./Earn/assets/ethereum-ybold.png')
+
+.earnVaultArtwork-base-yvusdc-h
+  background-image url('./Earn/assets/base-yvusdc-h.png')
+
+.earnVaultArtwork-katana-yvvbusdc
+  background-image url('./Earn/assets/katana-yvvbusdc.png')
+
+.earnVaultArtwork-katana-yvvbeth
+  background-image url('./Earn/assets/katana-yvvbeth.png')
+
+.earnVaultArtwork-katana-yvvbusdt
+  background-image url('./Earn/assets/katana-yvvbusdt.png')
+
+.earnVaultArtwork-ethereum-yvusd,
+.earnVaultArtwork-ethereum-yvusds-1,
+.earnVaultArtwork-ethereum-yvweth-1,
+.earnVaultArtwork-ethereum-ybold,
+.earnVaultArtwork-base-yvusdc-h,
+.earnVaultArtwork-katana-yvvbusdc,
+.earnVaultArtwork-katana-yvvbeth,
+.earnVaultArtwork-katana-yvvbusdt
+  > span
+    opacity 0
+
+.earnVaultArtwork-position
+  width 31px
+  height 31px
+
+.earnVaultArtwork-hero
+  width 48px
+  height 48px
+  box-shadow 0 4px 12px rgba(0, 0, 0, .28)
+
 .earnVaultName, .earnPositionName
-  font-size 15px
+  font-size 16px
   font-weight 500
 
 .earnVaultAsset, .earnPositionChain
   margin-top 4px
   color var(--outerspace06)
-  font-size 10px
+  font-size 12px
   letter-spacing .4px
 
 .earnApy
@@ -176,13 +273,13 @@
 
   strong
     font-family 'FiraCode'
-    font-size 16px
+    font-size 18px
     font-weight 400
 
   span
     margin-top 3px
     color var(--outerspace06)
-    font-size 9px
+    font-size 11px
     text-transform uppercase
 
 .earnVaultMetrics
@@ -191,7 +288,9 @@
   gap 8px
   margin-top 14px
   color var(--outerspace07)
-  font-size 10px
+  flex-wrap wrap
+  font-size 12px
+  line-height 16px
 
   span + span:before
     content '/'
@@ -212,20 +311,34 @@
 
 .earnVaultReason
   margin-top 10px
-  font-size 10px
-  line-height 15px
+  font-size 11px
+  line-height 16px
 
 .earnPosition
   display flex
   align-items center
   justify-content space-between
+  gap 12px
   padding 14px 18px
 
 .earnPositionAmounts
+  display flex
+  flex-direction column
+  gap 5px
   text-align right
   font-family 'FiraCode'
-  font-size 11px
+  font-size 12px
   line-height 17px
+
+.earnPositionAmount
+  display flex
+  flex-direction column
+
+  span
+    color var(--outerspace06)
+    font-family 'MainFont'
+    font-size 11px
+    text-transform uppercase
 
 .earnNotice
   display flex
@@ -236,8 +349,8 @@
   padding 11px 14px
   border-radius 15px
   background var(--ghostB)
-  font-size 10px
-  line-height 15px
+  font-size 12px
+  line-height 17px
 
   button
     flex none
@@ -245,13 +358,10 @@
     color var(--outerspace)
     background transparent
     font-family 'MainFont'
-    font-size 10px
+    font-size 12px
     font-weight 500
     cursor pointer
     text-decoration underline
-
-.earnNoticeWarn
-  border-left 3px solid var(--moon)
 
 .earnTextButton, .earnYearnLink
   margin 8px 8px 12px
@@ -259,12 +369,29 @@
   color var(--outerspace07)
   background transparent
   font-family 'MainFont'
-  font-size 11px
+  font-size 12px
   cursor pointer
 
+.earnTextButton:hover, .earnYearnLink:hover
+  color var(--outerspace)
+  text-decoration underline
+
 .earnDetailsHero
+  padding 22px
+
   h1
+    position relative
+    z-index 1
+    margin 3px 0 0
     font-size 27px
+
+.earnDetailsIdentity
+  position relative
+  z-index 1
+  display flex
+  align-items center
+  gap 13px
+  margin-bottom 12px
 
 .earnDetailsMetrics
   display grid
@@ -272,35 +399,23 @@
   gap 5px
   margin 8px 0
 
-.earnVaultFacts
-  display flex
-  flex-wrap wrap
-  gap 5px 12px
-  padding 4px 10px 8px
-  color var(--outerspace06)
-  font-size 8px
-
 .earnMetric
-  min-height 70px
-  padding 12px 10px
+  min-height 74px
+  padding 13px 10px
   border-radius 17px
   background var(--ghostA)
   box-sizing border-box
 
-.earnMetricLabel, .earnMetricDetail
+.earnMetricLabel
   color var(--outerspace06)
-  font-size 8px
+  font-size 11px
   letter-spacing .8px
   text-transform uppercase
 
 .earnMetricValue
-  margin-top 6px
-  font-size 13px
+  margin-top 8px
+  font-size 15px
   font-weight 500
-
-.earnMetricDetail
-  margin-top 5px
-  font-size 7px
 
 .earnVariants, .earnOwned
   margin-top 12px
@@ -310,7 +425,7 @@
 
   h2
     margin 0 0 11px
-    font-size 13px
+    font-size 14px
     font-weight 500
 
 .earnVariantGrid
@@ -332,21 +447,24 @@
     display block
 
   strong
-    font-size 12px
+    font-size 13px
 
   span
     margin-top 5px
     font-family 'FiraCode'
-    font-size 9px
+    font-size 12px
 
   p
     margin 8px 0 0
     color var(--outerspace07)
-    font-size 9px
-    line-height 14px
+    font-size 12px
+    line-height 17px
 
 .earnVariantSelected
   box-shadow inset 0 0 0 2px var(--outerspace04)
+  background var(--ghostC)
+
+.earnVariant:not(.earnVariantSelected):hover
   background var(--ghostC)
 
 .earnVariant:focus-visible
@@ -358,20 +476,31 @@
   padding 14px 16px
   border-radius 18px
   background var(--ghostA)
-  font-size 10px
-  line-height 16px
+  font-size 12px
+  line-height 18px
+
+.earnCooldownNotice
+  display flex
+  flex-direction column
+  gap 5px
+
+  strong
+    font-size 12px
 
 .earnOwnedLine
   display flex
   justify-content space-between
   padding 7px 0
   border-top 1px solid var(--ghostC)
-  font-size 10px
+  font-size 12px
+
+  strong:only-child
+    margin-left auto
 
   em
     margin-left 8px
     color var(--outerspace06)
-    font-size 8px
+    font-size 11px
     font-style normal
     text-transform uppercase
 
@@ -401,6 +530,9 @@
     opacity .35
     cursor default
 
+  button:not(:disabled):hover
+    background var(--ghostC)
+
 .earnSecondaryActions, .earnWorkflowActions
   display flex
   gap 6px
@@ -414,12 +546,15 @@
     color var(--outerspace)
     background var(--ghostB)
     font-family 'MainFont'
-    font-size 9px
+    font-size 11px
     cursor pointer
 
   button:disabled
     opacity .35
     cursor default
+
+  button:not(:disabled):hover
+    background var(--ghostC)
 
 .earnActionForm
   margin-top 12px
@@ -431,8 +566,8 @@
   > p
     margin 10px 0 15px
     color var(--outerspace07)
-    font-size 10px
-    line-height 16px
+    font-size 12px
+    line-height 18px
 
 .earnActionHead, .earnWorkflowHead
   display flex
@@ -442,7 +577,7 @@
 .earnActionHead
   span
     color var(--outerspace06)
-    font-size 8px
+    font-size 11px
     letter-spacing 1px
     text-transform uppercase
 
@@ -460,6 +595,9 @@
     background var(--ghostC)
     cursor pointer
 
+  button:hover
+    background var(--ghostB)
+
 .earnAmountField
   display block
 
@@ -467,7 +605,7 @@
     display block
     margin 0 0 6px
     color var(--outerspace06)
-    font-size 9px
+    font-size 11px
     letter-spacing .7px
     text-transform uppercase
 
@@ -498,10 +636,14 @@
     color var(--outerspace07)
     background transparent
     font-family 'MainFont'
-    font-size 10px
+    font-size 11px
     cursor pointer
 
   button.active
+    color var(--outerspace)
+    background var(--ghostC)
+
+  button:not(:disabled):hover
     color var(--outerspace)
     background var(--ghostC)
 
@@ -511,16 +653,15 @@
   gap 3px
   margin 7px 3px 0
   color var(--outerspace06)
-  font-size 9px
+  font-size 11px
 
 .earnActionSafety
   margin 14px 0 10px
   padding 11px 12px
-  border-left 3px solid var(--moon)
   border-radius 12px
   background var(--ghostB)
-  font-size 9px
-  line-height 14px
+  font-size 12px
+  line-height 17px
 
 .earnPrimaryAction
   width 100%
@@ -531,7 +672,7 @@
   color var(--outerspace)
   background var(--ghostC)
   font-family 'MainFont'
-  font-size 11px
+  font-size 12px
   font-weight 500
   cursor pointer
 
@@ -539,13 +680,16 @@
   opacity .4
   cursor default
 
+.earnPrimaryAction:not(:disabled):hover
+  background var(--ghostB)
+
 .earnWorkflows
   margin-top 15px
 
   > h2
     margin 0 10px 8px
     color var(--outerspace06)
-    font-size 10px
+    font-size 11px
     letter-spacing 1px
     text-transform uppercase
 
@@ -576,7 +720,7 @@
       border-radius 50%
       background var(--ghostB)
       font-family 'FiraCode'
-      font-size 8px
+      font-size 11px
 
     div
       display flex
@@ -586,7 +730,7 @@
       gap 8px
 
     strong, em
-      font-size 9px
+      font-size 11px
 
     em
       color var(--outerspace06)
@@ -601,7 +745,7 @@
       color var(--outerspace07)
       background transparent
       font-family 'MainFont'
-      font-size 8px
+      font-size 11px
       text-align left
       text-decoration underline
       cursor pointer
@@ -613,10 +757,10 @@
       gap 3px
       color var(--outerspace07)
       font-family 'FiraCode'
-      font-size 8px
+      font-size 11px
 
       span, em
-        font-size 8px
+        font-size 11px
 
       em
         text-transform none
@@ -633,19 +777,19 @@
 
   span
     color var(--outerspace06)
-    font-size 8px
+    font-size 11px
     text-transform uppercase
 
 .earnWorkflowAmount
   margin-top 5px
   font-family 'FiraCode'
-  font-size 10px
+  font-size 11px
 
 .earnWorkflowError
   margin-top 8px
   color var(--bad)
-  font-size 9px
-  line-height 14px
+  font-size 11px
+  line-height 16px
 
 .earnYearnLink
   display block
@@ -653,11 +797,11 @@
   color var(--outerspace)
   text-decoration underline
 
-.earnDisclosure, .earnFooter
+.earnDisclosure
   padding 7px 16px 16px
   color var(--outerspace05)
-  font-size 9px
-  line-height 14px
+  font-size 11px
+  line-height 16px
   text-align center
 
 .earnState

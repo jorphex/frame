@@ -1,7 +1,7 @@
 import Restore from 'react-restore'
 
 import { render, screen, waitFor } from '../../../componentSetup'
-import { Earn, formatReceiptAmount, formatUpdatedAt, positionsMatchAccount } from '../../../../app/dash/Earn'
+import { Earn, formatReceiptAmount, positionsMatchAccount } from '../../../../app/dash/Earn'
 import {
   getYearnCatalog,
   getYearnPositions,
@@ -84,7 +84,26 @@ const makeVault = (id, chainId, chainName, kind = 'direct') => ({
 const vaults = [
   makeVault('ethereum-yvusd', 1, 'Ethereum', 'yvUSD'),
   makeVault('base-yvusdc-h', 8453, 'Base'),
-  makeVault('katana-yvvbusdc', 747474, 'Katana')
+  makeVault('katana-yvvbusdc', 747474, 'Katana'),
+  {
+    ...makeVault('ethereum-ybold', 1, 'Ethereum', 'yBOLD'),
+    name: 'Staked yBOLD',
+    asset: { address, name: 'BOLD', symbol: 'BOLD', decimals: 18 },
+    variants: [
+      {
+        ...makeVault('ethereum-ybold', 1, 'Ethereum').variants[0],
+        id: 'direct',
+        name: 'yBOLD',
+        symbol: 'yBOLD'
+      },
+      {
+        ...makeVault('ethereum-ybold', 1, 'Ethereum').variants[0],
+        id: 'staked',
+        name: 'Staked yBOLD',
+        symbol: 'ysyBOLD'
+      }
+    ]
+  }
 ]
 const position = {
   vaultId: 'ethereum-yvusd',
@@ -98,6 +117,29 @@ const position = {
       id: 'unlocked',
       address,
       symbol: 'yvUSD',
+      decimals: 6,
+      sharesRaw: '1500000',
+      shares: '1.5',
+      assetSymbol: 'USDC',
+      assetDecimals: 6,
+      assetsRaw: '1500000',
+      assets: '1.5'
+    }
+  ]
+}
+
+const directPosition = {
+  vaultId: 'base-yvusdc-h',
+  chainId: 8453,
+  status: 'available',
+  hasPosition: true,
+  assetBalanceRaw: '5000000',
+  assetBalance: '5.0',
+  variants: [
+    {
+      id: 'direct',
+      address,
+      symbol: 'yvUSDC',
       decimals: 6,
       sharesRaw: '1500000',
       shares: '1.5',
@@ -215,12 +257,6 @@ beforeEach(() => {
   link.send.mockClear()
 })
 
-it('formats Yearn data freshness without exposing an invalid timestamp', () => {
-  expect(formatUpdatedAt(1_000_000, 1_030_000)).toBe('just now')
-  expect(formatUpdatedAt(1_000_000, 1_300_000)).toBe('5m ago')
-  expect(formatUpdatedAt(null, 1_300_000)).toBe('Unavailable')
-})
-
 it('formats receipt base units without floating-point conversion', () => {
   expect(formatReceiptAmount('1200000', 6)).toBe('1.2')
   expect(formatReceiptAmount('1234567890123456789', 18)).toBe('~1.234567')
@@ -234,18 +270,36 @@ it('fails closed while positions belong to the previously selected account', () 
   expect(positionsMatchAccount(positions, '')).toBe(false)
 })
 
-it('shows positions before chain-separated opportunities', async () => {
+it('shows positions before the chain-separated vault list without a redundant section label', async () => {
   render(<ConnectedEarn />)
 
   await screen.findByRole('heading', { name: 'Ethereum' })
   expect(screen.getByRole('heading', { name: 'Base' })).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Katana' })).toBeTruthy()
   const positionHeading = screen.getByRole('heading', { name: 'Your positions' })
-  const opportunityHeadings = screen.getAllByRole('heading', { name: 'Opportunities' })
-  expect(
-    positionHeading.compareDocumentPosition(opportunityHeadings[0]) & Node.DOCUMENT_POSITION_FOLLOWING
-  ).toBeTruthy()
+  const firstVault = screen.getByRole('button', { name: 'View yvUSD on Ethereum' })
+  expect(positionHeading.compareDocumentPosition(firstVault) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(screen.queryByRole('heading', { name: 'Opportunities' })).toBeNull()
   expect(screen.getByRole('button', { name: 'Manage yvUSD position' })).toBeTruthy()
+  expect(document.querySelector('.earnVaultArtwork-ethereum-yvusd')).toBeTruthy()
+})
+
+it('shows a direct vault position as a balance without exposing the internal variant name', async () => {
+  getYearnPositions.mockResolvedValue({
+    ...makePositions(),
+    chains: makePositions().chains.map((chain) =>
+      chain.chainId === 8453 ? { ...chain, status: 'ready', positions: [directPosition] } : chain
+    )
+  })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Base' })
+
+  const card = screen.getByRole('button', { name: 'Manage Base Vault position' })
+  expect(card.textContent.toLowerCase()).not.toContain('direct')
+
+  await user.click(card)
+  expect(document.querySelector('.earnOwned').textContent.toLowerCase()).not.toContain('direct')
+  expect(screen.getByText('1.5 USDC')).toBeTruthy()
 })
 
 it('filters by chain without mixing vaults', async () => {
@@ -283,7 +337,8 @@ it('opens product details and keeps watch-only transactions disabled', async () 
   expect(screen.getByText(/14-day cooldown/)).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Deposit' }).disabled).toBe(true)
   expect(screen.getByText(/Watch-only accounts/)).toBeTruthy()
-  expect(screen.getByText(/Performance fee/)).toBeTruthy()
+  expect(screen.queryByText(/Performance fee/)).toBeNull()
+  expect(screen.queryByText(/Yearn data updated/)).toBeNull()
   expect(screen.getByRole('button', { name: 'View vault contract (external)' })).toBeTruthy()
 })
 
@@ -314,6 +369,60 @@ it('uses selected locked yvUSD metrics and labels root risk explicitly', async (
   expect(screen.getByText('7%')).toBeTruthy()
   expect(screen.getByText('$500,000.0')).toBeTruthy()
   expect(screen.getByText('Underlying vault risk')).toBeTruthy()
+})
+
+it('explains an inactive locked withdrawal cooldown in user-facing terms', async () => {
+  getYearnPositions.mockResolvedValue({
+    ...makePositions(),
+    chains: makePositions().chains.map((chain) =>
+      chain.chainId === 1 ? { ...chain, positions: [lockedPosition] } : chain
+    )
+  })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+
+  await user.click(screen.getByRole('button', { name: 'Manage yvUSD position' }))
+
+  expect(screen.getByText('Locked withdrawal timing')).toBeTruthy()
+  expect(screen.getByText(/No cooldown is active/)).toBeTruthy()
+  expect(screen.queryByText(/Locked yvUSD: none/)).toBeNull()
+})
+
+it('describes approvals only for routes that can request them', async () => {
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+  await user.click(screen.getByRole('button', { name: 'Manage yvUSD position' }))
+
+  await user.click(screen.getByRole('button', { name: 'Withdraw' }))
+  expect(screen.getByText(/does not request a token approval/i)).toBeTruthy()
+  expect(screen.queryByText(/requests only the exact amount/i)).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Close Earn action' }))
+  await user.click(screen.getByRole('button', { name: 'Deposit' }))
+  expect(screen.getByText(/requests only the exact amount/i)).toBeTruthy()
+})
+
+it('describes staking as staking rather than a withdrawal', async () => {
+  const yBoldPosition = {
+    ...directPosition,
+    vaultId: 'ethereum-ybold',
+    chainId: 1,
+    variants: [{ ...directPosition.variants[0], symbol: 'yBOLD' }]
+  }
+  getYearnPositions.mockResolvedValue({
+    ...makePositions(),
+    chains: makePositions().chains.map((chain) =>
+      chain.chainId === 1 ? { ...chain, positions: [position, yBoldPosition] } : chain
+    )
+  })
+  const { user } = render(<ConnectedEarn />)
+  await screen.findByRole('heading', { name: 'Ethereum' })
+
+  await user.click(screen.getByRole('button', { name: 'Manage Staked yBOLD position' }))
+  await user.click(screen.getByRole('button', { name: 'Stake existing yBOLD' }))
+
+  expect(screen.getByText('Stake existing yBOLD and receive ysyBOLD.')).toBeTruthy()
+  expect(screen.queryByText(/Withdraw directly/)).toBeNull()
 })
 
 it('clears an open action when the selected account changes', () => {

@@ -26,6 +26,7 @@ export interface YearnActionData {
   spender?: string
   maxLossBps?: 0
   symbol?: string
+  outputSymbol?: string
   decimals?: number
   yearnUrl: string
 }
@@ -92,6 +93,15 @@ const tokenMetadata = (
   if (!companion) return {}
   const variant = vault?.variants.find(({ address: candidate }) => sameAddress(candidate, address))
   return { symbol: variant?.symbol || `${definition.name} ${companion.id}`, decimals: companion.decimals }
+}
+
+const outputTokenMetadata = (
+  definition: (typeof YEARN_CATALOG)[number],
+  vault: YearnVault | undefined,
+  address: string
+) => {
+  const symbol = tokenMetadata(definition, vault, address).symbol
+  return symbol ? { outputSymbol: symbol } : {}
 }
 
 const isExpectedApproval = (definition: (typeof YEARN_CATALOG)[number], token: string, spender: string) => {
@@ -180,6 +190,7 @@ export function recognizeYearnAction(
           amountRaw: (standard.args[0] as bigint).toString(),
           amountType: 'assets',
           receiver: getAddress((standard.args[1] as string).toLowerCase()),
+          ...outputTokenMetadata(definition, vault, target),
           ...(companion
             ? tokenMetadata(definition, vault, definition.address)
             : tokenMetadata(definition, vault, definition.asset.address))
@@ -247,6 +258,11 @@ export function recognizeYearnAction(
           amountRaw: (zap.args[0] as bigint).toString(),
           amountType: 'assets',
           receiver: getAddress((zap.args[1] as string).toLowerCase()),
+          ...outputTokenMetadata(
+            definition,
+            vault,
+            definition.companions?.find(({ id }) => id === 'locked')?.address || ''
+          ),
           ...tokenMetadata(definition, vault, definition.asset.address)
         },
         vault
@@ -283,6 +299,11 @@ export function recognizeYearnAction(
           amountRaw: (zap.args[0] as bigint).toString(),
           amountType: 'assets',
           receiver: getAddress((zap.args[1] as string).toLowerCase()),
+          ...outputTokenMetadata(
+            definition,
+            vault,
+            definition.companions?.find(({ id }) => id === 'staked')?.address || ''
+          ),
           ...tokenMetadata(definition, vault, definition.asset.address)
         },
         vault

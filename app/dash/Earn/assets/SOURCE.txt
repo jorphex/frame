@@ -1,0 +1,7 @@
+Artwork source: https://github.com/yearn/tokenAssets
+Pinned source commit: 8d11453565e1abcbaba76334649281a97383b882
+
+Each image is the source repository's 128px PNG for the corresponding curated
+vault address. Base yvUSDC-H uses the native Base USDC artwork because the
+source repository does not currently contain artwork for that vault address.
+

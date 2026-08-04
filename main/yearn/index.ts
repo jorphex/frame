@@ -8,6 +8,7 @@ import provider from '../provider'
 import store from '../store'
 import { requireStoreAction } from '../store/action'
 import { createYearnPositionsService } from './positions'
+import { preserveEarnReviewWindow } from './review'
 import { createYearnCatalogService } from './service'
 import { createYearnWorkflowService, type YearnQueuedResult } from './workflows/service'
 
@@ -111,7 +112,7 @@ const queueTransaction = (
       { type: 'ethereum', id: transaction.chainId },
       () => {
         queued = true
-        requireStoreAction('setDash')({ showing: false })
+        preserveEarnReviewWindow(requireStoreAction('setDash'))
         resolve()
         if (pendingResult) onResult(pendingResult)
       }

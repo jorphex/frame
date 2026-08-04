@@ -9,6 +9,50 @@ import { formatDisplayDecimal, isUnlimited } from '../../../../../../resources/u
 import { DisplayValue, DisplayCoinBalance } from '../../../../../../resources/Components/DisplayValue'
 import { getAddress } from '../../../../../../resources/utils'
 
+const MAX_UINT256_DECIMAL = '115792089237316195423570985008687907853269984665640564039457584007913129639935'
+
+const formatYearnAmount = (amountRaw, decimals) => new BigNumber(amountRaw).shiftedBy(-decimals).toFixed()
+
+export const getYearnIntentLines = (actionType, data = {}) => {
+  const { amountRaw, amountType, decimals, outputSymbol, symbol, vaultName } = data
+  const amount =
+    amountRaw !== undefined && decimals !== undefined
+      ? `${formatYearnAmount(amountRaw, decimals)} ${symbol || ''}`.trim()
+      : ''
+  const vaultShares = outputSymbol || (vaultName ? `${vaultName} shares` : 'vault shares')
+
+  if (actionType === 'deposit') {
+    return [
+      amount ? `Send ${amount}` : 'Send the selected assets',
+      `Receive ${vaultShares} at execution rate`
+    ]
+  }
+  if (actionType === 'withdraw') {
+    return amountType === 'shares'
+      ? [amount ? `Redeem ${amount}` : 'Redeem vault shares', 'Receive underlying assets at execution rate']
+      : [amount ? `Receive ${amount}` : 'Receive underlying assets', 'Burn the shares required at execution']
+  }
+  if (actionType === 'stake') {
+    return [
+      amount ? `Stake ${amount}` : 'Stake the selected vault shares',
+      `Receive ${outputSymbol || 'staked vault shares'}`
+    ]
+  }
+  if (actionType === 'start-cooldown') {
+    return [
+      amount ? `Move ${amount} into cooldown` : 'Move locked shares into cooldown',
+      'No assets are withdrawn yet'
+    ]
+  }
+  if (actionType === 'cancel-cooldown') return ['Return cooling shares to the locked position']
+  if (actionType === 'approve') {
+    if (amountRaw === '0') return [`Revoke ${symbol || 'token'} allowance`]
+    if (amountRaw === MAX_UINT256_DECIMAL) return [`Grant unlimited ${symbol || 'token'} allowance`]
+    return [amount ? `Set allowance to ${amount}` : 'Set the requested token allowance']
+  }
+  return []
+}
+
 class TxSending extends React.Component {
   constructor(...args) {
     super(...args)
@@ -43,9 +87,7 @@ class TxSending extends React.Component {
         vaultName,
         maxLossBps
       } = action.data || {}
-      const unlimitedApproval =
-        actionType === 'approve' &&
-        amountRaw === '115792089237316195423570985008687907853269984665640564039457584007913129639935'
+      const unlimitedApproval = actionType === 'approve' && amountRaw === MAX_UINT256_DECIMAL
       const labels = {
         approve:
           amountRaw === '0'
@@ -61,7 +103,9 @@ class TxSending extends React.Component {
       }
       const displayAmount =
         amountRaw !== undefined && decimals !== undefined
-          ? `${formatDisplayDecimal(amountRaw, decimals)} ${symbol || ''}`.trim()
+          ? unlimitedApproval
+            ? `Unlimited ${symbol || ''}`.trim()
+            : `${formatYearnAmount(amountRaw, decimals)} ${symbol || ''}`.trim()
           : amountRaw
       const amountLabel =
         actionType === 'approve'
@@ -71,6 +115,7 @@ class TxSending extends React.Component {
             : actionType === 'withdraw'
               ? 'Vault assets'
               : 'Input assets'
+      const intentLines = getYearnIntentLines(actionType, action.data)
 
       return (
         <ClusterBox
@@ -134,11 +179,19 @@ class TxSending extends React.Component {
                 </ClusterValue>
               </ClusterRow>
             ) : null}
-            {['deposit', 'withdraw', 'stake'].includes(actionType) ? (
+            {intentLines.length ? (
               <ClusterRow>
                 <ClusterValue>
-                  <div className='clusterTag'>
-                    Expected balance changes appear below when RPC simulation supports them.
+                  <div className='clusterFocus'>
+                    <div>Expected from verified calldata</div>
+                    {intentLines.map((line) => (
+                      <div className='clusterFocusHighlight' key={line}>
+                        {line}
+                      </div>
+                    ))}
+                    <div className='clusterTag'>
+                      Intent only; RPC-reported effects appear separately when supported.
+                    </div>
                   </div>
                 </ClusterValue>
               </ClusterRow>
