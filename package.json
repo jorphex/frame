@@ -84,7 +84,6 @@
     "@ledgerhq/hw-app-eth": "7.8.11",
     "@ledgerhq/hw-transport": "6.35.6",
     "@ledgerhq/hw-transport-node-hid-noevents": "6.36.0",
-    "@ledgerhq/hw-transport-node-hid-singleton": "6.35.5",
     "@metamask/eth-sig-util": "8.2.0",
     "@primer/octicons-react": "19.32.0",
     "@scure/bip32": "1.7.0",
@@ -288,8 +287,8 @@
     "@trezor/device-authenticity@1.1.2": {
       "@noble/curves": "1.9.7"
     },
-    "usb@2.18.0": {
-      "node-addon-api": "8.5.0"
+    "@trezor/transport": {
+      "usb": "3.0.1"
     },
     "elliptic@<=6.6.0": "6.6.1",
     "protobufjs@<=7.6.4": "7.6.5",
@@ -304,7 +303,6 @@
   "lavamoat": {
     "allowScripts": {
       "@lavamoat/preinstall-always-fail": false,
-      "@ledgerhq/hw-transport-node-hid-singleton>usb": false,
       "@parcel/core>msgpackr>msgpackr-extract": false,
       "@trezor/connect>@trezor/blockchain-link-utils>@trezor/protobuf>protobufjs": false,
       "@trezor/connect>@trezor/blockchain-link>@stellar/stellar-sdk": false,

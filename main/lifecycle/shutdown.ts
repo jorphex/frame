@@ -1,18 +1,47 @@
-interface ApplicationLifecycleEvents {
-  on(event: 'before-quit' | 'quit', listener: () => void): unknown
+interface QuitEvent {
+  preventDefault(): void
 }
 
-export function installShutdownHandlers(app: ApplicationLifecycleEvents, close: () => void) {
-  let closed = false
+interface ApplicationLifecycleEvents {
+  on(event: 'before-quit', listener: (event: QuitEvent) => void): unknown
+  on(event: 'quit', listener: () => void): unknown
+  quit(): void
+}
 
-  const closeOnce = () => {
-    if (closed) return
+type CloseResources = () => void | Promise<void>
+type ReportShutdownError = (error: unknown) => void
 
-    closed = true
-    close()
+export function installShutdownHandlers(
+  app: ApplicationLifecycleEvents,
+  close: CloseResources,
+  reportError: ReportShutdownError
+) {
+  let closePromise: Promise<void> | undefined
+  let readyToQuit = false
+
+  const closeOnce = (resumeQuit: boolean) => {
+    if (closePromise || readyToQuit) return
+
+    closePromise = (async () => {
+      try {
+        await close()
+      } catch (error) {
+        reportError(error)
+      } finally {
+        readyToQuit = true
+        if (resumeQuit) app.quit()
+      }
+    })()
   }
 
-  // USB transports must close before Electron starts tearing down Chromium.
-  app.on('before-quit', closeOnce)
-  app.on('quit', closeOnce)
+  app.on('before-quit', (event) => {
+    if (readyToQuit) return
+
+    // Hold Electron open until native signer transports release their devices.
+    event.preventDefault()
+    closeOnce(true)
+  })
+
+  // Retain a best-effort fallback for hosts that do not emit before-quit.
+  app.on('quit', () => closeOnce(false))
 }

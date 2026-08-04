@@ -249,15 +249,17 @@ export default class TrezorSignerAdapter extends SignerAdapter {
       })
   }
 
-  override close() {
+  override async close() {
     if (this.observer) {
       this.observer.remove()
       this.observer = undefined
     }
 
-    TrezorBridge.close()
-
-    super.close()
+    try {
+      await TrezorBridge.close()
+    } finally {
+      super.close()
+    }
   }
 
   override remove(trezor: Trezor) {

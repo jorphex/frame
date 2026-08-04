@@ -374,13 +374,18 @@ app.on('before-quit', () => {
   }
 })
 
-installShutdownHandlers(app, () => {
-  log.info('Application closing')
+installShutdownHandlers(
+  app,
+  async () => {
+    log.info('Application closing')
 
-  // await clients.stop()
-  accounts.close()
-  signers.close()
-})
+    // await clients.stop()
+    accounts.close()
+    await signers.close()
+    log.info('Application resources closed')
+  },
+  (error) => log.error('Application shutdown failed', error)
+)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

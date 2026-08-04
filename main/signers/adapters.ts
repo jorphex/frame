@@ -11,7 +11,7 @@ export class SignerAdapter extends EventEmitter {
   }
 
   open() {}
-  close() {}
+  close(): void | Promise<void> {}
   remove(signer: Signer) {}
   reload(signer: Signer) {}
 }

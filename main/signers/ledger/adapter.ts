@@ -1,8 +1,6 @@
 import log from 'electron-log'
 
 import { getDevices as getLedgerDevices } from '@ledgerhq/hw-transport-node-hid-noevents'
-import TransportNodeHid from '@ledgerhq/hw-transport-node-hid-singleton'
-import { Subscription } from '@ledgerhq/hw-transport'
 import { Device } from 'node-hid'
 
 import { Derivation } from '../Signer/derive'
@@ -25,13 +23,15 @@ interface Disconnection {
 }
 
 type ConnectedDevice = Device & { path: string; product: string }
+const DEVICE_SCAN_INTERVAL = 1000
 
 export default class LedgerSignerAdapter extends SignerAdapter {
   private knownSigners: { [devicePath: string]: Ledger }
   private disconnections: Disconnection[]
 
   private observer: any
-  private usbListener: Subscription | null = null
+  private scanTimer: NodeJS.Timeout | null = null
+  private scanFailureReported = false
 
   constructor() {
     super('ledger')
@@ -56,29 +56,9 @@ export default class LedgerSignerAdapter extends SignerAdapter {
       })
     })
 
-    try {
-      this.usbListener = TransportNodeHid.listen({
-        next: (evt) => {
-          log.debug(`received ${evt.type} USB event`)
-
-          if (!evt.deviceModel) {
-            log.warn('received USB event with no Ledger device model', evt)
-            return
-          }
-
-          this.handleDeviceChanges()
-        },
-        complete: () => {
-          log.debug('received USB complete event')
-        },
-        error: (err) => {
-          log.error('USB error', err)
-        }
-      })
-    } catch (err) {
-      log.warn('Ledger HID transport unavailable; skipping Ledger USB monitoring', err)
-      this.usbListener = null
-    }
+    this.scanForDeviceChanges()
+    this.scanTimer = setInterval(() => this.scanForDeviceChanges(), DEVICE_SCAN_INTERVAL)
+    this.scanTimer.unref()
 
     super.open()
   }
@@ -89,12 +69,27 @@ export default class LedgerSignerAdapter extends SignerAdapter {
       this.observer = null
     }
 
-    if (this.usbListener) {
-      this.usbListener.unsubscribe()
-      this.usbListener = null
+    if (this.scanTimer) {
+      clearInterval(this.scanTimer)
+      this.scanTimer = null
     }
 
+    this.disconnections.forEach(({ timeout }) => clearTimeout(timeout))
+    this.disconnections = []
+
     super.close()
+  }
+
+  private scanForDeviceChanges() {
+    try {
+      this.handleDeviceChanges()
+      this.scanFailureReported = false
+    } catch (error) {
+      if (!this.scanFailureReported) {
+        log.warn('Ledger HID transport unavailable; skipping Ledger device scan', error)
+        this.scanFailureReported = true
+      }
+    }
   }
 
   override remove(ledger: Ledger) {
@@ -185,6 +180,8 @@ export default class LedgerSignerAdapter extends SignerAdapter {
   }
 
   handleDisconnectedDevice(ledger: Ledger) {
+    if (this.disconnections.some(({ device }) => device === ledger)) return
+
     log.info(`Ledger ${ledger.model} disconnected from ${ledger.devicePath}`)
 
     ledger.disconnect()

@@ -13,7 +13,7 @@ import TrezorConnect, {
   UI,
   UI_EVENT
 } from '@trezor/connect'
-import { FrameNodeUsbTransport } from './nodeUsbTransport'
+import { closeFrameNodeUsbTransports, FrameNodeUsbTransport } from './nodeUsbTransport'
 
 export class DeviceError extends Error {
   readonly code
@@ -76,11 +76,16 @@ class TrezorBridge extends EventEmitter {
     }
   }
 
-  close() {
+  async close() {
     this.removeAllListeners()
 
     TrezorConnect.removeAllListeners()
-    TrezorConnect.dispose()
+
+    try {
+      await closeFrameNodeUsbTransports()
+    } finally {
+      await TrezorConnect.dispose()
+    }
   }
 
   // methods to send requests from the application to a Trezor device

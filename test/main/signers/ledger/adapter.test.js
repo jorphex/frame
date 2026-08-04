@@ -82,6 +82,38 @@ it('recognizes a connected Ledger', (done) => {
   adapter.handleDeviceChanges()
 })
 
+it('polls for connected Ledgers without loading the USB event transport', () => {
+  const onAdd = jest.fn()
+  adapter.on('add', onAdd)
+
+  simulateLedgerConnection('polled-nano-s-path')
+  jest.advanceTimersByTime(1000)
+
+  expect(onAdd).toHaveBeenCalledTimes(1)
+  expect(onAdd.mock.calls[0][0].devicePath).toBe('polled-nano-s-path')
+})
+
+it('stops polling when the adapter closes', () => {
+  const onAdd = jest.fn()
+  adapter.on('add', onAdd)
+  adapter.close()
+
+  simulateLedgerConnection('closed-adapter-path')
+  jest.advanceTimersByTime(1000)
+
+  expect(onAdd).not.toHaveBeenCalled()
+})
+
+it('does not queue a disconnected Ledger more than once while polling', () => {
+  simulateLedgerConnection('polled-disconnect-path')
+  adapter.handleDeviceChanges()
+
+  simulateLedgerDisconnection('polled-disconnect-path')
+  jest.advanceTimersByTime(4000)
+
+  expect(adapter.disconnections).toHaveLength(1)
+})
+
 it('creates a new Ledger when one is already attached', (done) => {
   const addedLedgers = []
 

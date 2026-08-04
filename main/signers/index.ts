@@ -49,8 +49,8 @@ class Signers extends EventEmitter {
     registeredAdapters.forEach(this.addAdapter.bind(this))
   }
 
-  close() {
-    registeredAdapters.forEach((a) => a.close())
+  async close() {
+    await Promise.all(registeredAdapters.map((adapter) => adapter.close()))
   }
 
   addAdapter(adapter: SignerAdapter) {
