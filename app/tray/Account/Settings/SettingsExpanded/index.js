@@ -2,7 +2,7 @@ import React from 'react'
 import Restore from 'react-restore'
 import link from '../../../../../resources/link'
 
-class Settings extends React.Component {
+export class SettingsExpanded extends React.Component {
   constructor(...args) {
     super(...args)
     this.moduleRef = React.createRef()
@@ -34,6 +34,14 @@ class Settings extends React.Component {
     this.nameObs.remove()
   }
 
+  saveName() {
+    const currentName = this.store('main.accounts', this.props.account, 'name') || ''
+    const name = this.state.name.trim()
+
+    if (name && name !== currentName) link.send('tray:renameAccount', this.props.account, name)
+    this.setState({ name: name || currentName })
+  }
+
   render() {
     return (
       <div className='accountViewScroll'>
@@ -47,7 +55,14 @@ class Settings extends React.Component {
                 value={this.state.name}
                 onChange={(e) => {
                   this.setState({ name: e.target.value })
-                  link.send('tray:renameAccount', this.props.account, e.target.value)
+                }}
+                onBlur={() => this.saveName()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                  if (e.key === 'Escape') {
+                    const name = this.store('main.accounts', this.props.account, 'name') || ''
+                    this.setState({ name })
+                  }
                 }}
               />
             </div>
@@ -58,4 +73,4 @@ class Settings extends React.Component {
   }
 }
 
-export default Restore.connect(Settings)
+export default Restore.connect(SettingsExpanded)

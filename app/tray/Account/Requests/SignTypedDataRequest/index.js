@@ -9,17 +9,6 @@ import { getSignatureRequestClass } from '../../../../../resources/domain/reques
 import { getOriginDisplayName } from '../../../../../resources/domain/origin'
 
 export class SignTypedDataRequest extends React.Component {
-  constructor(...args) {
-    super(...args)
-    this.state = { allowInput: false, dataView: false }
-
-    const props = args[0] || {}
-
-    setTimeout(() => {
-      this.setState({ allowInput: true })
-    }, props.signingDelay || 1500)
-  }
-
   render() {
     const { req, signer } = this.props
     const originName = getOriginDisplayName(this.store('main.origins', req.origin, 'name'))

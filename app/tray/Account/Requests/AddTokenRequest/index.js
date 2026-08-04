@@ -4,14 +4,6 @@ import svg from '../../../../../resources/svg'
 import { getOriginDisplayName } from '../../../../../resources/domain/origin'
 
 class AddTokenRequest extends React.Component {
-  constructor(...args) {
-    super(...args)
-    this.state = { allowInput: false }
-    setTimeout(() => {
-      this.setState({ allowInput: true })
-    }, 200)
-  }
-
   render() {
     const status = this.props.req.status
     const notice = this.props.req.notice

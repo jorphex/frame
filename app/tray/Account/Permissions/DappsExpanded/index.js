@@ -1,10 +1,11 @@
 import React from 'react'
 import Restore from 'react-restore'
 import link from '../../../../../resources/link'
+import { getPermissionIds } from '../../../../../resources/domain/permissions'
 
 import { ClusterBox, Cluster, ClusterRow, ClusterValue } from '../../../../../resources/Components/Cluster'
 
-class DappsPermissionsExpanded extends React.Component {
+export class DappsPermissionsExpanded extends React.Component {
   constructor(...args) {
     super(...args)
     this.moduleRef = React.createRef()
@@ -12,7 +13,7 @@ class DappsPermissionsExpanded extends React.Component {
 
   render() {
     const permissions = this.store('main.permissions', this.props.account) || {}
-    let permissionList = Object.keys(permissions).sort((a, b) => (a.origin < b.origin ? -1 : 1))
+    let permissionList = getPermissionIds(permissions, this.props.filter)
     if (!this.props.expanded) permissionList = permissionList.slice(0, 3)
 
     return (

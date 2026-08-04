@@ -15,23 +15,6 @@ import link from '../../../../../resources/link'
 import { erc20Interface } from '../../../../../resources/contracts'
 
 class TransactionRequest extends React.Component {
-  constructor(props, context) {
-    super(props, context)
-    this.state = { allowInput: false, dataView: false, showHashDetails: false }
-
-    setTimeout(() => {
-      this.setState({ allowInput: true })
-    }, props.signingDelay || 1500)
-  }
-
-  overlayMode(mode) {
-    this.setState({ overlayMode: mode })
-  }
-
-  allowOtherChain() {
-    this.setState({ allowOtherChain: true })
-  }
-
   renderAdjustFee() {
     const { req } = this.props
     return <AdjustFee req={req} />

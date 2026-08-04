@@ -2,11 +2,11 @@ import React from 'react'
 import Restore from 'react-restore'
 import link from '../../../../../resources/link'
 import svg from '../../../../../resources/svg'
-import { matchFilter } from '../../../../../resources/utils'
+import { getPermissionIds } from '../../../../../resources/domain/permissions'
 
 import { Cluster, ClusterRow, ClusterValue } from '../../../../../resources/Components/Cluster'
 
-class DappsPermissionsPreview extends React.Component {
+export class DappsPermissionsPreview extends React.Component {
   constructor(...args) {
     super(...args)
     this.moduleRef = React.createRef()
@@ -31,12 +31,7 @@ class DappsPermissionsPreview extends React.Component {
 
   render() {
     const permissions = this.store('main.permissions', this.props.account) || {}
-    let permissionList = Object.keys(permissions)
-      .filter((o) => {
-        const { filter = '' } = this.props
-        return matchFilter(filter, [permissions[o].origin])
-      })
-      .sort((a, b) => (a.origin < b.origin ? -1 : 1))
+    let permissionList = getPermissionIds(permissions, this.props.filter)
     if (!this.props.expanded) permissionList = permissionList.slice(0, 4)
 
     return (

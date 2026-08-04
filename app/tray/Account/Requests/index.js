@@ -45,6 +45,10 @@ class Requests extends React.Component {
     if (this.resizeObserver) this.resizeObserver.observe(this.moduleRef.current)
   }
 
+  componentWillUnmount() {
+    if (this.resizeObserver) this.resizeObserver.disconnect()
+  }
+
   renderPreview() {
     const reqCount = Object.keys(this.store('main.accounts', this.props.account, 'requests') || {}).length
     return (
@@ -120,7 +124,7 @@ class Requests extends React.Component {
             if (req.type === 'access') {
               return (
                 <RequestItem
-                  key={req.type + i}
+                  key={req.handlerId}
                   req={req}
                   account={this.props.account}
                   handlerId={req.handlerId}
@@ -135,7 +139,7 @@ class Requests extends React.Component {
             } else if (req.type === 'sign') {
               return (
                 <RequestItem
-                  key={req.type + i}
+                  key={req.handlerId}
                   req={req}
                   account={this.props.account}
                   handlerId={req.handlerId}
@@ -150,7 +154,7 @@ class Requests extends React.Component {
             } else if (req.type === 'signTypedData') {
               return (
                 <RequestItem
-                  key={req.type + i}
+                  key={req.handlerId}
                   req={req}
                   account={this.props.account}
                   handlerId={req.handlerId}
@@ -169,7 +173,7 @@ class Requests extends React.Component {
 
               return (
                 <RequestItem
-                  key={req.type + i}
+                  key={req.handlerId}
                   req={req}
                   account={this.props.account}
                   handlerId={req.handlerId}
@@ -184,7 +188,7 @@ class Requests extends React.Component {
             } else if (req.type === 'addChain') {
               return (
                 <RequestItem
-                  key={req.type + i}
+                  key={req.handlerId}
                   req={req}
                   account={this.props.account}
                   handlerId={req.handlerId}
@@ -199,7 +203,7 @@ class Requests extends React.Component {
             } else if (req.type === 'switchChain') {
               return (
                 <RequestItem
-                  key={req.type + i}
+                  key={req.handlerId}
                   req={req}
                   account={this.props.account}
                   handlerId={req.handlerId}
@@ -214,7 +218,7 @@ class Requests extends React.Component {
             } else if (req.type === 'addToken') {
               return (
                 <RequestItem
-                  key={req.type + i}
+                  key={req.handlerId}
                   req={req}
                   account={this.props.account}
                   handlerId={req.handlerId}
@@ -237,7 +241,7 @@ class Requests extends React.Component {
               const originName = getOriginDisplayName(this.store('main.origins', req.origin, 'name'))
               return (
                 <RequestItem
-                  key={req.type + i}
+                  key={req.handlerId}
                   req={req}
                   account={this.props.account}
                   handlerId={req.handlerId}
@@ -262,7 +266,7 @@ class Requests extends React.Component {
               const metadata = this.store('main.networksMeta.ethereum', chainId) || {}
               return (
                 <RequestItem
-                  key={req.type + i}
+                  key={req.handlerId}
                   req={req}
                   account={this.props.account}
                   handlerId={req.handlerId}

@@ -4,7 +4,7 @@ import link from '../../../../../resources/link'
 
 import { Cluster, ClusterRow, ClusterValue } from '../../../../../resources/Components/Cluster'
 
-class Settings extends React.Component {
+export class SettingsPreview extends React.Component {
   constructor(...args) {
     super(...args)
     this.moduleRef = React.createRef()
@@ -22,7 +22,8 @@ class Settings extends React.Component {
       name: '',
       showMore: false,
       newName: '',
-      editName: false
+      editName: false,
+      removeConfirm: false
     }
   }
 
@@ -39,6 +40,14 @@ class Settings extends React.Component {
     this.nameObs.remove()
   }
 
+  saveName() {
+    const currentName = this.store('main.accounts', this.props.account, 'name') || ''
+    const name = this.state.name.trim()
+
+    if (name && name !== currentName) link.send('tray:renameAccount', this.props.account, name)
+    this.setState({ name: name || currentName, editName: false })
+  }
+
   render() {
     return (
       <div ref={this.moduleRef}>
@@ -47,7 +56,11 @@ class Settings extends React.Component {
             <ClusterRow>
               <ClusterValue
                 onClick={() => {
-                  this.setState({ showMore: !this.state.showMore, editName: false })
+                  this.setState({
+                    showMore: !this.state.showMore,
+                    editName: false,
+                    removeConfirm: false
+                  })
                 }}
               >
                 <div className='moduleItem'>{this.state.showMore ? 'less' : 'more'}</div>
@@ -67,11 +80,13 @@ class Settings extends React.Component {
                             value={this.state.name}
                             onChange={(e) => {
                               this.setState({ name: e.target.value })
-                              link.send('tray:renameAccount', this.props.account, e.target.value)
                             }}
+                            onBlur={() => this.saveName()}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                this.setState({ editName: false })
+                              if (e.key === 'Enter') e.currentTarget.blur()
+                              if (e.key === 'Escape') {
+                                const name = this.store('main.accounts', this.props.account, 'name') || ''
+                                this.setState({ name, editName: false })
                               }
                             }}
                           />
@@ -83,7 +98,7 @@ class Settings extends React.Component {
                   <ClusterRow>
                     <ClusterValue
                       onClick={() => {
-                        this.setState({ editName: true })
+                        this.setState({ editName: true, removeConfirm: false })
                       }}
                     >
                       <div className='moduleItem cardShow'>{'Update Name'}</div>
@@ -93,7 +108,11 @@ class Settings extends React.Component {
                 <ClusterRow>
                   <ClusterValue
                     onClick={() => {
-                      link.rpc('removeAccount', this.props.account, {}, () => {})
+                      if (this.state.removeConfirm) {
+                        link.rpc('removeAccount', this.props.account, {}, () => {})
+                      } else {
+                        this.setState({ removeConfirm: true })
+                      }
                     }}
                     style={
                       this.state.editName
@@ -108,7 +127,9 @@ class Settings extends React.Component {
                           }
                     }
                   >
-                    <div className='moduleItem cardShow'>{'Remove Account'}</div>
+                    <div className='moduleItem cardShow'>
+                      {this.state.removeConfirm ? 'Confirm Remove' : 'Remove Account'}
+                    </div>
                   </ClusterValue>
                 </ClusterRow>
               </>
@@ -120,4 +141,4 @@ class Settings extends React.Component {
   }
 }
 
-export default Restore.connect(Settings)
+export default Restore.connect(SettingsPreview)

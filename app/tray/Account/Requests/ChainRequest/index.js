@@ -3,14 +3,6 @@ import Restore from 'react-restore'
 import svg from '../../../../../resources/svg'
 
 export class ChainRequest extends React.Component {
-  constructor(...args) {
-    super(...args)
-    this.state = { allowInput: false }
-    setTimeout(() => {
-      this.setState({ allowInput: true })
-    }, 200)
-  }
-
   render() {
     const { status, notice, type, chain } = this.props.req
     const origin = this.props.originName || 'Unknown'
