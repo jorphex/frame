@@ -234,15 +234,16 @@ export default function (store: Store) {
     const isCustomToken = (balance: Balance) => customTokens.has(toTokenId(balance))
 
     const changedBalances = balances.filter((newBalance) => {
-      const currentBalance = currentTokenBalances.find(
-        (b) => b.address === newBalance.address && b.chainId === newBalance.chainId
-      )
+      const tokenId = toTokenId(newBalance)
+      const matchingBalances = currentTokenBalances.filter((balance) => toTokenId(balance) === tokenId)
+      const currentBalance = matchingBalances[0]
 
       // do not add newly found tokens with a zero balance
       const isNewBalance = !currentBalance && parseInt(newBalance.balance) !== 0
       const isChangedBalance = !!currentBalance && currentBalance.balance !== newBalance.balance
+      const hasDuplicateIdentity = matchingBalances.length > 1
 
-      return isNewBalance || isChangedBalance || isCustomToken(newBalance)
+      return isNewBalance || isChangedBalance || hasDuplicateIdentity || isCustomToken(newBalance)
     })
 
     if (changedBalances.length > 0) {

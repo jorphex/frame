@@ -350,6 +350,28 @@ describe('#setBalances', () => {
       }
     ])
   })
+
+  it('collapses checksum-case variants into one updated token balance', () => {
+    const checksummedAddress = testTokens.badger.address
+    const uppercaseAddress = `0x${checksummedAddress.slice(2).toUpperCase()}`
+    balances.push({ ...balances[0], address: uppercaseAddress })
+
+    setBalances([
+      {
+        ...testTokens.badger,
+        address: checksummedAddress.toLowerCase(),
+        balance: '0x2a'
+      }
+    ])
+
+    expect(balances).toEqual([
+      {
+        ...testTokens.badger,
+        address: checksummedAddress.toLowerCase(),
+        balance: '0x2a'
+      }
+    ])
+  })
 })
 
 describe('#removeBalance', () => {

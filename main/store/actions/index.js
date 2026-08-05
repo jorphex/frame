@@ -620,14 +620,13 @@ module.exports = {
   // Tokens
   setBalances: (u, address, newBalances) => {
     u('main.balances', address, (balances = []) => {
-      const existingBalances = balances.filter((b) => {
-        return newBalances.every((bal) => bal.chainId !== b.chainId || bal.address !== b.address)
-      })
+      const balancesByToken = new Map(balances.map((balance) => [toTokenId(balance), balance]))
+      newBalances.forEach((balance) => balancesByToken.set(toTokenId(balance), balance))
 
       // TODO: possibly add an option to filter out zero balances
       //const withoutZeroBalances = Object.entries(updatedBalances)
       //.filter(([address, balanceObj]) => !(new BigNumber(balanceObj.balance)).isZero())
-      return [...existingBalances, ...newBalances]
+      return [...balancesByToken.values()]
     })
   },
   removeBalance: (u, chainId, address) => {

@@ -97,3 +97,19 @@ it('prefers explicit custom token metadata over hidden Yearn metadata', () => {
   )
   expect(matching).toEqual([customToken])
 })
+
+it('queues a canonical update when stored token balances differ only by address casing', () => {
+  const token = { ...knownTokens[0], balance: '0x1', decimals: 18 }
+  const uppercaseAddress = `0x${token.address.slice(2).toUpperCase()}`
+  store.set('main.accounts', address, { address })
+  store.set('main.balances', address, [token, { ...token, address: uppercaseAddress }])
+  store.setBalances = jest.fn()
+  store.accountTokensUpdated = jest.fn()
+
+  balancesController.emit('tokenBalances', address, [{ ...token, address: token.address.toLowerCase() }])
+
+  expect(store.setBalances).toHaveBeenCalledWith(address, [
+    { ...token, address: token.address.toLowerCase() }
+  ])
+  expect(store.accountTokensUpdated).toHaveBeenCalledWith(address)
+})

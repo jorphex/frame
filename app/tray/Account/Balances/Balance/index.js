@@ -18,8 +18,7 @@ class Balance extends React.Component {
         priceChangeClass += ' signerBalanceCurrentPriceChangeDown'
       }
     }
-    let name = balance.name
-    if (name.length > 19) name = name.substr(0, 17) + '..'
+    const name = balance.name || symbol
 
     const displayPriceChange = () => {
       if (!priceChange) {
@@ -51,8 +50,10 @@ class Balance extends React.Component {
           <div className='signerBalanceChain' style={{ color: chainColor ? `var(--${chainColor})` : '' }}>
             {chainName}
           </div>
-          <div className='signerBalanceCurrency'>{name}</div>
-          <div className='signerBalanceValue'>
+          <div className='signerBalanceCurrency' title={name}>
+            {name}
+          </div>
+          <div className='signerBalanceValue' title={symbol}>
             <DisplayValue
               type='ether'
               value={balanceValue}
