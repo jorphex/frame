@@ -151,7 +151,10 @@ Yearn recognition, review summaries, and Earn interactions. An isolated Xvfb
 Electron run at the milestone commit rendered all chain sections and yvUSD details
 from live Kong data with no renderer exception.
 
-That evidence does not qualify contract economics, live transactions, a packaged
-artifact, RPC correctness, hardware display behavior, or signer compatibility.
-Use the deferred procedure in [Linux Release Qualification](QUALIFICATION.md)
-before describing this feature as release-qualified.
+Manual Linux-package evidence additionally covers a Base yvUSDC-H deposit,
+partial withdrawal, Max redeem without share dust, and physical Trezor review.
+It does not qualify contract economics, every curated product on every signer,
+or configured RPC correctness beyond the exercised flows. The exact release
+candidate and remaining signer limitations are recorded through
+[Linux Release Qualification](QUALIFICATION.md); do not generalize a tested row
+to an untested product, chain, or signer.

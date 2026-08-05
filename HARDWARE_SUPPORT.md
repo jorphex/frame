@@ -31,10 +31,13 @@ upgrade automated or implemented evidence to physical qualification.
 | Windows x64                        | Electron package              | Inherited build configuration only                                                                                           | Unverified and unsigned by this fork        |
 | Linux arm64, snap, tarball         | Electron package              | Legacy configuration only                                                                                                    | Not produced by current CI                  |
 
-The exact `0.7.0` Safe 7 qualification reused an existing device trust record.
-Fresh pairing-code entry was exercised during earlier fork testing and remains
-covered at the event/response bridge by automated tests, but it was not repeated
-on the final release candidate.
+The `0.8.0` qualification exercised fresh Safe 7 pairing, full address display,
+request rejection, personal signing, and structured EIP-712 review on an initial
+candidate. After targeted transaction-state and balance-rendering fixes, the
+post-fix candidate reused that isolated profile's trust and repeated physical
+address verification, Base Sepolia transaction signing/broadcast, and USB
+reconnect without a reload loop. Pairing event/response behavior also remains
+covered by automated bridge tests.
 
 Trezor Suite is not required for the verified Safe 7 USB flow. Running another
 application that owns the device transport may cause contention. Bluetooth

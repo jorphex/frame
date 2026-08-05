@@ -296,3 +296,73 @@ release blockers.
 Report only versions, checksums, pass/fail status, sanitized error text, and
 reproduction steps. Keep account addresses, transaction hashes, signatures,
 device identifiers, profile contents, and all secrets private.
+
+## Frame 0.8.0 Linux x64 Execution Record
+
+This record summarizes the completed `0.8.0` manual run without publishing
+accounts, device identifiers, transaction hashes, signatures, or secrets. The
+runtime candidate was the clean AppImage built from desktop commit `3963a014`
+and paired with Companion commit `88ca5b2f`. Release artifacts rebuilt after
+documentation-only changes must be verified against their own embedded source
+identity and published `SHA256SUMS`; the hashes below identify the candidate
+artifact set whose AppImage was physically exercised.
+
+| Item                    | Result                                                             |
+| ----------------------- | ------------------------------------------------------------------ |
+| Desktop                 | `0.8.0`, commit `3963a014`                                         |
+| Companion               | `0.13.1`, commit `88ca5b2f`, protocol 2                            |
+| AppImage SHA-256        | `7dce2601f138e06310dd42bf30995ed64b1764a410b4877502592de53779c715` |
+| deb SHA-256             | `2407fb420b969369e197491eb185c151caa350d0ccb4d480c2f11da0b5a316e6` |
+| Chrome ZIP SHA-256      | `0706701a2f4390edff1ff4c6c663050e7e1a9373e6550353b9e3036c8acf2bdd` |
+| Firefox ZIP SHA-256     | `48e5b0d7fff5adea087f68778034b6c6e51aa313edb440c3edffd04930244b77` |
+| Host                    | Pop!_OS 22.04, Linux `7.0.11-76070011-generic`, X11/GNOME          |
+| Browsers                | Chrome for Testing `151.0.7922.76`; Firefox `151.0.4`              |
+| Desktop GitHub checks   | Quality/package `30971856638`; CodeQL `30971856630`                |
+| Companion GitHub checks | Quality/package `30870559679`; CodeQL `30870559678`                |
+
+### Runtime Results
+
+- Fresh and migrated isolated profiles rendered Tray and Dash, bound only the
+  expected loopback services, persisted settings and permissions, rejected a
+  second instance, closed to tray, summoned, and passed X11 Glide. No upstream
+  update prompt or renderer exception appeared.
+- Exact Chrome and Firefox Companion archives paired through six-digit code
+  comparison, enforced account access, isolated request results by tab, emitted
+  account/chain events once per affected origin, survived browser and desktop
+  restart, and passed credential revocation, reset, and re-pairing.
+- Disposable private-key and seed signers rejected wrong passwords, unlocked,
+  rejected and approved personal plus EIP-712 v4 requests, and each broadcast a
+  zero-value Base Sepolia self-transfer with status `0x1`, 21,000 gas, identical
+  sender/recipient, and empty calldata. Both relocked after process restart,
+  were removed through Frame, and left zero signer files. Exact fixture scanning
+  found no plaintext key, phrase, or password in the isolated profile or log.
+- Safe 7 firmware `2.12.0` passed fresh pairing, full address display, rejection,
+  personal signing, and clear EIP-712 review on the immediately preceding
+  `0.8.0` candidate. The post-fix `3963a014` candidate changed only transaction
+  refresh and balance presentation paths; it repeated full address verification,
+  signed and mined two Base Sepolia funding transfers, and recovered from USB
+  disconnect/reconnect with no reload loop or pending request.
+- Model One firmware `1.13.1` passed full address display, personal rejection and
+  approval, hash-only EIP-712 warning plus rejection and approval, and USB
+  reconnect. Base Sepolia correctly failed closed before signing or broadcast:
+  its signed network definition uses coin type 1 while the selected standard
+  Ethereum derivation uses coin type 60. Frame displayed the specific strict
+  safety explanation and did not weaken the device setting.
+- The candidate showed eight chain-separated curated Yearn products, enforced
+  watch-only gating and allowlisted transaction review, and retained the prior
+  packaged Base yvUSDC-H deposit, partial withdrawal, Max redeem, and physical
+  Trezor evidence described in [`YEARN_EARN.md`](YEARN_EARN.md). This does not
+  generalize live-funds evidence to every product or signer.
+
+### Remaining Boundaries
+
+- Linux packages are unsigned and are not byte-for-byte reproducible. Their
+  embedded clean source identity, SHA-256 manifest, SBOM, and GitHub provenance
+  are the available release evidence.
+- The dependency audit contains 19 low-severity transitive findings and no high
+  or critical findings. The remaining `elliptic` path has no compatible upstream
+  fix in this release line.
+- Linux x64 is the only packaged desktop target qualified here. macOS, Windows,
+  Linux arm64, native Wayland Glide, Bluetooth, unlisted hardware, and every
+  unexercised Yearn product/signer combination remain unqualified or unsupported
+  as documented elsewhere in this repository.

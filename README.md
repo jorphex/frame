@@ -23,20 +23,22 @@ Frame runs as a desktop wallet and exposes one consistent approval and signing i
 
 ## Current Release
 
-Frame `0.7.0` is published as a Linux x64 AppImage and deb pre-release in the
-[desktop releases](https://github.com/jorphex/frame/releases). Browser dapps
-require the separately packaged Frame Companion `0.13.0` pre-release from the
-[companion releases](https://github.com/jorphex/frame-extension/releases).
+Frame `0.8.0` is the current Linux x64 AppImage and deb release candidate.
+Browser dapps require the separately packaged Frame Companion `0.13.1`
+candidate. The last published versions remain available from the
+[desktop releases](https://github.com/jorphex/frame/releases) and
+[companion releases](https://github.com/jorphex/frame-extension/releases) until
+the paired `0.8.0` and `0.13.1` artifacts are published.
 
 | Component or platform                  | Current status                                                                |
 | -------------------------------------- | ----------------------------------------------------------------------------- |
 | Linux x64 AppImage and deb             | Current qualified release target                                              |
 | Trezor Safe 7 over USB                 | Physically tested for address verification, signing, broadcast, and reconnect |
 | Trezor Model One over USB              | Physically tested with documented typed-data and testnet limitations          |
-| Ledger and GridPlus Lattice1           | Implemented with automated coverage; not physically requalified for `0.7.0`   |
-| Seed phrase, private key, and keystore | Implemented with encrypted local signer workers                               |
+| Ledger and GridPlus Lattice1           | Implemented with automated coverage; not physically requalified for `0.8.0`   |
+| Seed phrase, private key, and keystore | Encrypted local signer workers; disposable seed and private-key flows tested  |
 | Watch-only addresses                   | Supported for monitoring; signing is blocked                                  |
-| Chrome and Firefox companion           | Packaged and tested against the `0.7.0` desktop protocol                      |
+| Chrome and Firefox companion           | Packaged and tested against the `0.8.0` desktop protocol                      |
 | macOS, Windows, and Linux arm64        | Not produced or qualified by this fork                                        |
 | Trezor Safe 7 Bluetooth                | Unsupported                                                                   |
 
@@ -67,12 +69,13 @@ qualified Safe 7 USB flow.
   consent for dangerous `eth_sign` requests.
 - **Multichain routing:** Each application can target an enabled chain without
   forcing every connected application onto one global network.
-- **Curated Yearn Earn (development):** The current `main` branch adds locally
+- **Curated Yearn Earn:** Locally
   allowlisted Ethereum, Base, and Katana Yearn products with positions, direct
   and product-specific workflows, exact approvals, configured-RPC simulation,
   ordinary Frame signer review, and hidden balance tracking for curated assets
-  and vault shares. This feature is not part of the `0.7.0` release and has not
-  completed live-funds qualification.
+  and vault shares. Packaged Base deposit, partial withdrawal, Max redeem, and
+  physical Trezor signing have been exercised; other product paths retain the
+  narrower evidence and limitations documented in [Yearn Earn](YEARN_EARN.md).
 - **Modern wallet methods:** Hardened EIP-1193 behavior, chain add/switch flows,
   paired-companion EIP-6963 discovery, and non-atomic EIP-5792 wallet calls.
 - **User-controlled infrastructure:** Custom Ethereum RPC and Kubo IPFS
@@ -86,9 +89,10 @@ Standards](SUPPORTED_EIPS.md) and [RPC Compatibility](RPC_COMPATIBILITY.md).
 
 ## Install
 
-Download `Frame-0.7.0.AppImage` or `frame_0.7.0_amd64.deb` together with
-`SHA256SUMS` from the [`0.7.0` release](https://github.com/jorphex/frame/releases/tag/v0.7.0).
-Verify the files from the download directory before running either package:
+After the candidate is published, download `Frame-0.8.0.AppImage` or
+`frame_0.8.0_amd64.deb` together with `SHA256SUMS` from the
+[`0.8.0` release](https://github.com/jorphex/frame/releases/tag/v0.8.0). Verify
+the files from the download directory before running either package:
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS
@@ -97,14 +101,14 @@ sha256sum --check --ignore-missing SHA256SUMS
 Run the AppImage without installing it:
 
 ```bash
-chmod +x Frame-0.7.0.AppImage
-./Frame-0.7.0.AppImage
+chmod +x Frame-0.8.0.AppImage
+./Frame-0.8.0.AppImage
 ```
 
 Or install the deb package:
 
 ```bash
-sudo apt install ./frame_0.7.0_amd64.deb
+sudo apt install ./frame_0.8.0_amd64.deb
 ```
 
 The Linux packages are currently unsigned. Verify their checksums and GitHub
@@ -113,8 +117,9 @@ artifact attestations against the published release before installation.
 ### Browser Companion
 
 The browser companion injects Frame's EIP-1193 provider and announces it using
-EIP-6963. Download the Chrome or Firefox archive from the
-[`0.13.0` companion release](https://github.com/jorphex/frame-extension/releases/tag/v0.13.0),
+EIP-6963. Once the candidate is published, download the Chrome or Firefox
+archive from the
+[`0.13.1` companion release](https://github.com/jorphex/frame-extension/releases/tag/v0.13.1),
 verify its checksum, extract it, and follow the
 [companion installation instructions](https://github.com/jorphex/frame-extension#install).
 
@@ -199,12 +204,12 @@ community security fixes.
 
 ## Direction
 
-The current development branch contains the first headlessly qualified Yearn
-Earn milestone and local contacts; the Earn scope and deferred live
-qualification are documented in [Yearn Earn](YEARN_EARN.md). Near-term desktop
-work focuses on broader UI qualification. Smart-account support and a future
-mobile client with WalletConnect built around shared wallet-core logic remain
-later work. Roadmap items are directional and are not release support claims.
+The current release candidate contains the first curated Yearn Earn milestone
+and local contacts; its exact scope and evidence boundaries are documented in
+[Yearn Earn](YEARN_EARN.md). Near-term desktop work focuses on broader UI and
+simulation qualification. Smart-account support and a future mobile client with
+WalletConnect built around shared wallet-core logic remain later work. Roadmap
+items are directional and are not release support claims.
 
 ## Documentation
 
