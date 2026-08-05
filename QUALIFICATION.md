@@ -353,6 +353,19 @@ artifact set whose AppImage was physically exercised.
   packaged Base yvUSDC-H deposit, partial withdrawal, Max redeem, and physical
   Trezor evidence described in [`YEARN_EARN.md`](YEARN_EARN.md). This does not
   generalize live-funds evidence to every product or signer.
+- Post-record desktop commit `8fe2ed17` restored Frame's per-origin omnichain
+  behavior: an authorized origin switched between enabled Ethereum Mainnet and
+  Sepolia in 1-3 ms without creating an approval request. A pending untouched
+  request on the previous chain was canceled with EIP-1193 error `4901` before
+  the switch; unknown, disabled, and unauthorized targets continued to fail
+  closed. The complete automated gate passed unchanged at 216 suites and 2,909
+  tests, and a fresh exact-commit AppImage rendered Tray, Dash, and onboarding,
+  connected the detected Trezor, and shut down cleanly. The exercised
+  post-record artifacts were AppImage
+  `e2b6be573c4f887950d0f9c1acb4ff72064e0aac531d190f7de9aa6f1b4775b5`
+  and deb
+  `527f376790c9757b1fa5203e0c3cd8225ae6ea18c494f438e88890c2b4d9e34d`;
+  signer implementations were not changed.
 
 ### Remaining Boundaries
 
