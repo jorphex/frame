@@ -22,7 +22,7 @@ import {
   isSignerReady,
   isWatchOnlyAccountType
 } from '../../resources/domain/signer'
-import { isCancelableRequest, isSignatureRequest } from '../../resources/domain/request'
+import { isCancelableRequest, isSignatureRequest, isTransactionRequest } from '../../resources/domain/request'
 
 import {
   AccountRequest,
@@ -1141,6 +1141,9 @@ export class Accounts extends EventEmitter {
       (storedRequest.type === 'transaction' || isSignatureRequest(storedRequest))
     ) {
       throw new Error(WATCH_ONLY_SIGNING_ERROR)
+    }
+    if (isTransactionRequest(storedRequest) && storedRequest.simulation?.status === 'pending') {
+      throw new Error('Transaction execution check is still pending')
     }
 
     storedRequest.status = RequestStatus.Pending

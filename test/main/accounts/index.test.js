@@ -1167,6 +1167,7 @@ describe('account-bound request transitions', () => {
     const targetAccount = Accounts.accounts[account2.address]
     const explicit = targetRequest('account-bound-error')
     targetAccount.addRequest(explicit)
+    explicit.simulation = { status: 'succeeded', calls: [] }
 
     Accounts.setRequestPending(explicit)
     Accounts.setRequestError(explicit.handlerId, new Error('Device declined'), account2.address)
@@ -1182,6 +1183,7 @@ describe('account-bound request transitions', () => {
     const targetAccount = Accounts.accounts[account2.address]
     const explicit = targetRequest('single-approval-claim')
     targetAccount.addRequest(explicit)
+    explicit.simulation = { status: 'succeeded', calls: [] }
 
     expect(Accounts.setRequestPending(explicit)).toBe(true)
     expect(() => Accounts.setRequestPending(explicit)).toThrow(/already pending or complete/i)
@@ -1249,6 +1251,7 @@ describe('account-bound request transitions', () => {
     const explicit = targetRequest('signed-is-not-cancelable')
     const monitor = jest.spyOn(Accounts, 'txMonitor').mockImplementation()
     targetAccount.addRequest(explicit)
+    explicit.simulation = { status: 'succeeded', calls: [] }
     Accounts.setRequestPending(explicit)
     targetAccount.requests[explicit.handlerId].status = 'sending'
 
@@ -1746,6 +1749,21 @@ describe('#signerCompatibility', () => {
 })
 
 describe('#setRequestPending', () => {
+  it('keeps a transaction reviewable while its execution check is pending', () => {
+    const currentAccount = Accounts.current()
+    currentAccount.lastSignerType = 'seed'
+    const pendingSimulation = {
+      ...request,
+      handlerId: 'pending-simulation',
+      simulation: { status: 'pending', calls: [] }
+    }
+    currentAccount.requests[pendingSimulation.handlerId] = pendingSimulation
+
+    expect(() => Accounts.setRequestPending(pendingSimulation)).toThrow(/execution check is still pending/i)
+    expect(pendingSimulation.status).toBeUndefined()
+    expect(pendingSimulation.notice).toBeUndefined()
+  })
+
   it.each(['transaction', 'sign', 'signTypedData', 'signErc20Permit'])(
     'rejects a watch-only %s request before pending state',
     (type) => {
