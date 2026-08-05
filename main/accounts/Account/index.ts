@@ -8,7 +8,6 @@ import {
   AddTokenRequest,
   RequestMode,
   SignTypedDataRequest,
-  SwitchChainRequest,
   TransactionRequest,
   WalletCallsRequest
 } from '..'
@@ -330,7 +329,7 @@ class FrameAccount {
     })
   }
 
-  rejectUnapprovedRequestsForOriginChain(origin: string, chainId: number, exceptHandlerId: string) {
+  rejectUnapprovedRequestsForOriginChain(origin: string, chainId: number) {
     const requestChainId = (request: AccountRequest) => {
       if (request.type === 'transaction') {
         return parseInt((request as TransactionRequest).data.chainId, 16)
@@ -344,9 +343,6 @@ class FrameAccount {
       if (request.type === 'addToken') {
         return Number((request as AddTokenRequest).token.chainId)
       }
-      if (request.type === 'switchChain') {
-        return (request as SwitchChainRequest).sourceChainId
-      }
       if (request.type === 'walletCalls') {
         return parseInt((request as WalletCallsRequest).chainId, 16)
       }
@@ -354,12 +350,7 @@ class FrameAccount {
     }
 
     Object.values(this.requests).forEach((request) => {
-      if (
-        request.handlerId !== exceptHandlerId &&
-        request.origin === origin &&
-        request.status === undefined &&
-        requestChainId(request) === chainId
-      ) {
+      if (request.origin === origin && request.status === undefined && requestChainId(request) === chainId) {
         this.rejectRequest(request, {
           code: 4901,
           message: `Request cancelled because the origin switched away from chain ${chainId}`

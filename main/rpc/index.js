@@ -185,10 +185,6 @@ const rpc = {
         if (err) return accounts.setRequestError(req.handlerId, err, req.account)
         accounts.setRequestSuccess(req.handlerId, req.account)
       })
-    } else if (req.type === 'switchChain') {
-      provider.approveSwitchChain(req.handlerId, (err) => {
-        if (err) accounts.setRequestError(req.handlerId, err, req.account)
-      })
     }
     cb(null)
   },

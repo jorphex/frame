@@ -154,33 +154,8 @@ export class Footer extends React.Component {
               signingDelay={isHardwareSigner(account.lastSignerType) ? 0 : 1500}
             />
           )
-        } else if (req.type === 'addChain' || req.type === 'switchChain') {
-          return req.type === 'switchChain' ? (
-            <div className='requestApprove'>
-              <div
-                className='requestDecline'
-                style={{ pointerEvents: this.state.allowInput ? 'auto' : 'none' }}
-                onClick={() => {
-                  this.rejectRequest(req)
-                }}
-              >
-                <div className='requestDeclineButton _txButton _txButtonBad'>
-                  <span>Decline</span>
-                </div>
-              </div>
-              <div
-                className='requestSign'
-                style={{ pointerEvents: this.state.allowInput ? 'auto' : 'none' }}
-                onClick={() => {
-                  if (this.state.allowInput) this.approve(req.handlerId, req)
-                }}
-              >
-                <div className='requestSignButton _txButton'>
-                  <span>Switch</span>
-                </div>
-              </div>
-            </div>
-          ) : (
+        } else if (req.type === 'addChain') {
+          return (
             <div className='requestApprove'>
               <div
                 className='requestDecline'

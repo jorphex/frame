@@ -4,10 +4,8 @@ import svg from '../../../../../resources/svg'
 
 export class ChainRequest extends React.Component {
   render() {
-    const { status, notice, type, chain } = this.props.req
+    const { status, notice, chain } = this.props.req
     const origin = this.props.originName || 'Unknown'
-    const destinationName = this.props.chainData?.destinationChainName || chain.name || 'Unknown'
-    const sourceName = type === 'switchChain' ? this.props.chainData?.sourceChainName || 'Unknown' : ''
 
     let requestClass = 'signerRequest'
     if (status === 'success') requestClass += ' signerRequestSuccess'
@@ -39,14 +37,8 @@ export class ChainRequest extends React.Component {
             <div className='approveTransactionPayload'>
               <div className='requestChainInner'>
                 <div className={originClass}>{origin}</div>
-                <div className={'requestChainOriginSub'}>
-                  {type === 'switchChain' ? 'wants to switch chains' : 'wants to add chain'}
-                </div>
-                <div className='requestChainName'>
-                  {type === 'switchChain'
-                    ? `${sourceName} (${this.props.req.sourceChainId}) to ${destinationName} (${chain.id})`
-                    : chain.name}
-                </div>
+                <div className={'requestChainOriginSub'}>wants to add chain</div>
+                <div className='requestChainName'>{chain.name}</div>
               </div>
             </div>
           )}

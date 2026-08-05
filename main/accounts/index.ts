@@ -120,7 +120,6 @@ export {
   TransactionRequest,
   SignTypedDataRequest,
   AddChainRequest,
-  SwitchChainRequest,
   AddTokenRequest,
   WalletCallsRequest
 } from './types'
@@ -1288,9 +1287,9 @@ export class Accounts extends EventEmitter {
     }
   }
 
-  rejectUnapprovedRequestsForOriginChain(origin: string, chainId: number, exceptHandlerId: string) {
+  rejectUnapprovedRequestsForOriginChain(origin: string, chainId: number) {
     Object.values(this.accounts).forEach((account) => {
-      account.rejectUnapprovedRequestsForOriginChain(origin, chainId, exceptHandlerId)
+      account.rejectUnapprovedRequestsForOriginChain(origin, chainId)
     })
   }
 

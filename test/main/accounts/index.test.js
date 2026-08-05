@@ -1413,18 +1413,10 @@ describe('#rejectUnapprovedRequestsForOriginChain', () => {
         origin: '07h3r'
       })
     )
-    Accounts.addRequest(
-      requestFor('active-switch', {
-        type: 'switchChain',
-        chain: { id: 5, type: 'ethereum' },
-        sourceChainId: 1
-      })
-    )
-
-    activeAccount.rejectUnapprovedRequestsForOriginChain(request.origin, 1, 'active-switch')
+    activeAccount.rejectUnapprovedRequestsForOriginChain(request.origin, 1)
 
     expect(Object.keys(activeAccount.requests).sort()).toEqual(
-      ['active-switch', 'already-approved', 'other-chain', 'other-origin'].sort()
+      ['already-approved', 'other-chain', 'other-origin'].sort()
     )
     expect(responses.transaction).toHaveBeenCalledWith(
       expect.objectContaining({ error: { code: 4901, message: expect.stringContaining('chain 1') } })
@@ -1778,13 +1770,13 @@ describe('#setRequestPending', () => {
     }
   )
 
-  it('keeps non-signing request approval available to watch-only accounts', () => {
+  it('keeps add-chain approval available to watch-only accounts', () => {
     const currentAccount = Accounts.current()
-    const switchRequest = { ...request, handlerId: 'watch-only-switch', type: 'switchChain' }
+    const addChainRequest = { ...request, handlerId: 'watch-only-add-chain', type: 'addChain' }
     currentAccount.lastSignerType = 'address'
-    currentAccount.requests[switchRequest.handlerId] = switchRequest
+    currentAccount.requests[addChainRequest.handlerId] = addChainRequest
 
-    expect(() => Accounts.setRequestPending(switchRequest)).not.toThrow()
-    expect(switchRequest.status).toBe('pending')
+    expect(() => Accounts.setRequestPending(addChainRequest)).not.toThrow()
+    expect(addChainRequest.status).toBe('pending')
   })
 })

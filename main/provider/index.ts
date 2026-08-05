@@ -16,7 +16,6 @@ import accounts, {
   TransactionRequest,
   SignTypedDataRequest,
   AddChainRequest,
-  SwitchChainRequest,
   AddTokenRequest,
   WalletCallsRequest
 } from '../accounts'
@@ -1259,72 +1258,30 @@ export class Provider extends EventEmitter {
       if (!origin) {
         return resError({ message: 'Unknown requesting origin', code: 4100 }, payload, res)
       }
+
+      const access = getOriginAccess(payload)
+      if (!access?.permission?.provider) {
+        return resError({ message: 'Origin is not authorized to switch chains', code: 4100 }, payload, res)
+      }
       if (origin.chain.id === chainId) return res({ id: payload.id, jsonrpc: '2.0', result: null })
 
-      const currentAccount = accounts.current()
-      if (!currentAccount) {
+      let switchOriginChain: ReturnType<typeof requireStoreAction>
+      try {
+        switchOriginChain = requireStoreAction('switchOriginChain')
+      } catch {
         return resError(
-          { message: 'No account selected to approve the chain-switch request', code: 4100 },
+          { code: -32603, message: 'Store action switchOriginChain is unavailable' },
           payload,
           res
         )
       }
 
-      const request: SwitchChainRequest = {
-        handlerId: uuid(),
-        type: 'switchChain',
-        chain: { type: origin.chain.type, id: chainId },
-        sourceChainId: origin.chain.id,
-        account: currentAccount.id,
-        origin: originId,
-        payload
-      }
-
-      accounts.addRequest(request, res)
+      accounts.rejectUnapprovedRequestsForOriginChain(originId, origin.chain.id)
+      switchOriginChain(originId, chainId, origin.chain.type)
+      return res({ id: payload.id, jsonrpc: '2.0', result: null })
     } catch (e) {
       return resError(e as EVMError, payload, res)
     }
-  }
-
-  approveSwitchChain(handlerId: string, cb: Callback<void>) {
-    const currentAccount = accounts.current()
-    const request = currentAccount?.getRequest<SwitchChainRequest>(handlerId)
-
-    if (!currentAccount || !request || request.type !== 'switchChain') {
-      return cb(new Error('Chain-switch request is no longer available'))
-    }
-
-    const targetChain = store('main.networks', request.chain.type, request.chain.id)
-    if (!targetChain) {
-      const error = { code: 4902, message: 'Requested chain is no longer available' }
-      currentAccount.rejectRequest(request, error)
-      return cb(new Error(error.message))
-    }
-    if (targetChain.on === false) {
-      const error = { code: 4901, message: `Frame is not connected to chain ${request.chain.id}` }
-      currentAccount.rejectRequest(request, error)
-      return cb(new Error(error.message))
-    }
-
-    const origin = storeApi.getOrigin(request.origin)
-    if (!origin || origin.chain.id !== request.sourceChainId || origin.chain.type !== request.chain.type) {
-      const error = { code: 4901, message: 'Chain-switch request is stale' }
-      currentAccount.rejectRequest(request, error)
-      return cb(new Error(error.message))
-    }
-
-    accounts.rejectUnapprovedRequestsForOriginChain(request.origin, request.sourceChainId, request.handlerId)
-    let switchOriginChain: ReturnType<typeof requireStoreAction>
-    try {
-      switchOriginChain = requireStoreAction('switchOriginChain')
-    } catch {
-      const error = { code: -32603, message: 'Store action switchOriginChain is unavailable' }
-      currentAccount.rejectRequest(request, error)
-      return cb(new Error(error.message))
-    }
-    switchOriginChain(request.origin, request.chain.id, request.chain.type)
-    currentAccount.resolveRequest(request, null)
-    cb(null)
   }
 
   private addEthereumChain(payload: RPCRequestPayload, res: RPCRequestCallback) {

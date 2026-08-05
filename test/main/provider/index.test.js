@@ -1043,69 +1043,98 @@ describe('#send', () => {
       sendRequest(validChain, cb)
     })
 
-    it('uses the switch confirmation flow if the chain already exists', () => {
+    it('switches automatically if the chain already exists and the origin is authorized', () => {
       store.set('main.networks.ethereum', 1, { id: 1 })
       store.set('main.origins', '8073729a-5e59-53b7-9e69-5d9bcff94087', {
-        chain: { id: 137, type: 'ethereum' }
+        chain: { id: 137, type: 'ethereum' },
+        name: 'example.test'
+      })
+      store.set('main.permissions', address, {
+        granted: { origin: 'example.test', provider: true }
       })
       store.switchOriginChain = jest.fn()
-      accounts.addRequest.mockImplementationOnce((request) => accountRequests.push(request))
       const response = jest.fn()
 
       sendRequest({ chainId: '0x1' }, response)
 
-      expect(response).not.toHaveBeenCalled()
-      expect(accountRequests).toHaveLength(1)
-      expect(accountRequests[0]).toMatchObject({
-        type: 'switchChain',
-        sourceChainId: 137,
-        chain: { id: 1, type: 'ethereum' }
-      })
-      expect(store.switchOriginChain).not.toHaveBeenCalled()
+      expect(response).toHaveBeenCalledWith(expect.objectContaining({ result: null }))
+      expect(accountRequests).toHaveLength(0)
+      expect(accounts.rejectUnapprovedRequestsForOriginChain).toHaveBeenCalledWith(
+        '8073729a-5e59-53b7-9e69-5d9bcff94087',
+        137
+      )
+      expect(store.switchOriginChain).toHaveBeenCalledWith(
+        '8073729a-5e59-53b7-9e69-5d9bcff94087',
+        1,
+        'ethereum'
+      )
     })
   })
 
   describe('#wallet_switchEthereumChain', () => {
-    it('queues an origin-specific confirmation without switching immediately', () => {
+    const authorizeOrigin = () =>
+      store.set('main.permissions', address, {
+        granted: { origin: 'example.test', provider: true }
+      })
+
+    it('switches the authorized origin immediately without queuing a wallet request', () => {
       store.set('main.networks.ethereum', 5, { id: 5 })
+      authorizeOrigin()
       store.switchOriginChain = jest.fn()
-      accounts.addRequest.mockImplementationOnce((request) => accountRequests.push(request))
       const response = jest.fn()
 
       send({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x5' }] }, response)
 
-      expect(response).not.toHaveBeenCalled()
-      expect(store.switchOriginChain).not.toHaveBeenCalled()
-      expect(accountRequests).toHaveLength(1)
-      expect(accountRequests[0]).toMatchObject({
-        type: 'switchChain',
-        sourceChainId: 1,
-        chain: { id: 5, type: 'ethereum' },
-        account: address,
-        origin: '8073729a-5e59-53b7-9e69-5d9bcff94087'
-      })
+      expect(response).toHaveBeenCalledWith(expect.objectContaining({ result: null }))
+      expect(accountRequests).toHaveLength(0)
+      expect(accounts.rejectUnapprovedRequestsForOriginChain).toHaveBeenCalledWith(
+        '8073729a-5e59-53b7-9e69-5d9bcff94087',
+        1
+      )
+      expect(store.switchOriginChain).toHaveBeenCalledWith(
+        '8073729a-5e59-53b7-9e69-5d9bcff94087',
+        5,
+        'ethereum'
+      )
     })
 
     it('resolves without prompting when the origin is already on the requested chain', (done) => {
       store.set('main.networks.ethereum', 1, { id: 1 })
+      authorizeOrigin()
 
       send({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x1' }] }, (response) => {
         expect(response.result).toBeNull()
         expect(accountRequests).toHaveLength(0)
+        expect(accounts.rejectUnapprovedRequestsForOriginChain).not.toHaveBeenCalled()
         done()
       })
     })
 
-    it('rejects instead of hanging when no account can approve the switch', (done) => {
+    it('rejects instead of hanging when no account has authorized the switch', (done) => {
       store.set('main.networks.ethereum', 5, { id: 5 })
       accounts.current.mockReturnValueOnce(null)
 
       send({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x5' }] }, (response) => {
         expect(response.error).toEqual({
           code: 4100,
-          message: 'No account selected to approve the chain-switch request'
+          message: 'Origin is not authorized to switch chains'
         })
         expect(accountRequests).toHaveLength(0)
+        expect(store.switchOriginChain).not.toHaveBeenCalled()
+        done()
+      })
+    })
+
+    it('rejects a known origin that lacks account permission', (done) => {
+      store.set('main.networks.ethereum', 5, { id: 5 })
+
+      send({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x5' }] }, (response) => {
+        expect(response.error).toEqual({
+          code: 4100,
+          message: 'Origin is not authorized to switch chains'
+        })
+        expect(accounts.rejectUnapprovedRequestsForOriginChain).not.toHaveBeenCalled()
+        expect(store.switchOriginChain).not.toHaveBeenCalled()
         done()
       })
     })
@@ -1117,6 +1146,7 @@ describe('#send', () => {
       send({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x5' }] }, (response) => {
         expect(response.error).toEqual({ code: 4100, message: 'Unknown requesting origin' })
         expect(accountRequests).toHaveLength(0)
+        expect(store.switchOriginChain).not.toHaveBeenCalled()
         done()
       })
     })
@@ -1169,65 +1199,19 @@ describe('#send', () => {
       }
     )
 
-    it('approves the stored request, cancels untouched old-chain confirmations, and switches its origin', () => {
+    it('fails closed if the origin-chain store action is unavailable', (done) => {
       store.set('main.networks.ethereum', 5, { id: 5 })
-      store.switchOriginChain = jest.fn()
-      accounts.addRequest.mockImplementationOnce((request) => accountRequests.push(request))
-      send({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x5' }] })
-      const request = accountRequests[0]
-      const callback = jest.fn()
+      authorizeOrigin()
+      store.switchOriginChain = undefined
 
-      provider.approveSwitchChain(request.handlerId, callback)
-
-      expect(accounts.rejectUnapprovedRequestsForOriginChain).toHaveBeenCalledWith(
-        request.origin,
-        1,
-        request.handlerId
-      )
-      expect(store.switchOriginChain).toHaveBeenCalledWith(request.origin, 5, 'ethereum')
-      expect(currentAccount.resolveRequest).toHaveBeenCalledWith(request, null)
-      expect(callback).toHaveBeenCalledWith(null)
-    })
-
-    it('rejects a stale confirmation instead of overriding an intervening switch', () => {
-      store.set('main.networks.ethereum', 5, { id: 5 })
-      accounts.addRequest.mockImplementationOnce((request) => accountRequests.push(request))
-      send({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x5' }] })
-      const request = accountRequests[0]
-      store.set('main.origins', request.origin, {
-        name: 'example.test',
-        chain: { id: 10, type: 'ethereum' }
+      send({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x5' }] }, (response) => {
+        expect(response.error).toEqual({
+          code: -32603,
+          message: 'Store action switchOriginChain is unavailable'
+        })
+        expect(accounts.rejectUnapprovedRequestsForOriginChain).not.toHaveBeenCalled()
+        done()
       })
-      store.switchOriginChain = jest.fn()
-      const callback = jest.fn()
-
-      provider.approveSwitchChain(request.handlerId, callback)
-
-      expect(currentAccount.rejectRequest).toHaveBeenCalledWith(request, {
-        code: 4901,
-        message: 'Chain-switch request is stale'
-      })
-      expect(store.switchOriginChain).not.toHaveBeenCalled()
-      expect(callback).toHaveBeenCalledWith(new Error('Chain-switch request is stale'))
-    })
-
-    it('rejects approval if the destination chain was removed while awaiting consent', () => {
-      store.set('main.networks.ethereum', 5, { id: 5 })
-      accounts.addRequest.mockImplementationOnce((request) => accountRequests.push(request))
-      send({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x5' }] })
-      const request = accountRequests[0]
-      store.set('main.networks.ethereum', 5, undefined)
-      store.switchOriginChain = jest.fn()
-      const callback = jest.fn()
-
-      provider.approveSwitchChain(request.handlerId, callback)
-
-      expect(currentAccount.rejectRequest).toHaveBeenCalledWith(request, {
-        code: 4902,
-        message: 'Requested chain is no longer available'
-      })
-      expect(store.switchOriginChain).not.toHaveBeenCalled()
-      expect(callback).toHaveBeenCalledWith(new Error('Requested chain is no longer available'))
     })
   })
 

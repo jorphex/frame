@@ -39,7 +39,7 @@ export type TypedSignatureRequestType = 'signTypedData' | 'signErc20Permit'
 export type SignatureRequestType = 'sign' | TypedSignatureRequestType
 
 export type RequestType =
-  SignatureRequestType | 'transaction' | 'access' | 'addChain' | 'switchChain' | 'addToken' | 'walletCalls'
+  SignatureRequestType | 'transaction' | 'access' | 'addChain' | 'addToken' | 'walletCalls'
 
 interface Request {
   type: RequestType
@@ -294,11 +294,6 @@ export interface AddChainRequest extends AccountRequest<'addChain'> {
   chain: Chain
 }
 
-export interface SwitchChainRequest extends AccountRequest<'switchChain'> {
-  chain: Chain
-  sourceChainId: number
-}
-
 export interface AddTokenRequest extends AccountRequest<'addToken'> {
   token: Token
 }
@@ -330,7 +325,6 @@ export type AnyAccountRequest =
   | SignatureRequest
   | AccessRequest
   | AddChainRequest
-  | SwitchChainRequest
   | AddTokenRequest
   | WalletCallsRequest
 

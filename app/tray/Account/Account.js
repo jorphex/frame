@@ -37,7 +37,6 @@ const requests = {
   transaction: TransactionRequest,
   access: ProviderRequest,
   addChain: ChainRequest,
-  switchChain: ChainRequest,
   addToken: AddTokenRequest,
   walletCalls: WalletCallsRequest
 }
@@ -228,13 +227,6 @@ class _AccountBody extends React.Component {
         chainName: this.store('main.networks.ethereum', chainId, 'name') || `Chain ${chainId}`,
         nativeCurrencySymbol: nativeCurrency.symbol || '?',
         nativeCurrencyDecimals: nativeCurrency.decimals ?? 18
-      }
-    }
-
-    if (req.type === 'switchChain') {
-      return {
-        sourceChainName: this.store('main.networks', req.chain.type, req.sourceChainId, 'name'),
-        destinationChainName: this.store('main.networks', req.chain.type, req.chain.id, 'name')
       }
     }
 

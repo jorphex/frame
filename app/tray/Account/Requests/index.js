@@ -200,21 +200,6 @@ class Requests extends React.Component {
                   <div style={{ height: '10px' }} />
                 </RequestItem>
               )
-            } else if (req.type === 'switchChain') {
-              return (
-                <RequestItem
-                  key={req.handlerId}
-                  req={req}
-                  account={this.props.account}
-                  handlerId={req.handlerId}
-                  i={i}
-                  title={'Switch Chain'}
-                  color={'var(--outerspace)'}
-                  svgName={'chain'}
-                >
-                  <div style={{ height: '10px' }} />
-                </RequestItem>
-              )
             } else if (req.type === 'addToken') {
               return (
                 <RequestItem
